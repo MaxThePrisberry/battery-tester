@@ -1,20 +1,20 @@
 /******************************************************************************
- * PSB 10000 Series Power Supply Control Library
- * Implementation file for LabWindows/CVI with Auto-Discovery
+ * PSB 10000 Series Power Supply Control Library - Simplified Version
+ * Implementation file for LabWindows/CVI
  * 
- * This library provides functions to control PSB 10000 series power supplies
- * via Modbus RTU communication protocol, including automatic port scanning.
- * 
- * Author: Generated for LabWindows/CVI
- * Date: 2025
+ * Configured for 60V/60A derated version
  ******************************************************************************/
 
 #include "psb10000.h"
 #include <string.h>
+#include <stdio.h>
+#include <stdarg.h>
 
 /******************************************************************************
- * Static Variables and Internal Functions
+ * Static Variables
  ******************************************************************************/
+
+static int debugEnabled = 0;
 
 static const char* errorStrings[] = {
     "Success",
@@ -22,12 +22,228 @@ static const char* errorStrings[] = {
     "CRC error", 
     "Timeout error",
     "Invalid parameter",
-    "Device busy"
+    "Device busy",
+    "Not connected",
+    "Invalid response"
 };
 
-// Internal helper to send Modbus command and receive response
-static int PSB_SendModbusCommand(PSB_Handle *handle, unsigned char *txBuffer, int txLength, 
-                                unsigned char *rxBuffer, int expectedRxLength);
+/******************************************************************************
+ * Internal Helper Functions
+ ******************************************************************************/
+
+static void DebugPrint(const char *format, ...) {
+    if (debugEnabled) {
+        va_list args;
+        va_start(args, format);
+        vprintf(format, args);
+        va_end(args);
+    }
+}
+
+static void PrintHexDump(const char *label, unsigned char *data, int length) {
+    if (!debugEnabled) return;
+    
+    printf("%s (%d bytes): ", label, length);
+    for (int i = 0; i < length; i++) {
+        printf("%02X ", data[i]);
+    }
+    printf("\n");
+}
+
+static int ConvertToDeviceUnits(double realValue, double nominalValue) {
+    double percentage = (realValue / nominalValue) * 100.0;
+    if (percentage > 102.0) percentage = 102.0;
+    if (percentage < 0.0) percentage = 0.0;
+    return (int)((percentage / 102.0) * 53477);
+}
+
+static double ConvertFromDeviceUnits(int deviceValue, double nominalValue) {
+    double percentage = ((double)deviceValue / 53477.0) * 102.0;
+    return (percentage / 100.0) * nominalValue;
+}
+
+static int SendModbusCommand(PSB_Handle *handle, unsigned char *txBuffer, int txLength, 
+                            unsigned char *rxBuffer, int expectedRxLength) {
+    if (!handle || !handle->isConnected) {
+        return PSB_ERROR_NOT_CONNECTED;
+    }
+    
+    // Store the function code we're sending for later verification
+    unsigned char sentFunctionCode = txBuffer[1];
+    
+    PrintHexDump("TX", txBuffer, txLength);
+    
+    // Clear input buffer
+    FlushInQ(handle->comPort);
+    
+    // Send command
+    if (ComWrt(handle->comPort, (char*)txBuffer, txLength) != txLength) {
+        DebugPrint("ERROR: Failed to write all bytes\n");
+        return PSB_ERROR_COMM;
+    }
+    
+    // Wait for response
+    Delay(0.05);  // 50ms delay for device processing
+    
+    // Read response with timeout
+    int totalBytesRead = 0;
+    double startTime = Timer();
+    
+    // First, try to read at least 5 bytes to check if it's an exception response
+    int minBytesToRead = 5;
+    int actualExpectedBytes = expectedRxLength;
+    
+    while (totalBytesRead < minBytesToRead) {
+        int bytesAvailable = GetInQLen(handle->comPort);
+        if (bytesAvailable > 0) {
+            int bytesToRead = (bytesAvailable < (minBytesToRead - totalBytesRead)) ? 
+                             bytesAvailable : (minBytesToRead - totalBytesRead);
+            int bytesRead = ComRd(handle->comPort, (char*)&rxBuffer[totalBytesRead], bytesToRead);
+            if (bytesRead > 0) {
+                totalBytesRead += bytesRead;
+            }
+        }
+        
+        // Check timeout
+        if ((Timer() - startTime) > (handle->timeoutMs / 1000.0)) {
+            DebugPrint("ERROR: Timeout - read %d of %d bytes\n", totalBytesRead, minBytesToRead);
+            if (totalBytesRead > 0) {
+                PrintHexDump("Partial RX", rxBuffer, totalBytesRead);
+            }
+            return PSB_ERROR_TIMEOUT;
+        }
+        
+        if (totalBytesRead < minBytesToRead) {
+            Delay(0.01);  // Small delay between read attempts
+        }
+    }
+    
+    // Check if this is an exception response
+    if (totalBytesRead >= 2 && (rxBuffer[1] & 0x80)) {
+        // This is an exception response, which is only 5 bytes total
+        actualExpectedBytes = 5;
+        DebugPrint("Detected Modbus exception response\n");
+    }
+    
+    // Continue reading remaining bytes if needed
+    while (totalBytesRead < actualExpectedBytes) {
+        int bytesAvailable = GetInQLen(handle->comPort);
+        if (bytesAvailable > 0) {
+            int bytesToRead = (bytesAvailable < (actualExpectedBytes - totalBytesRead)) ? 
+                             bytesAvailable : (actualExpectedBytes - totalBytesRead);
+            int bytesRead = ComRd(handle->comPort, (char*)&rxBuffer[totalBytesRead], bytesToRead);
+            if (bytesRead > 0) {
+                totalBytesRead += bytesRead;
+            }
+        }
+        
+        // Check timeout
+        if ((Timer() - startTime) > (handle->timeoutMs / 1000.0)) {
+            DebugPrint("ERROR: Timeout - read %d of %d bytes\n", totalBytesRead, actualExpectedBytes);
+            if (totalBytesRead > 0) {
+                PrintHexDump("Partial RX", rxBuffer, totalBytesRead);
+            }
+            return PSB_ERROR_TIMEOUT;
+        }
+        
+        if (totalBytesRead < actualExpectedBytes) {
+            Delay(0.01);  // Small delay between read attempts
+        }
+    }
+    
+    PrintHexDump("RX", rxBuffer, totalBytesRead);
+    
+    // Verify response length
+    if (totalBytesRead != actualExpectedBytes) {
+        DebugPrint("ERROR: Wrong response length - got %d, expected %d\n", 
+                   totalBytesRead, actualExpectedBytes);
+        return PSB_ERROR_RESPONSE;
+    }
+    
+    // Verify slave address
+    if (rxBuffer[0] != handle->slaveAddress) {
+        DebugPrint("ERROR: Wrong slave address in response - got 0x%02X, expected 0x%02X\n", 
+                   rxBuffer[0], handle->slaveAddress);
+        return PSB_ERROR_RESPONSE;
+    }
+    
+    // Check for Modbus exception
+    if (rxBuffer[1] & 0x80) {
+        unsigned char exceptionCode = rxBuffer[2];
+        DebugPrint("ERROR: Modbus exception code: 0x%02X - ", exceptionCode);
+        switch(exceptionCode) {
+            case 0x01: DebugPrint("Illegal function\n"); break;
+            case 0x02: DebugPrint("Illegal data address\n"); break;
+            case 0x03: DebugPrint("Illegal data value\n"); break;
+            case 0x04: DebugPrint("Slave device failure\n"); break;
+            case 0x05: DebugPrint("Acknowledge\n"); break;
+            case 0x06: DebugPrint("Slave device busy\n"); break;
+            case 0x07: DebugPrint("Negative acknowledge\n"); break;
+            case 0x08: DebugPrint("Memory parity error\n"); break;
+            default: DebugPrint("Unknown exception\n"); break;
+        }
+        return PSB_ERROR_RESPONSE;
+    }
+    
+    // CRITICAL: Verify function code matches what we sent
+    if (rxBuffer[1] != sentFunctionCode) {
+        DebugPrint("ERROR: Function code mismatch - sent 0x%02X, received 0x%02X\n", 
+                   sentFunctionCode, rxBuffer[1]);
+        
+        // Special diagnostic for common error
+        if (sentFunctionCode == MODBUS_READ_HOLDING_REGISTERS && rxBuffer[1] == MODBUS_WRITE_SINGLE_REGISTER) {
+            DebugPrint("ERROR: Device responded with WRITE REGISTER (0x06) to READ REGISTERS (0x03) request!\n");
+        } else if (sentFunctionCode == MODBUS_WRITE_SINGLE_COIL && rxBuffer[1] == MODBUS_READ_HOLDING_REGISTERS) {
+            DebugPrint("ERROR: Device responded with READ REGISTERS (0x03) to WRITE COIL (0x05) request!\n");
+        }
+        
+        return PSB_ERROR_RESPONSE;
+    }
+    
+    // Additional validation based on function code
+    if (sentFunctionCode == MODBUS_READ_HOLDING_REGISTERS) {
+        // For read responses, byte 2 should be the byte count
+        unsigned char expectedByteCount = (unsigned char)(actualExpectedBytes - 5); // Total - Address - Function - ByteCount - CRC(2)
+        if (rxBuffer[2] != expectedByteCount) {
+            DebugPrint("ERROR: Read response byte count mismatch - got %d, expected %d\n", 
+                       rxBuffer[2], expectedByteCount);
+            return PSB_ERROR_RESPONSE;
+        }
+    }
+    
+    // Verify CRC
+    unsigned short receivedCRC = (unsigned short)((rxBuffer[totalBytesRead-1] << 8) | rxBuffer[totalBytesRead-2]);
+    unsigned short calculatedCRC = PSB_CalculateCRC(rxBuffer, totalBytesRead - 2);
+    
+    if (receivedCRC != calculatedCRC) {
+        DebugPrint("ERROR: CRC mismatch - received 0x%04X, calculated 0x%04X\n", 
+                   receivedCRC, calculatedCRC);
+        return PSB_ERROR_CRC;
+    }
+    
+    return PSB_SUCCESS;
+}
+
+/******************************************************************************
+ * CRC Calculation
+ ******************************************************************************/
+
+unsigned short PSB_CalculateCRC(unsigned char *data, int length) {
+    unsigned short crc = MODBUS_CRC_INIT;
+    
+    for (int i = 0; i < length; i++) {
+        crc ^= data[i];
+        for (int j = 0; j < 8; j++) {
+            if (crc & 0x0001) {
+                crc = (crc >> 1) ^ 0xA001;
+            } else {
+                crc = crc >> 1;
+            }
+        }
+    }
+    
+    return crc;
+}
 
 /******************************************************************************
  * Auto-Discovery Functions
@@ -36,171 +252,184 @@ static int PSB_SendModbusCommand(PSB_Handle *handle, unsigned char *txBuffer, in
 int PSB_ScanPort(int comPort, PSB_DiscoveryResult *result) {
     if (!result) return PSB_ERROR_INVALID_PARAM;
     
-    // Clear result structure
     memset(result, 0, sizeof(PSB_DiscoveryResult));
     
-    // Test different baud rates
     int baudRates[] = {9600, 19200, 38400, 57600, 115200};
     int numRates = sizeof(baudRates) / sizeof(baudRates[0]);
     
     for (int i = 0; i < numRates; i++) {
-        // Disable CVI error popups temporarily
+        DebugPrint("Trying COM%d at %d baud...\n", comPort, baudRates[i]);
+        
         SetBreakOnLibraryErrors(0);
-        
-        // Try to open port at this baud rate
         int portResult = OpenComConfig(comPort, "", baudRates[i], 0, 8, 1, 512, 512);
-        
-        // Re-enable CVI error popups
         SetBreakOnLibraryErrors(1);
         
         if (portResult < 0) {
-            // Port doesn't exist or can't be opened - this is normal
-            continue; // Try next baud rate or return error
+            continue;
         }
         
-        SetComTime(comPort, 1.0);  // 1 second timeout
+        SetComTime(comPort, 1.0);
         
-        // Test 1: Read device class (register 0) to verify it's a PSB
-        unsigned char cmd1[8] = {1, 0x03, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00};
-        unsigned char response1[10];
+        // Test: Read device class (register 0)
+        unsigned char cmd[8] = {DEFAULT_SLAVE_ADDRESS, 0x03, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00};
+        unsigned char response[10];
         
-        // Calculate CRC
-        unsigned short crc1 = PSB_CalculateCRC(cmd1, 6);
-        cmd1[6] = crc1 & 0xFF;
-        cmd1[7] = (crc1 >> 8) & 0xFF;
+        unsigned short crc = PSB_CalculateCRC(cmd, 6);
+        cmd[6] = (unsigned char)(crc & 0xFF);
+        cmd[7] = (unsigned char)((crc >> 8) & 0xFF);
         
         FlushInQ(comPort);
         
-        if (ComWrt(comPort, (char*)cmd1, 8) == 8) {
+        if (ComWrt(comPort, (char*)cmd, 8) == 8) {
             Delay(0.1);
-            int len1 = ComRd(comPort, (char*)response1, 10);
+            int len = ComRd(comPort, (char*)response, 7);
             
-            if (len1 == 7 && response1[0] == 1 && response1[1] == 0x03 && response1[2] == 0x02) {
-                // Valid response! Now read device info
+            // Verify it's a read response (function code 0x03)
+            if (len == 7 && response[0] == DEFAULT_SLAVE_ADDRESS && response[1] == 0x03) {
+                // Valid response - read device info
                 
                 // Read device type (registers 1-20)
-                unsigned char cmd2[8] = {1, 0x03, 0x00, 0x01, 0x00, 0x14, 0x00, 0x00};
+                unsigned char cmd2[8] = {DEFAULT_SLAVE_ADDRESS, 0x03, 0x00, 0x01, 0x00, 0x14, 0x00, 0x00};
                 unsigned char response2[50];
                 
                 unsigned short crc2 = PSB_CalculateCRC(cmd2, 6);
-                cmd2[6] = crc2 & 0xFF;
-                cmd2[7] = (crc2 >> 8) & 0xFF;
+                cmd2[6] = (unsigned char)(crc2 & 0xFF);
+                cmd2[7] = (unsigned char)((crc2 >> 8) & 0xFF);
                 
                 FlushInQ(comPort);
                 
                 if (ComWrt(comPort, (char*)cmd2, 8) == 8) {
                     Delay(0.1);
-                    int len2 = ComRd(comPort, (char*)response2, 50);
+                    int len2 = ComRd(comPort, (char*)response2, 45);
                     
-                    if (len2 == 45 && response2[0] == 1 && response2[1] == 0x03 && response2[2] == 0x28) {
-                        // Extract device type
+                    if (len2 == 45 && response2[0] == DEFAULT_SLAVE_ADDRESS && response2[1] == 0x03) {
                         strncpy(result->deviceType, (char*)&response2[3], 40);
                         result->deviceType[40] = '\0';
                         
                         // Read serial number (registers 151-170)
-                        unsigned char cmd3[8] = {1, 0x03, 0x00, 0x97, 0x00, 0x14, 0x00, 0x00};
+                        unsigned char cmd3[8] = {DEFAULT_SLAVE_ADDRESS, 0x03, 0x00, 0x97, 0x00, 0x14, 0x00, 0x00};
                         unsigned char response3[50];
                         
                         unsigned short crc3 = PSB_CalculateCRC(cmd3, 6);
-                        cmd3[6] = crc3 & 0xFF;
-                        cmd3[7] = (crc3 >> 8) & 0xFF;
+                        cmd3[6] = (unsigned char)(crc3 & 0xFF);
+                        cmd3[7] = (unsigned char)((crc3 >> 8) & 0xFF);
                         
                         FlushInQ(comPort);
                         
                         if (ComWrt(comPort, (char*)cmd3, 8) == 8) {
                             Delay(0.1);
-                            int len3 = ComRd(comPort, (char*)response3, 50);
+                            int len3 = ComRd(comPort, (char*)response3, 45);
                             
-                            if (len3 == 45 && response3[0] == 1 && response3[1] == 0x03 && response3[2] == 0x28) {
-                                // Extract serial number
+                            if (len3 == 45 && response3[0] == DEFAULT_SLAVE_ADDRESS && response3[1] == 0x03) {
                                 strncpy(result->serialNumber, (char*)&response3[3], 40);
                                 result->serialNumber[40] = '\0';
                                 
-                                // Store connection info
                                 result->comPort = comPort;
-                                result->slaveAddress = 1;
+                                result->slaveAddress = DEFAULT_SLAVE_ADDRESS;
                                 result->baudRate = baudRates[i];
                                 
                                 CloseCom(comPort);
+                                
+                                DebugPrint("Found PSB: %s, SN: %s\n", 
+                                          result->deviceType, result->serialNumber);
+                                
                                 return PSB_SUCCESS;
                             }
                         }
                     }
                 }
+            } else if (len == 7 && response[0] == DEFAULT_SLAVE_ADDRESS && response[1] == 0x06) {
+                DebugPrint("WARNING: Device responded with WRITE response (0x06) to READ request during scan!\n");
             }
         }
         
         CloseCom(comPort);
     }
     
-    // If we get here, no PSB was found on any baud rate
-    return PSB_ERROR_COMM;  // No PSB found on this port
+    return PSB_ERROR_COMM;
 }
 
-int PSB_AutoDiscover(PSB_DiscoveryResult *devices, int maxDevices, int *foundCount) {
-    if (!devices || !foundCount || maxDevices <= 0) return PSB_ERROR_INVALID_PARAM;
+int PSB_AutoDiscover(const char *targetSerial, PSB_Handle *handle) {
+    if (!handle || !targetSerial) return PSB_ERROR_INVALID_PARAM;
     
-    *foundCount = 0;
+    printf("\n=== AUTO-DISCOVERING PSB 10000 ===\n");
+    printf("Target serial: %s\n", targetSerial);
     
-    // Scan COM ports 1-20
-    for (int port = 1; port <= 20 && *foundCount < maxDevices; port++) {
+    SetBreakOnLibraryErrors(0);
+    
+    int portsToScan[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16};
+    int numPorts = sizeof(portsToScan) / sizeof(portsToScan[0]);
+    
+    for (int i = 0; i < numPorts; i++) {
+        int port = portsToScan[i];
         PSB_DiscoveryResult result;
         
-        if (PSB_ScanPort(port, &result) == PSB_SUCCESS) {
-            // Copy result to output array
-            devices[*foundCount] = result;
-            (*foundCount)++;
+        printf("Scanning COM%d...", port);
+        fflush(stdout);
+        
+        int scanResult = PSB_ScanPort(port, &result);
+        
+        if (scanResult == PSB_SUCCESS) {
+            printf(" Found PSB!\n");
+            printf("  Model: %s\n", result.deviceType);
+            printf("  Serial: %s\n", result.serialNumber);
+            
+            if (strncmp(result.serialNumber, targetSerial, strlen(targetSerial)) == 0) {
+                printf("  ? TARGET DEVICE FOUND!\n\n");
+                
+                SetBreakOnLibraryErrors(1);
+                
+                if (PSB_InitializeSpecific(handle, port, result.slaveAddress, result.baudRate) == PSB_SUCCESS) {
+                    strncpy(handle->serialNumber, result.serialNumber, sizeof(handle->serialNumber)-1);
+                    printf("? Successfully connected to PSB %s on COM%d\n", targetSerial, port);
+                    return PSB_SUCCESS;
+                } else {
+                    printf("? Found target but failed to connect\n");
+                    return PSB_ERROR_COMM;
+                }
+            } else {
+                printf("  ? Different device, continuing...\n");
+            }
+        } else {
+            printf(" no PSB\n");
         }
         
-        // Small delay between port scans
         Delay(0.05);
     }
     
-    return (*foundCount > 0) ? PSB_SUCCESS : PSB_ERROR_COMM;
+    SetBreakOnLibraryErrors(1);
+    
+    printf("\n? PSB with serial %s not found\n", targetSerial);
+    return PSB_ERROR_COMM;
 }
 
 /******************************************************************************
- * Initialization and Communication Functions
+ * Connection Functions
  ******************************************************************************/
-
-int PSB_Initialize(PSB_Handle *handle, int comPort, int slaveAddress) {
-    return PSB_InitializeSpecific(handle, comPort, slaveAddress, 9600);
-}
 
 int PSB_InitializeSpecific(PSB_Handle *handle, int comPort, int slaveAddress, int baudRate) {
     if (!handle) return PSB_ERROR_INVALID_PARAM;
     
-    // Initialize structure
     memset(handle, 0, sizeof(PSB_Handle));
     handle->comPort = comPort;
     handle->slaveAddress = slaveAddress;
     handle->timeoutMs = DEFAULT_TIMEOUT_MS;
     
-    // Configure serial port for Modbus RTU over USB
     if (OpenComConfig(comPort, "", baudRate, 0, 8, 1, 512, 512) < 0) {
         return PSB_ERROR_COMM;
     }
     
-    // Set timeouts
-    SetComTime(comPort, 1.0);  // 1 second timeout
+    SetComTime(comPort, handle->timeoutMs / 1000.0);
     
     handle->isConnected = 1;
     return PSB_SUCCESS;
 }
 
 int PSB_Close(PSB_Handle *handle) {
-    if (!handle || !handle->isConnected) return PSB_ERROR_INVALID_PARAM;
+    if (!handle || !handle->isConnected) return PSB_ERROR_NOT_CONNECTED;
     
     CloseCom(handle->comPort);
     handle->isConnected = 0;
-    return PSB_SUCCESS;
-}
-
-int PSB_SetTimeout(PSB_Handle *handle, int timeoutMs) {
-    if (!handle) return PSB_ERROR_INVALID_PARAM;
-    
-    handle->timeoutMs = timeoutMs;
-    SetComTime(handle->comPort, timeoutMs / 1000.0);
     return PSB_SUCCESS;
 }
 
@@ -209,175 +438,358 @@ int PSB_SetTimeout(PSB_Handle *handle, int timeoutMs) {
  ******************************************************************************/
 
 int PSB_SetRemoteMode(PSB_Handle *handle, int enable) {
-    if (!handle || !handle->isConnected) return PSB_ERROR_INVALID_PARAM;
+    if (!handle || !handle->isConnected) return PSB_ERROR_NOT_CONNECTED;
     
-    int value = enable ? COIL_ON : COIL_OFF;
-    return PSB_WriteSingleCoil(handle, REG_REMOTE_MODE, value);
+    unsigned char txBuffer[8];
+    unsigned char rxBuffer[8];
+    
+    txBuffer[0] = (unsigned char)handle->slaveAddress;
+    txBuffer[1] = MODBUS_WRITE_SINGLE_COIL;
+    txBuffer[2] = (unsigned char)((REG_REMOTE_MODE >> 8) & 0xFF);
+    txBuffer[3] = (unsigned char)(REG_REMOTE_MODE & 0xFF);
+    txBuffer[4] = enable ? 0xFF : 0x00;
+    txBuffer[5] = enable ? 0x00 : 0x00;
+    
+    unsigned short crc = PSB_CalculateCRC(txBuffer, 6);
+    txBuffer[6] = (unsigned char)(crc & 0xFF);
+    txBuffer[7] = (unsigned char)((crc >> 8) & 0xFF);
+    
+    DebugPrint("\nSetting remote mode: %s\n", enable ? "ON" : "OFF");
+    
+    // Expected response for write coil: Same as request = 8 bytes
+    return SendModbusCommand(handle, txBuffer, 8, rxBuffer, 8);
 }
 
 int PSB_SetOutputEnable(PSB_Handle *handle, int enable) {
-    if (!handle || !handle->isConnected) return PSB_ERROR_INVALID_PARAM;
+    if (!handle || !handle->isConnected) return PSB_ERROR_NOT_CONNECTED;
     
-    int value = enable ? COIL_ON : COIL_OFF;
-    return PSB_WriteSingleCoil(handle, REG_DC_OUTPUT, value);
-}
-
-int PSB_SetOperationMode(PSB_Handle *handle, int mode) {
-    if (!handle || !handle->isConnected) return PSB_ERROR_INVALID_PARAM;
+    unsigned char txBuffer[8];
+    unsigned char rxBuffer[8];
     
-    // mode: 0 = UIP (voltage priority), 1 = UIR (current priority)
-    int value = (mode == 0) ? MODE_UIP : MODE_UIR;
-    return PSB_WriteSingleCoil(handle, REG_OPERATION_MODE, value);
+    txBuffer[0] = (unsigned char)handle->slaveAddress;
+    txBuffer[1] = MODBUS_WRITE_SINGLE_COIL;
+    txBuffer[2] = (unsigned char)((REG_DC_OUTPUT >> 8) & 0xFF);
+    txBuffer[3] = (unsigned char)(REG_DC_OUTPUT & 0xFF);
+    txBuffer[4] = enable ? 0xFF : 0x00;
+    txBuffer[5] = enable ? 0x00 : 0x00;
+    
+    unsigned short crc = PSB_CalculateCRC(txBuffer, 6);
+    txBuffer[6] = (unsigned char)(crc & 0xFF);
+    txBuffer[7] = (unsigned char)((crc >> 8) & 0xFF);
+    
+    DebugPrint("\nSetting output: %s\n", enable ? "ON" : "OFF");
+    
+    return SendModbusCommand(handle, txBuffer, 8, rxBuffer, 8);
 }
 
 /******************************************************************************
- * Voltage and Current Control Functions
+ * Voltage Control Functions
  ******************************************************************************/
 
 int PSB_SetVoltage(PSB_Handle *handle, double voltage) {
-    if (!handle || !handle->isConnected) return PSB_ERROR_INVALID_PARAM;
-    if (voltage < 0) return PSB_ERROR_INVALID_PARAM;
+    if (!handle || !handle->isConnected) return PSB_ERROR_NOT_CONNECTED;
+    if (voltage < 0 || voltage > PSB_NOMINAL_VOLTAGE * 1.02) return PSB_ERROR_INVALID_PARAM;
     
-    // Convert voltage to device units (0-102% range, 0xD0E5 = 102%)
-    // Assuming nominal voltage from device specifications
-    int deviceValue = PSB_ConvertToDeviceUnits(voltage, 80.0);  // Assuming 80V nominal
+    unsigned char txBuffer[8];
+    unsigned char rxBuffer[8];
     
-    return PSB_WriteSingleRegister(handle, REG_SET_VOLTAGE, deviceValue);
+    int deviceValue = ConvertToDeviceUnits(voltage, PSB_NOMINAL_VOLTAGE);
+    
+    txBuffer[0] = (unsigned char)handle->slaveAddress;
+    txBuffer[1] = MODBUS_WRITE_SINGLE_REGISTER;
+    txBuffer[2] = (unsigned char)((REG_SET_VOLTAGE >> 8) & 0xFF);
+    txBuffer[3] = (unsigned char)(REG_SET_VOLTAGE & 0xFF);
+    txBuffer[4] = (unsigned char)((deviceValue >> 8) & 0xFF);
+    txBuffer[5] = (unsigned char)(deviceValue & 0xFF);
+    
+    unsigned short crc = PSB_CalculateCRC(txBuffer, 6);
+    txBuffer[6] = (unsigned char)(crc & 0xFF);
+    txBuffer[7] = (unsigned char)((crc >> 8) & 0xFF);
+    
+    DebugPrint("\nSetting voltage: %.2fV (0x%04X)\n", voltage, deviceValue);
+    
+    // Expected response for write register: Same as request = 8 bytes
+    return SendModbusCommand(handle, txBuffer, 8, rxBuffer, 8);
 }
 
-int PSB_SetCurrent(PSB_Handle *handle, double current) {
-    if (!handle || !handle->isConnected) return PSB_ERROR_INVALID_PARAM;
-    if (current < 0) return PSB_ERROR_INVALID_PARAM;
+int PSB_SetVoltageLimits(PSB_Handle *handle, double minVoltage, double maxVoltage) {
+    if (!handle || !handle->isConnected) return PSB_ERROR_NOT_CONNECTED;
+    if (minVoltage < 0 || maxVoltage > PSB_NOMINAL_VOLTAGE * 1.02) return PSB_ERROR_INVALID_PARAM;
+    if (minVoltage > maxVoltage) return PSB_ERROR_INVALID_PARAM;
     
-    // Convert current to device units (0-102% range, 0xD0E5 = 102%)
-    // Assuming nominal current from device specifications
-    int deviceValue = PSB_ConvertToDeviceUnits(current, 1000.0);  // Assuming 1000A nominal
+    // Set minimum voltage
+    unsigned char txBuffer[8];
+    unsigned char rxBuffer[8];
     
-    return PSB_WriteSingleRegister(handle, REG_SET_CURRENT, deviceValue);
-}
-
-int PSB_GetActualValues(PSB_Handle *handle, PSB_Status *status) {
-    if (!handle || !handle->isConnected || !status) return PSB_ERROR_INVALID_PARAM;
+    int minValue = ConvertToDeviceUnits(minVoltage, PSB_NOMINAL_VOLTAGE);
     
-    unsigned short registers[3];
-    int result = PSB_ReadHoldingRegisters(handle, REG_ACTUAL_VOLTAGE, 3, registers);
+    txBuffer[0] = (unsigned char)handle->slaveAddress;
+    txBuffer[1] = MODBUS_WRITE_SINGLE_REGISTER;
+    txBuffer[2] = (unsigned char)((REG_VOLTAGE_MIN >> 8) & 0xFF);
+    txBuffer[3] = (unsigned char)(REG_VOLTAGE_MIN & 0xFF);
+    txBuffer[4] = (unsigned char)((minValue >> 8) & 0xFF);
+    txBuffer[5] = (unsigned char)(minValue & 0xFF);
     
-    if (result == PSB_SUCCESS) {
-        // Convert from device units to real values
-        status->voltage = PSB_ConvertFromDeviceUnits(registers[0], 80.0);   // Assuming 80V nominal
-        status->current = PSB_ConvertFromDeviceUnits(registers[1], 1000.0); // Assuming 1000A nominal  
-        status->power = PSB_ConvertFromDeviceUnits(registers[2], 30000.0);  // Assuming 30kW nominal
-    }
+    unsigned short crc = PSB_CalculateCRC(txBuffer, 6);
+    txBuffer[6] = (unsigned char)(crc & 0xFF);
+    txBuffer[7] = (unsigned char)((crc >> 8) & 0xFF);
     
-    return result;
+    DebugPrint("\nSetting min voltage: %.2fV\n", minVoltage);
+    
+    int result = SendModbusCommand(handle, txBuffer, 8, rxBuffer, 8);
+    if (result != PSB_SUCCESS) return result;
+    
+    // Set maximum voltage
+    int maxValue = ConvertToDeviceUnits(maxVoltage, PSB_NOMINAL_VOLTAGE);
+    
+    txBuffer[2] = (unsigned char)((REG_VOLTAGE_MAX >> 8) & 0xFF);
+    txBuffer[3] = (unsigned char)(REG_VOLTAGE_MAX & 0xFF);
+    txBuffer[4] = (unsigned char)((maxValue >> 8) & 0xFF);
+    txBuffer[5] = (unsigned char)(maxValue & 0xFF);
+    
+    crc = PSB_CalculateCRC(txBuffer, 6);
+    txBuffer[6] = (unsigned char)(crc & 0xFF);
+    txBuffer[7] = (unsigned char)((crc >> 8) & 0xFF);
+    
+    DebugPrint("Setting max voltage: %.2fV\n", maxVoltage);
+    
+    return SendModbusCommand(handle, txBuffer, 8, rxBuffer, 8);
 }
 
 /******************************************************************************
- * Limit Configuration Functions
+ * Current Control Functions
  ******************************************************************************/
 
-int PSB_SetVoltageLimits(PSB_Handle *handle, double minVoltage, double maxVoltage) {
-    if (!handle || !handle->isConnected) return PSB_ERROR_INVALID_PARAM;
-    if (minVoltage < 0 || maxVoltage < minVoltage) return PSB_ERROR_INVALID_PARAM;
+int PSB_SetCurrent(PSB_Handle *handle, double current) {
+    if (!handle || !handle->isConnected) return PSB_ERROR_NOT_CONNECTED;
+    if (current < 0 || current > PSB_NOMINAL_CURRENT * 1.02) return PSB_ERROR_INVALID_PARAM;
     
-    int minValue = PSB_ConvertToDeviceUnits(minVoltage, 80.0);
-    int maxValue = PSB_ConvertToDeviceUnits(maxVoltage, 80.0);
+    unsigned char txBuffer[8];
+    unsigned char rxBuffer[8];
     
-    int result = PSB_WriteSingleRegister(handle, REG_VOLTAGE_MIN, minValue);
-    if (result == PSB_SUCCESS) {
-        result = PSB_WriteSingleRegister(handle, REG_VOLTAGE_MAX, maxValue);
-    }
+    int deviceValue = ConvertToDeviceUnits(current, PSB_NOMINAL_CURRENT);
     
-    return result;
+    txBuffer[0] = (unsigned char)handle->slaveAddress;
+    txBuffer[1] = MODBUS_WRITE_SINGLE_REGISTER;
+    txBuffer[2] = (unsigned char)((REG_SET_CURRENT >> 8) & 0xFF);
+    txBuffer[3] = (unsigned char)(REG_SET_CURRENT & 0xFF);
+    txBuffer[4] = (unsigned char)((deviceValue >> 8) & 0xFF);
+    txBuffer[5] = (unsigned char)(deviceValue & 0xFF);
+    
+    unsigned short crc = PSB_CalculateCRC(txBuffer, 6);
+    txBuffer[6] = (unsigned char)(crc & 0xFF);
+    txBuffer[7] = (unsigned char)((crc >> 8) & 0xFF);
+    
+    DebugPrint("\nSetting current: %.2fA (0x%04X)\n", current, deviceValue);
+    
+    return SendModbusCommand(handle, txBuffer, 8, rxBuffer, 8);
 }
 
 int PSB_SetCurrentLimits(PSB_Handle *handle, double minCurrent, double maxCurrent) {
-    if (!handle || !handle->isConnected) return PSB_ERROR_INVALID_PARAM;
-    if (minCurrent < 0 || maxCurrent < minCurrent) return PSB_ERROR_INVALID_PARAM;
+    if (!handle || !handle->isConnected) return PSB_ERROR_NOT_CONNECTED;
+    if (minCurrent < 0 || maxCurrent > PSB_NOMINAL_CURRENT * 1.02) return PSB_ERROR_INVALID_PARAM;
+    if (minCurrent > maxCurrent) return PSB_ERROR_INVALID_PARAM;
     
-    int minValue = PSB_ConvertToDeviceUnits(minCurrent, 1000.0);
-    int maxValue = PSB_ConvertToDeviceUnits(maxCurrent, 1000.0);
+    // Set minimum current
+    unsigned char txBuffer[8];
+    unsigned char rxBuffer[8];
     
-    int result = PSB_WriteSingleRegister(handle, REG_CURRENT_MIN, minValue);
-    if (result == PSB_SUCCESS) {
-        result = PSB_WriteSingleRegister(handle, REG_CURRENT_MAX, maxValue);
-    }
+    int minValue = ConvertToDeviceUnits(minCurrent, PSB_NOMINAL_CURRENT);
     
-    return result;
-}
-
-int PSB_SetPowerLimit(PSB_Handle *handle, double maxPower) {
-    if (!handle || !handle->isConnected) return PSB_ERROR_INVALID_PARAM;
-    if (maxPower < 0) return PSB_ERROR_INVALID_PARAM;
+    txBuffer[0] = (unsigned char)handle->slaveAddress;
+    txBuffer[1] = MODBUS_WRITE_SINGLE_REGISTER;
+    txBuffer[2] = (unsigned char)((REG_CURRENT_MIN >> 8) & 0xFF);
+    txBuffer[3] = (unsigned char)(REG_CURRENT_MIN & 0xFF);
+    txBuffer[4] = (unsigned char)((minValue >> 8) & 0xFF);
+    txBuffer[5] = (unsigned char)(minValue & 0xFF);
     
-    int value = PSB_ConvertToDeviceUnits(maxPower, 30000.0);
-    return PSB_WriteSingleRegister(handle, REG_POWER_MAX, value);
-}
-
-int PSB_GetLimits(PSB_Handle *handle, PSB_Limits *limits) {
-    if (!handle || !handle->isConnected || !limits) return PSB_ERROR_INVALID_PARAM;
+    unsigned short crc = PSB_CalculateCRC(txBuffer, 6);
+    txBuffer[6] = (unsigned char)(crc & 0xFF);
+    txBuffer[7] = (unsigned char)((crc >> 8) & 0xFF);
     
-    unsigned short registers[5];
-    int result = PSB_ReadHoldingRegisters(handle, REG_VOLTAGE_MAX, 5, registers);
+    DebugPrint("\nSetting min current: %.2fA\n", minCurrent);
     
-    if (result == PSB_SUCCESS) {
-        limits->maxVoltage = PSB_ConvertFromDeviceUnits(registers[0], 80.0);
-        limits->minVoltage = PSB_ConvertFromDeviceUnits(registers[1], 80.0);
-        limits->maxCurrent = PSB_ConvertFromDeviceUnits(registers[2], 1000.0);
-        limits->minCurrent = PSB_ConvertFromDeviceUnits(registers[3], 1000.0);
-        limits->maxPower = PSB_ConvertFromDeviceUnits(registers[4], 30000.0);
-    }
+    int result = SendModbusCommand(handle, txBuffer, 8, rxBuffer, 8);
+    if (result != PSB_SUCCESS) return result;
     
-    return result;
+    // Set maximum current
+    int maxValue = ConvertToDeviceUnits(maxCurrent, PSB_NOMINAL_CURRENT);
+    
+    txBuffer[2] = (unsigned char)((REG_CURRENT_MAX >> 8) & 0xFF);
+    txBuffer[3] = (unsigned char)(REG_CURRENT_MAX & 0xFF);
+    txBuffer[4] = (unsigned char)((maxValue >> 8) & 0xFF);
+    txBuffer[5] = (unsigned char)(maxValue & 0xFF);
+    
+    crc = PSB_CalculateCRC(txBuffer, 6);
+    txBuffer[6] = (unsigned char)(crc & 0xFF);
+    txBuffer[7] = (unsigned char)((crc >> 8) & 0xFF);
+    
+    DebugPrint("Setting max current: %.2fA\n", maxCurrent);
+    
+    return SendModbusCommand(handle, txBuffer, 8, rxBuffer, 8);
 }
 
 /******************************************************************************
- * Status and Monitoring Functions
+ * Power Control Functions
  ******************************************************************************/
 
-int PSB_GetDeviceStatus(PSB_Handle *handle, PSB_Status *status) {
-    if (!handle || !handle->isConnected || !status) return PSB_ERROR_INVALID_PARAM;
+int PSB_SetPower(PSB_Handle *handle, double power) {
+    if (!handle || !handle->isConnected) return PSB_ERROR_NOT_CONNECTED;
+    if (power < 0 || power > PSB_NOMINAL_POWER * 1.02) return PSB_ERROR_INVALID_PARAM;
     
-    unsigned short deviceState[2];
-    int result = PSB_ReadHoldingRegisters(handle, REG_DEVICE_STATE, 2, deviceState);
+    unsigned char txBuffer[8];
+    unsigned char rxBuffer[8];
+    
+    int deviceValue = ConvertToDeviceUnits(power, PSB_NOMINAL_POWER);
+    
+    txBuffer[0] = (unsigned char)handle->slaveAddress;
+    txBuffer[1] = MODBUS_WRITE_SINGLE_REGISTER;
+    txBuffer[2] = (unsigned char)((REG_SET_POWER_SOURCE >> 8) & 0xFF);
+    txBuffer[3] = (unsigned char)(REG_SET_POWER_SOURCE & 0xFF);
+    txBuffer[4] = (unsigned char)((deviceValue >> 8) & 0xFF);
+    txBuffer[5] = (unsigned char)(deviceValue & 0xFF);
+    
+    unsigned short crc = PSB_CalculateCRC(txBuffer, 6);
+    txBuffer[6] = (unsigned char)(crc & 0xFF);
+    txBuffer[7] = (unsigned char)((crc >> 8) & 0xFF);
+    
+    DebugPrint("\nSetting power: %.2fW (0x%04X)\n", power, deviceValue);
+    
+    return SendModbusCommand(handle, txBuffer, 8, rxBuffer, 8);
+}
+
+int PSB_SetPowerLimit(PSB_Handle *handle, double maxPower) {
+    if (!handle || !handle->isConnected) return PSB_ERROR_NOT_CONNECTED;
+    if (maxPower < 0 || maxPower > PSB_NOMINAL_POWER * 1.02) return PSB_ERROR_INVALID_PARAM;
+    
+    unsigned char txBuffer[8];
+    unsigned char rxBuffer[8];
+    
+    int maxValue = ConvertToDeviceUnits(maxPower, PSB_NOMINAL_POWER);
+    
+    txBuffer[0] = (unsigned char)handle->slaveAddress;
+    txBuffer[1] = MODBUS_WRITE_SINGLE_REGISTER;
+    txBuffer[2] = (unsigned char)((REG_POWER_MAX >> 8) & 0xFF);
+    txBuffer[3] = (unsigned char)(REG_POWER_MAX & 0xFF);
+    txBuffer[4] = (unsigned char)((maxValue >> 8) & 0xFF);
+    txBuffer[5] = (unsigned char)(maxValue & 0xFF);
+    
+    unsigned short crc = PSB_CalculateCRC(txBuffer, 6);
+    txBuffer[6] = (unsigned char)(crc & 0xFF);
+    txBuffer[7] = (unsigned char)((crc >> 8) & 0xFF);
+    
+    DebugPrint("\nSetting max power: %.2fW\n", maxPower);
+    
+    return SendModbusCommand(handle, txBuffer, 8, rxBuffer, 8);
+}
+
+/******************************************************************************
+ * Status Functions
+ ******************************************************************************/
+
+int PSB_GetStatus(PSB_Handle *handle, PSB_Status *status) {
+    if (!handle || !handle->isConnected || !status) return PSB_ERROR_NOT_CONNECTED;
+    
+    memset(status, 0, sizeof(PSB_Status));
+    
+    // Read device state register (505) - 32-bit value across 2 registers
+    unsigned char txBuffer[8];
+    unsigned char rxBuffer[10];
+    
+    txBuffer[0] = (unsigned char)handle->slaveAddress;
+    txBuffer[1] = MODBUS_READ_HOLDING_REGISTERS;
+    txBuffer[2] = (unsigned char)((REG_DEVICE_STATE >> 8) & 0xFF);
+    txBuffer[3] = (unsigned char)(REG_DEVICE_STATE & 0xFF);
+    txBuffer[4] = 0x00;  // Number of registers high byte
+    txBuffer[5] = 0x02;  // Number of registers low byte (2 registers for 32-bit)
+    
+    unsigned short crc = PSB_CalculateCRC(txBuffer, 6);
+    txBuffer[6] = (unsigned char)(crc & 0xFF);
+    txBuffer[7] = (unsigned char)((crc >> 8) & 0xFF);
+    
+    DebugPrint("\n=== Reading Device State (Reg 505) ===\n");
+    
+    // Expected response: Address(1) + Function(1) + ByteCount(1) + Data(4) + CRC(2) = 9 bytes
+    int result = SendModbusCommand(handle, txBuffer, 8, rxBuffer, 9);
     
     if (result == PSB_SUCCESS) {
-        // Parse device state bits (see register 505 documentation)
-        unsigned long state = ((unsigned long)deviceState[1] << 16) | deviceState[0];
+        // Verify this is a read response
+        if (rxBuffer[1] != MODBUS_READ_HOLDING_REGISTERS) {
+            DebugPrint("ERROR: Expected READ response (0x03), got 0x%02X\n", rxBuffer[1]);
+            return PSB_ERROR_RESPONSE;
+        }
         
-        // Extract the key status bits according to manual
-        status->outputEnabled = (state & 0x80) ? 1 : 0;        // Bit 7: Output state
-        status->remoteMode = (state & 0x800) ? 1 : 0;          // Bit 11: Remote mode
-        status->operationMode = (state & 0x600) >> 9;          // Bits 9-10: Regulation mode
+        // Extract the 32-bit state value
+        // Data is in bytes 3-6 of response
+        unsigned short reg505_value = (unsigned short)((rxBuffer[3] << 8) | rxBuffer[4]);  // 0x0000
+		unsigned short reg506_value = (unsigned short)((rxBuffer[5] << 8) | rxBuffer[6]);  // 0x0803
+		status->rawState = ((unsigned long)reg505_value << 16) | reg506_value;  // 0x00000803
         
-        // Get actual values as well
-        PSB_GetActualValues(handle, status);
+        DebugPrint("Raw registers: [505]=0x%04X, [506]=0x%04X\n", reg505_value, reg506_value);
+        DebugPrint("Combined 32-bit state: 0x%08lX\n", status->rawState);
+        
+        // Parse state bits
+        status->controlLocation = (int)(status->rawState & STATE_CONTROL_LOCATION_MASK);
+        status->outputEnabled = (status->rawState & STATE_OUTPUT_ENABLED) ? 1 : 0;
+        status->regulationMode = (int)((status->rawState & STATE_REGULATION_MODE_MASK) >> 9);
+        status->remoteMode = (status->rawState & STATE_REMOTE_MODE) ? 1 : 0;
+        status->alarmsActive = (status->rawState & STATE_ALARMS_ACTIVE) ? 1 : 0;
+        
+        DebugPrint("Parsed state:\n");
+        DebugPrint("  Control Location: 0x%02X\n", status->controlLocation);
+        DebugPrint("  Output Enabled: %s\n", status->outputEnabled ? "YES" : "NO");
+        DebugPrint("  Remote Mode: %s\n", status->remoteMode ? "YES" : "NO");
+        DebugPrint("  Regulation Mode: %d\n", status->regulationMode);
+        DebugPrint("  Alarms Active: %s\n", status->alarmsActive ? "YES" : "NO");
+        
+        // Read actual values
+        return PSB_GetActualValues(handle, &status->voltage, &status->current, &status->power);
     }
     
     return result;
 }
 
-int PSB_IsOutputEnabled(PSB_Handle *handle, int *enabled) {
-    if (!handle || !handle->isConnected || !enabled) return PSB_ERROR_INVALID_PARAM;
+int PSB_GetActualValues(PSB_Handle *handle, double *voltage, double *current, double *power) {
+    if (!handle || !handle->isConnected) return PSB_ERROR_NOT_CONNECTED;
     
-    PSB_Status status;
-    int result = PSB_GetDeviceStatus(handle, &status);
+    unsigned char txBuffer[8];
+    unsigned char rxBuffer[12];
+    
+    txBuffer[0] = (unsigned char)handle->slaveAddress;
+    txBuffer[1] = MODBUS_READ_HOLDING_REGISTERS;
+    txBuffer[2] = (unsigned char)((REG_ACTUAL_VOLTAGE >> 8) & 0xFF);
+    txBuffer[3] = (unsigned char)(REG_ACTUAL_VOLTAGE & 0xFF);
+    txBuffer[4] = 0x00;
+    txBuffer[5] = 0x03;  // Read 3 registers (voltage, current, power)
+    
+    unsigned short crc = PSB_CalculateCRC(txBuffer, 6);
+    txBuffer[6] = (unsigned char)(crc & 0xFF);
+    txBuffer[7] = (unsigned char)((crc >> 8) & 0xFF);
+    
+    DebugPrint("\n=== Reading Actual Values ===\n");
+    
+    // Expected response: Address(1) + Function(1) + ByteCount(1) + Data(6) + CRC(2) = 11 bytes
+    int result = SendModbusCommand(handle, txBuffer, 8, rxBuffer, 11);
     
     if (result == PSB_SUCCESS) {
-        *enabled = status.outputEnabled;
-    }
-    
-    return result;
-}
-
-int PSB_IsRemoteModeActive(PSB_Handle *handle, int *active) {
-    if (!handle || !handle->isConnected || !active) return PSB_ERROR_INVALID_PARAM;
-    
-    PSB_Status status;
-    int result = PSB_GetDeviceStatus(handle, &status);
-    
-    if (result == PSB_SUCCESS) {
-        *active = status.remoteMode;
+        // Verify this is a read response
+        if (rxBuffer[1] != MODBUS_READ_HOLDING_REGISTERS) {
+            DebugPrint("ERROR: Expected READ response (0x03), got 0x%02X\n", rxBuffer[1]);
+            return PSB_ERROR_RESPONSE;
+        }
+        
+        unsigned short voltageRaw = (unsigned short)((rxBuffer[3] << 8) | rxBuffer[4]);
+        unsigned short currentRaw = (unsigned short)((rxBuffer[5] << 8) | rxBuffer[6]);
+        unsigned short powerRaw = (unsigned short)((rxBuffer[7] << 8) | rxBuffer[8]);
+        
+        if (voltage) *voltage = ConvertFromDeviceUnits(voltageRaw, PSB_NOMINAL_VOLTAGE);
+        if (current) *current = ConvertFromDeviceUnits(currentRaw, PSB_NOMINAL_CURRENT);
+        if (power) *power = ConvertFromDeviceUnits(powerRaw, PSB_NOMINAL_POWER);
+        
+        DebugPrint("Actual values: V=%.2fV, I=%.2fA, P=%.2fW\n",
+                   voltage ? *voltage : 0.0,
+                   current ? *current : 0.0,
+                   power ? *power : 0.0);
     }
     
     return result;
@@ -395,186 +807,35 @@ const char* PSB_GetErrorString(int errorCode) {
     return "Unknown error";
 }
 
-int PSB_ConvertToDeviceUnits(double realValue, double nominalValue) {
-    // Convert real value to device units (0-102% range)
-    // 0xD0E5 (53477) represents 102%
-    double percentage = (realValue / nominalValue) * 100.0;
-    if (percentage > 102.0) percentage = 102.0;
-    if (percentage < 0.0) percentage = 0.0;
-    
-    return (int)((percentage / 102.0) * 53477);
+void PSB_EnableDebugOutput(int enable) {
+    debugEnabled = enable;
 }
 
-double PSB_ConvertFromDeviceUnits(int deviceValue, double nominalValue) {
-    // Convert device units to real value
-    double percentage = ((double)deviceValue / 53477.0) * 102.0;
-    return (percentage / 100.0) * nominalValue;
-}
-
-/******************************************************************************
- * Low-level Modbus Functions
- ******************************************************************************/
-
-int PSB_ReadHoldingRegisters(PSB_Handle *handle, int startAddr, int numRegs, unsigned short *data) {
-    if (!handle || !handle->isConnected || !data) return PSB_ERROR_INVALID_PARAM;
+void PSB_PrintStatus(PSB_Status *status) {
+    if (!status) return;
     
-    unsigned char txBuffer[8];
-    unsigned char rxBuffer[256];
-    
-    // Build Modbus RTU frame
-    txBuffer[0] = handle->slaveAddress;
-    txBuffer[1] = MODBUS_READ_HOLDING_REGISTERS;
-    txBuffer[2] = (startAddr >> 8) & 0xFF;
-    txBuffer[3] = startAddr & 0xFF;
-    txBuffer[4] = (numRegs >> 8) & 0xFF;
-    txBuffer[5] = numRegs & 0xFF;
-    
-    // Calculate CRC
-    unsigned short crc = PSB_CalculateCRC(txBuffer, 6);
-    txBuffer[6] = crc & 0xFF;
-    txBuffer[7] = (crc >> 8) & 0xFF;
-    
-    int expectedRxLength = 5 + (numRegs * 2);
-    int result = PSB_SendModbusCommand(handle, txBuffer, 8, rxBuffer, expectedRxLength);
-    
-    if (result == PSB_SUCCESS) {
-        // Extract data from response
-        for (int i = 0; i < numRegs; i++) {
-            data[i] = (rxBuffer[3 + i*2] << 8) | rxBuffer[4 + i*2];
-        }
+    printf("\n=== PSB Status ===\n");
+    printf("Voltage: %.2f V\n", status->voltage);
+    printf("Current: %.2f A\n", status->current);
+    printf("Power: %.2f W\n", status->power);
+    printf("Output Enabled: %s\n", status->outputEnabled ? "YES" : "NO");
+    printf("Remote Mode: %s\n", status->remoteMode ? "YES" : "NO");
+    printf("Control Location: ");
+    switch (status->controlLocation) {
+        case CONTROL_FREE: printf("FREE\n"); break;
+        case CONTROL_LOCAL: printf("LOCAL\n"); break;
+        case CONTROL_USB: printf("USB\n"); break;
+        case CONTROL_ANALOG: printf("ANALOG\n"); break;
+        default: printf("OTHER (0x%02X)\n", status->controlLocation); break;
     }
-    
-    return result;
-}
-
-int PSB_WriteSingleCoil(PSB_Handle *handle, int address, int value) {
-    if (!handle || !handle->isConnected) return PSB_ERROR_INVALID_PARAM;
-    
-    unsigned char txBuffer[8];
-    unsigned char rxBuffer[8];
-    
-    // Build Modbus RTU frame
-    txBuffer[0] = handle->slaveAddress;
-    txBuffer[1] = MODBUS_WRITE_SINGLE_COIL;
-    txBuffer[2] = (address >> 8) & 0xFF;
-    txBuffer[3] = address & 0xFF;
-    txBuffer[4] = (value >> 8) & 0xFF;
-    txBuffer[5] = value & 0xFF;
-    
-    // Calculate CRC
-    unsigned short crc = PSB_CalculateCRC(txBuffer, 6);
-    txBuffer[6] = crc & 0xFF;
-    txBuffer[7] = (crc >> 8) & 0xFF;
-    
-    return PSB_SendModbusCommand(handle, txBuffer, 8, rxBuffer, 8);
-}
-
-int PSB_WriteSingleRegister(PSB_Handle *handle, int address, int value) {
-    if (!handle || !handle->isConnected) return PSB_ERROR_INVALID_PARAM;
-    
-    unsigned char txBuffer[8];
-    unsigned char rxBuffer[8];
-    
-    // Build Modbus RTU frame
-    txBuffer[0] = handle->slaveAddress;
-    txBuffer[1] = MODBUS_WRITE_SINGLE_REGISTER;
-    txBuffer[2] = (address >> 8) & 0xFF;
-    txBuffer[3] = address & 0xFF;
-    txBuffer[4] = (value >> 8) & 0xFF;
-    txBuffer[5] = value & 0xFF;
-    
-    // Calculate CRC
-    unsigned short crc = PSB_CalculateCRC(txBuffer, 6);
-    txBuffer[6] = crc & 0xFF;
-    txBuffer[7] = (crc >> 8) & 0xFF;
-    
-    return PSB_SendModbusCommand(handle, txBuffer, 8, rxBuffer, 8);
-}
-
-int PSB_WriteMultipleRegisters(PSB_Handle *handle, int startAddr, int numRegs, unsigned short *data) {
-    if (!handle || !handle->isConnected || !data) return PSB_ERROR_INVALID_PARAM;
-    
-    unsigned char txBuffer[256];
-    unsigned char rxBuffer[8];
-    
-    int byteCount = numRegs * 2;
-    
-    // Build Modbus RTU frame
-    txBuffer[0] = handle->slaveAddress;
-    txBuffer[1] = MODBUS_WRITE_MULTIPLE_REGISTERS;
-    txBuffer[2] = (startAddr >> 8) & 0xFF;
-    txBuffer[3] = startAddr & 0xFF;
-    txBuffer[4] = (numRegs >> 8) & 0xFF;
-    txBuffer[5] = numRegs & 0xFF;
-    txBuffer[6] = byteCount;
-    
-    // Add data
-    for (int i = 0; i < numRegs; i++) {
-        txBuffer[7 + i*2] = (data[i] >> 8) & 0xFF;
-        txBuffer[8 + i*2] = data[i] & 0xFF;
+    printf("Regulation Mode: ");
+    switch (status->regulationMode) {
+        case 0: printf("CV (Constant Voltage)\n"); break;
+        case 1: printf("CR (Constant Resistance)\n"); break;
+        case 2: printf("CC (Constant Current)\n"); break;
+        case 3: printf("CP (Constant Power)\n"); break;
     }
-    
-    // Calculate CRC
-    int frameLength = 7 + byteCount;
-    unsigned short crc = PSB_CalculateCRC(txBuffer, frameLength);
-    txBuffer[frameLength] = crc & 0xFF;
-    txBuffer[frameLength + 1] = (crc >> 8) & 0xFF;
-    
-    return PSB_SendModbusCommand(handle, txBuffer, frameLength + 2, rxBuffer, 8);
-}
-
-static int PSB_SendModbusCommand(PSB_Handle *handle, unsigned char *txBuffer, int txLength, 
-                                unsigned char *rxBuffer, int expectedRxLength) {
-    if (!handle || !handle->isConnected) return PSB_ERROR_INVALID_PARAM;
-    
-    // Flush input buffer
-    FlushInQ(handle->comPort);
-    
-    // Send command
-    if (ComWrt(handle->comPort, (char*)txBuffer, txLength) != txLength) {
-        return PSB_ERROR_COMM;
-    }
-    
-    // Wait for response
-    Delay(0.01);  // Small delay for device processing
-    
-    // Read response
-    int bytesRead = ComRdTerm(handle->comPort, (char*)rxBuffer, expectedRxLength, 0x0A);
-    if (bytesRead < expectedRxLength) {
-        // Try to read remaining bytes
-        int remainingBytes = expectedRxLength - bytesRead;
-        int additionalBytes = ComRd(handle->comPort, (char*)&rxBuffer[bytesRead], remainingBytes);
-        bytesRead += additionalBytes;
-    }
-    
-    if (bytesRead != expectedRxLength) {
-        return PSB_ERROR_TIMEOUT;
-    }
-    
-    // Verify CRC
-    unsigned short receivedCRC = rxBuffer[bytesRead-1] << 8 | rxBuffer[bytesRead-2];
-    unsigned short calculatedCRC = PSB_CalculateCRC(rxBuffer, bytesRead - 2);
-    
-    if (receivedCRC != calculatedCRC) {
-        return PSB_ERROR_CRC;
-    }
-    
-    return PSB_SUCCESS;
-}
-
-unsigned short PSB_CalculateCRC(unsigned char *data, int length) {
-    unsigned short crc = MODBUS_CRC_INIT;
-    
-    for (int i = 0; i < length; i++) {
-        crc ^= data[i];
-        for (int j = 0; j < 8; j++) {
-            if (crc & 0x0001) {
-                crc = (crc >> 1) ^ 0xA001;
-            } else {
-                crc = crc >> 1;
-            }
-        }
-    }
-    
-    return crc;
+    printf("Alarms Active: %s\n", status->alarmsActive ? "YES" : "NO");
+    printf("Raw State: 0x%08lX\n", status->rawState);
+    printf("==================\n");
 }

@@ -11,7 +11,7 @@ IVI Standard Root Dir = "/c/Program Files/IVI Foundation/IVI"
 VXIplug&play Framework Dir = "/C/Program Files (x86)/IVI Foundation/VISA/winnt"
 IVI Standard Root 64-bit Dir = "/C/Program Files/IVI Foundation/IVI"
 VXIplug&play Framework 64-bit Dir = "/C/Program Files/IVI Foundation/VISA/win64"
-Number of Files = 5
+Number of Files = 7
 Target Type = "Executable"
 Flags = 2064
 Copied From Locked InstrDrv Directory = False
@@ -68,8 +68,21 @@ Folder = "Include Files"
 Folder Id = 1
 
 [File 0004]
-File Type = "CSource"
+File Type = "Include"
 Res Id = 4
+Path Is Rel = True
+Path Rel To = "Project"
+Path Rel Path = "psb10000_test.h"
+Path Line0001 = "/c/Users/CV166/Documents/LabWindowsCVI/BatteryTester/battery-tester/psb10000_tes"
+Path Line0002 = "t.h"
+Exclude = False
+Project Flags = 0
+Folder = "Include Files"
+Folder Id = 1
+
+[File 0005]
+File Type = "CSource"
+Res Id = 5
 Path Is Rel = True
 Path Rel To = "Project"
 Path Rel Path = "BatteryTester.c"
@@ -81,13 +94,27 @@ Project Flags = 0
 Folder = "Source Files"
 Folder Id = 2
 
-[File 0005]
+[File 0006]
 File Type = "CSource"
-Res Id = 5
+Res Id = 6
 Path Is Rel = True
 Path Rel To = "Project"
 Path Rel Path = "psb10000.c"
 Path = "/c/Users/CV166/Documents/LabWindowsCVI/BatteryTester/battery-tester/psb10000.c"
+Exclude = False
+Compile Into Object File = False
+Project Flags = 0
+Folder = "Source Files"
+Folder Id = 2
+
+[File 0007]
+File Type = "CSource"
+Res Id = 7
+Path Is Rel = True
+Path Rel To = "Project"
+Path Rel Path = "psb10000_test.c"
+Path Line0001 = "/c/Users/CV166/Documents/LabWindowsCVI/BatteryTester/battery-tester/psb10000_tes"
+Path Line0002 = "t.c"
 Exclude = False
 Compile Into Object File = False
 Project Flags = 0
