@@ -106,6 +106,7 @@ int Test_OutputControl(PSB_Handle *handle, char *errorMsg, int errorMsgSize);
 int Test_InvalidParameters(PSB_Handle *handle, char *errorMsg, int errorMsgSize);
 int Test_SequenceOperations(PSB_Handle *handle, char *errorMsg, int errorMsgSize);
 int Test_BoundaryConditions(PSB_Handle *handle, char *errorMsg, int errorMsgSize);
+int Test_OutputVoltageVerification(PSB_Handle *handle, char *errorMsg, int errorMsgSize);
 
 // Utility functions
 void PrintTestHeader(const char *testName);

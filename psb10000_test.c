@@ -26,7 +26,8 @@ static TestCase testCases[] = {
     {"Output Control", Test_OutputControl, 0, "", 0.0},
     {"Invalid Parameters", Test_InvalidParameters, 0, "", 0.0},
     {"Boundary Conditions", Test_BoundaryConditions, 0, "", 0.0},
-    {"Sequence Operations", Test_SequenceOperations, 0, "", 0.0}
+    {"Sequence Operations", Test_SequenceOperations, 0, "", 0.0},
+    {"Output Voltage Verification", Test_OutputVoltageVerification, 0, "", 0.0}
 };
 
 static int numTestCases = sizeof(testCases) / sizeof(testCases[0]);
@@ -120,8 +121,17 @@ static int SetWideLimits(PSB_Handle *handle) {
     int result;
     int errors = 0;
     
+    // Ensure remote mode is on
+    result = PSB_SetRemoteMode(handle, 1);
+    if (result != PSB_SUCCESS) {
+        printf("Failed to enable remote mode: %s\n", PSB_GetErrorString(result));
+        return PSB_ERROR_COMM;
+    }
+    
+    Delay(TEST_DELAY_SHORT);
+    
     // For voltage limits, we need to be careful about order
-    printf("Setting voltage limits: %.1fV - %.1fV...\n", 
+    printf("Setting voltage limits: %.1fV - %.1fV...", 
            PSB_TEST_VOLTAGE_MIN_WIDE, PSB_TEST_VOLTAGE_MAX_WIDE);
     result = PSB_SetVoltageLimits(handle, PSB_TEST_VOLTAGE_MIN_WIDE, PSB_TEST_VOLTAGE_MAX_WIDE);
     if (result != PSB_SUCCESS) {
@@ -130,35 +140,35 @@ static int SetWideLimits(PSB_Handle *handle) {
         printf("WARNING: Failed to set voltage limits\n");
         errors++;
     } else {
-        printf("? Voltage limits set successfully\n");
+        printf("SUCCESS\n");
     }
     
     // Set current limits
-    printf("Setting current limits: %.1fA - %.1fA...\n", 
+    printf("Setting current limits: %.1fA - %.1fA...", 
            PSB_TEST_CURRENT_MIN_WIDE, PSB_TEST_CURRENT_MAX_WIDE);
     result = PSB_SetCurrentLimits(handle, PSB_TEST_CURRENT_MIN_WIDE, PSB_TEST_CURRENT_MAX_WIDE);
     if (result != PSB_SUCCESS) {
         printf("WARNING: Failed to set current limits: %s\n", PSB_GetErrorString(result));
         errors++;
     } else {
-        printf("? Current limits set successfully\n");
+        printf("SUCCESS\n");
     }
     
     // Set power limit
-    printf("Setting power limit: %.1fW...\n", PSB_TEST_POWER_MAX_WIDE);
+    printf("Setting power limit: %.1fW...", PSB_TEST_POWER_MAX_WIDE);
     result = PSB_SetPowerLimit(handle, PSB_TEST_POWER_MAX_WIDE);
     if (result != PSB_SUCCESS) {
         printf("WARNING: Failed to set power limit: %s\n", PSB_GetErrorString(result));
         errors++;
     } else {
-        printf("? Power limit set successfully\n");
+        printf("SUCCESS\n");
     }
     
     if (errors == 0) {
         printf("? All wide limits set successfully\n");
         return PSB_SUCCESS;
     } else {
-        printf("? Failed to set %d limit(s)\n", errors);
+        printf("Failed to set %d limit(s)\n", errors);
         return PSB_ERROR_COMM;
     }
 }
@@ -541,13 +551,23 @@ int Test_VoltageControl(PSB_Handle *handle, char *errorMsg, int errorMsgSize) {
 int Test_VoltageLimits(PSB_Handle *handle, char *errorMsg, int errorMsgSize) {
     printf("Testing voltage limits...\n");
     
+    // Ensure remote mode is on
+    int result = PSB_SetRemoteMode(handle, 1);
+    if (result != PSB_SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Failed to enable remote mode: %s", 
+                PSB_GetErrorString(result));
+        return -1;
+    }
+    
+    Delay(TEST_DELAY_SHORT);
+    
     // Test valid limits
     double minVoltage = 15.0;
     double maxVoltage = 45.0;
     
     printf("Setting voltage limits: min=%.2fV, max=%.2fV\n", minVoltage, maxVoltage);
     
-    int result = PSB_SetVoltageLimits(handle, minVoltage, maxVoltage);
+    result = PSB_SetVoltageLimits(handle, minVoltage, maxVoltage);
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to set voltage limits: %s", 
                 PSB_GetErrorString(result));
@@ -583,6 +603,8 @@ int Test_CurrentControl(PSB_Handle *handle, char *errorMsg, int errorMsgSize) {
         return -1;
     }
     
+    Delay(TEST_DELAY_SHORT);
+    
     // Test setting different current values
     double testCurrents[] = {TEST_CURRENT_LOW, TEST_CURRENT_MID, TEST_CURRENT_HIGH};
     
@@ -606,13 +628,23 @@ int Test_CurrentControl(PSB_Handle *handle, char *errorMsg, int errorMsgSize) {
 int Test_CurrentLimits(PSB_Handle *handle, char *errorMsg, int errorMsgSize) {
     printf("Testing current limits...\n");
     
+    // Ensure remote mode is on
+    int result = PSB_SetRemoteMode(handle, 1);
+    if (result != PSB_SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Failed to enable remote mode: %s", 
+                PSB_GetErrorString(result));
+        return -1;
+    }
+    
+    Delay(TEST_DELAY_SHORT);
+    
     // Test valid limits
     double minCurrent = 10.0;
     double maxCurrent = 50.0;
     
     printf("Setting current limits: min=%.2fA, max=%.2fA\n", minCurrent, maxCurrent);
     
-    int result = PSB_SetCurrentLimits(handle, minCurrent, maxCurrent);
+    result = PSB_SetCurrentLimits(handle, minCurrent, maxCurrent);
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to set current limits: %s", 
                 PSB_GetErrorString(result));
@@ -631,13 +663,23 @@ int Test_CurrentLimits(PSB_Handle *handle, char *errorMsg, int errorMsgSize) {
 int Test_PowerControl(PSB_Handle *handle, char *errorMsg, int errorMsgSize) {
     printf("Testing power control...\n");
     
+    // Ensure remote mode is on
+    int result = PSB_SetRemoteMode(handle, 1);
+    if (result != PSB_SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Failed to enable remote mode: %s", 
+                PSB_GetErrorString(result));
+        return -1;
+    }
+    
+    Delay(TEST_DELAY_SHORT);
+    
     // Test setting different power values
     double testPowers[] = {TEST_POWER_LOW, TEST_POWER_MID, TEST_POWER_HIGH};
     
     for (int i = 0; i < 3; i++) {
         printf("Setting power to %.2fW...\n", testPowers[i]);
         
-        int result = PSB_SetPower(handle, testPowers[i]);
+        result = PSB_SetPower(handle, testPowers[i]);
         if (result != PSB_SUCCESS) {
             snprintf(errorMsg, errorMsgSize, "Failed to set power to %.2fW: %s", 
                     testPowers[i], PSB_GetErrorString(result));
@@ -654,11 +696,21 @@ int Test_PowerControl(PSB_Handle *handle, char *errorMsg, int errorMsgSize) {
 int Test_PowerLimit(PSB_Handle *handle, char *errorMsg, int errorMsgSize) {
     printf("Testing power limit...\n");
     
+    // Ensure remote mode is on
+    int result = PSB_SetRemoteMode(handle, 1);
+    if (result != PSB_SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Failed to enable remote mode: %s", 
+                PSB_GetErrorString(result));
+        return -1;
+    }
+    
+    Delay(TEST_DELAY_SHORT);
+    
     double maxPower = 1000.0;
     
     printf("Setting power limit to %.2fW\n", maxPower);
     
-    int result = PSB_SetPowerLimit(handle, maxPower);
+    result = PSB_SetPowerLimit(handle, maxPower);
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to set power limit: %s", 
                 PSB_GetErrorString(result));
@@ -682,6 +734,16 @@ int Test_OutputControl(PSB_Handle *handle, char *errorMsg, int errorMsgSize) {
     
     PSB_Status status;
     int result;
+    
+    // Ensure remote mode is on
+    result = PSB_SetRemoteMode(handle, 1);
+    if (result != PSB_SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Failed to enable remote mode: %s", 
+                PSB_GetErrorString(result));
+        return -1;
+    }
+    
+    Delay(TEST_DELAY_SHORT);
     
     // Ensure output is OFF first
     printf("Turning output OFF...\n");
@@ -708,9 +770,6 @@ int Test_OutputControl(PSB_Handle *handle, char *errorMsg, int errorMsgSize) {
     }
     printf("? Output successfully turned OFF\n");
     
-    // Note: We won't turn output ON during testing for safety
-    printf("(Skipping output ON test for safety)\n");
-    
     return 1;
 }
 
@@ -718,6 +777,16 @@ int Test_InvalidParameters(PSB_Handle *handle, char *errorMsg, int errorMsgSize)
     printf("Testing invalid parameter handling...\n");
     
     int result;
+    
+    // Ensure remote mode is on
+    result = PSB_SetRemoteMode(handle, 1);
+    if (result != PSB_SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Failed to enable remote mode: %s", 
+                PSB_GetErrorString(result));
+        return -1;
+    }
+    
+    Delay(TEST_DELAY_SHORT);
     
     // Test voltage beyond OVP limit
     printf("Testing voltage beyond limit (%.2fV)...\n", TEST_VOLTAGE_INVALID);
@@ -765,6 +834,16 @@ int Test_BoundaryConditions(PSB_Handle *handle, char *errorMsg, int errorMsgSize
     printf("Testing boundary conditions...\n");
     
     int result;
+    
+    // Ensure remote mode is on
+    result = PSB_SetRemoteMode(handle, 1);
+    if (result != PSB_SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Failed to enable remote mode: %s", 
+                PSB_GetErrorString(result));
+        return -1;
+    }
+    
+    Delay(TEST_DELAY_SHORT);
     
     // At this point, we should have wide limits from the previous tests
     // But let's make sure
@@ -909,4 +988,233 @@ int Test_SequenceOperations(PSB_Handle *handle, char *errorMsg, int errorMsgSize
     printf("? Sequence completed successfully\n");
     
     return 1;
+}
+
+int Test_OutputVoltageVerification(PSB_Handle *handle, char *errorMsg, int errorMsgSize) {
+    printf("Testing output voltage verification (CAUTION: Output will be enabled)...\n");
+    printf("WARNING: Ensure nothing is connected to the PSB output terminals!\n");
+    
+    int result;
+    PSB_Status status;
+    double actualVoltage, actualCurrent, actualPower;
+    
+    // First, check current device state
+    printf("\nChecking initial device state...\n");
+    result = PSB_GetStatus(handle, &status);
+    if (result != PSB_SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Failed to read initial status: %s", 
+                PSB_GetErrorString(result));
+        return -1;
+    }
+    
+    PSB_PrintStatus(&status);
+    
+    // Check if there are active alarms
+    if (status.alarmsActive) {
+        printf("Active alarms detected - acknowledging...\n");
+        AcknowledgeAlarms(handle);
+        Delay(TEST_DELAY_SHORT);
+    }
+    
+    // Check control location
+    if (status.controlLocation == CONTROL_LOCAL) {
+        snprintf(errorMsg, errorMsgSize, 
+                "Device is in LOCAL mode - remote control blocked. "
+                "Please enable 'Allow remote control' on the device front panel");
+        return -1;
+    }
+    
+    // Ensure remote mode is enabled FIRST
+    printf("\nEnsuring remote mode is enabled...\n");
+    if (!status.remoteMode) {
+        result = PSB_SetRemoteMode(handle, 1);
+        if (result != PSB_SUCCESS) {
+            snprintf(errorMsg, errorMsgSize, "Failed to enable remote mode: %s", 
+                    PSB_GetErrorString(result));
+            return -1;
+        }
+        Delay(TEST_DELAY_MEDIUM);
+        
+        // Verify remote mode is now active
+        result = PSB_GetStatus(handle, &status);
+        if (result != PSB_SUCCESS || !status.remoteMode) {
+            snprintf(errorMsg, errorMsgSize, "Failed to activate remote mode");
+            return -1;
+        }
+    }
+    
+    // Now try to ensure output is OFF
+    printf("Ensuring output is OFF...\n");
+    if (status.outputEnabled) {
+        result = PSB_SetOutputEnable(handle, 0);
+        if (result != PSB_SUCCESS) {
+            // If this fails, it might be because the device won't accept output control
+            // Let's continue anyway and see if we can at least read values
+            printf("WARNING: Failed to turn off output initially: %s\n", 
+                   PSB_GetErrorString(result));
+            printf("Device might require manual output control\n");
+            
+            // Ask user to manually turn off output
+            printf("\n*** MANUAL INTERVENTION REQUIRED ***\n");
+            printf("Please ensure the PSB output is OFF using the front panel\n");
+            printf("Press any key to continue...\n");
+            getchar();
+        }
+    }
+    
+    // Set safe operating parameters before enabling output
+    printf("\nSetting safe operating parameters...\n");
+    
+    // Set current limit to a safe value (1A) to protect against accidental shorts
+    printf("Setting current limit to 1.0A...\n");
+    result = PSB_SetCurrent(handle, 1.0);
+    if (result != PSB_SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Failed to set current limit: %s", 
+                PSB_GetErrorString(result));
+        return -1;
+    }
+    
+    // Set initial voltage to 0V
+    printf("Setting voltage to 0V...\n");
+    result = PSB_SetVoltage(handle, 0.0);
+    if (result != PSB_SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Failed to set initial voltage: %s", 
+                PSB_GetErrorString(result));
+        return -1;
+    }
+    
+    Delay(TEST_DELAY_SHORT);
+    
+    // Test voltage values - use conservative values for safety
+    double testVoltages[] = {5.0, 12.0, 24.0, 48.0};
+    double tolerance = 0.5; // 0.5V tolerance for voltage accuracy
+    
+    printf("\n*** READY TO BEGIN OUTPUT TESTS ***\n");
+    printf("The test will enable the PSB output with low current limit (1A)\n");
+    printf("Ensure nothing is connected to the output terminals!\n");
+    printf("Press any key to continue or Ctrl+C to abort...\n");
+    getchar();
+    
+    for (int i = 0; i < 4; i++) {
+        printf("\n--- Testing %.1fV output ---\n", testVoltages[i]);
+        
+        // Set the voltage setpoint
+        printf("Setting voltage to %.2fV...\n", testVoltages[i]);
+        result = PSB_SetVoltage(handle, testVoltages[i]);
+        if (result != PSB_SUCCESS) {
+            snprintf(errorMsg, errorMsgSize, "Failed to set voltage to %.2fV: %s", 
+                    testVoltages[i], PSB_GetErrorString(result));
+            goto cleanup;
+        }
+        
+        Delay(TEST_DELAY_SHORT);
+        
+        // Enable output
+        printf("Enabling output...\n");
+        result = PSB_SetOutputEnable(handle, 1);
+        if (result != PSB_SUCCESS) {
+            // If remote output control fails, ask user to enable manually
+            printf("Remote output control failed: %s\n", PSB_GetErrorString(result));
+            printf("\n*** MANUAL INTERVENTION REQUIRED ***\n");
+            printf("Please turn ON the output using the front panel\n");
+            printf("Press any key when output is ON...\n");
+            getchar();
+        }
+        
+        // Wait for voltage to stabilize
+        printf("Waiting for voltage to stabilize...\n");
+        Delay(TEST_DELAY_MEDIUM);
+        
+        // Read actual values
+        result = PSB_GetActualValues(handle, &actualVoltage, &actualCurrent, &actualPower);
+        if (result != PSB_SUCCESS) {
+            snprintf(errorMsg, errorMsgSize, "Failed to read actual values: %s", 
+                    PSB_GetErrorString(result));
+            goto cleanup;
+        }
+        
+        printf("Actual values: V=%.3fV, I=%.3fA, P=%.3fW\n", 
+               actualVoltage, actualCurrent, actualPower);
+        
+        // Verify voltage is within tolerance
+        if (!CompareDouble(actualVoltage, testVoltages[i], tolerance)) {
+            snprintf(errorMsg, errorMsgSize, 
+                    "Voltage mismatch: Set=%.2fV, Actual=%.3fV (tolerance=%.2fV)", 
+                    testVoltages[i], actualVoltage, tolerance);
+            goto cleanup;
+        }
+        
+        // Verify current is near zero (no load connected)
+        if (actualCurrent > 0.1) {  // 100mA threshold
+            printf("WARNING: Current detected (%.3fA) - possible load connected?\n", 
+                   actualCurrent);
+        }
+        
+        // Get full status for additional verification
+        result = PSB_GetStatus(handle, &status);
+        if (result != PSB_SUCCESS) {
+            snprintf(errorMsg, errorMsgSize, "Failed to read status: %s", 
+                    PSB_GetErrorString(result));
+            goto cleanup;
+        }
+        
+        // Verify output is enabled in status
+        if (!status.outputEnabled) {
+            printf("WARNING: Output status shows OFF but we're reading voltage\n");
+        }
+        
+        // Verify regulation mode (should be CV - Constant Voltage)
+        if (status.regulationMode != 0) {
+            printf("Note: Regulation mode is %d (expected 0 for CV mode)\n", 
+                   status.regulationMode);
+        }
+        
+        printf("? Voltage %.2fV verified successfully\n", testVoltages[i]);
+        
+        // Turn output OFF before next test
+        printf("Disabling output...\n");
+        result = PSB_SetOutputEnable(handle, 0);
+        if (result != PSB_SUCCESS) {
+            printf("Remote output disable failed\n");
+            printf("Please turn OFF the output using the front panel\n");
+            printf("Press any key when output is OFF...\n");
+            getchar();
+        }
+        
+        Delay(TEST_DELAY_SHORT);
+        
+        // Verify voltage drops to zero
+        result = PSB_GetActualValues(handle, &actualVoltage, &actualCurrent, &actualPower);
+        if (result == PSB_SUCCESS && actualVoltage > 1.0) {
+            printf("WARNING: Voltage still present after output disabled: %.3fV\n", 
+                   actualVoltage);
+        }
+    }
+    
+    // Success - ensure clean shutdown
+    printf("\nTest completed - ensuring safe shutdown...\n");
+    PSB_SetVoltage(handle, 0.0);
+    PSB_SetOutputEnable(handle, 0);
+    Delay(TEST_DELAY_SHORT);
+    
+    // Restore wide current limit
+    PSB_SetCurrent(handle, PSB_TEST_CURRENT_MAX_WIDE);
+    
+    printf("\n? All output voltage tests passed successfully\n");
+    return 1;
+    
+cleanup:
+    // Emergency shutdown - ensure output is OFF
+    printf("\nCLEANUP: Ensuring safe state...\n");
+    PSB_SetVoltage(handle, 0.0);
+    PSB_SetOutputEnable(handle, 0);
+    
+    printf("If output is still ON, please turn it OFF manually\n");
+    printf("Press any key when safe...\n");
+    getchar();
+    
+    // Restore wide current limit
+    PSB_SetCurrent(handle, PSB_TEST_CURRENT_MAX_WIDE);
+    
+    return -1;
 }
