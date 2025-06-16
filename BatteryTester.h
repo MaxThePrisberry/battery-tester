@@ -21,8 +21,10 @@
 #define  PANEL_NUM_VOLTAGE                6       /* control type: numeric, callback function: (none) */
 #define  PANEL_BTN_SET_VALUES             7       /* control type: command, callback function: SetValuesCallback */
 #define  PANEL_TOGGLE_REMOTE_MODE         8       /* control type: binary, callback function: RemoteModeToggle */
-#define  PANEL_BTN_TEST                   9       /* control type: command, callback function: TestButtonCallback */
+#define  PANEL_BTN_TEST_PSB               9       /* control type: command, callback function: TestButtonCallback */
 #define  PANEL_STRING_STATUS              10      /* control type: string, callback function: (none) */
+#define  PANEL_BTN_TEST_BIOLOGIC          11      /* control type: command, callback function: ConnectBiologicCallback */
+#define  PANEL_STATUS_TEXT                12      /* control type: string, callback function: (none) */
 
 
      /* Control Arrays: */
@@ -37,6 +39,7 @@
 
      /* Callback Prototypes: */
 
+int  CVICALLBACK ConnectBiologicCallback(int panel, int control, int event, void *callbackData, int eventData1, int eventData2);
 int  CVICALLBACK PanelCallback(int panel, int event, void *callbackData, int eventData1, int eventData2);
 int  CVICALLBACK RemoteModeToggle(int panel, int control, int event, void *callbackData, int eventData1, int eventData2);
 int  CVICALLBACK SetValuesCallback(int panel, int control, int event, void *callbackData, int eventData1, int eventData2);

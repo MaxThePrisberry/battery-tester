@@ -11,7 +11,7 @@ IVI Standard Root Dir = "/c/Program Files/IVI Foundation/IVI"
 VXIplug&play Framework Dir = "/C/Program Files (x86)/IVI Foundation/VISA/winnt"
 IVI Standard Root 64-bit Dir = "/C/Program Files/IVI Foundation/IVI"
 VXIplug&play Framework 64-bit Dir = "/C/Program Files/IVI Foundation/VISA/win64"
-Number of Files = 7
+Number of Files = 11
 Target Type = "Executable"
 Flags = 2064
 Copied From Locked InstrDrv Directory = False
@@ -60,8 +60,8 @@ File Type = "Include"
 Res Id = 3
 Path Is Rel = True
 Path Rel To = "Project"
-Path Rel Path = "psb10000.h"
-Path = "/c/Users/CV166/Documents/LabWindowsCVI/BatteryTester/battery-tester/psb10000.h"
+Path Rel Path = "biologic.h"
+Path = "/c/Users/CV166/Documents/LabWindowsCVI/BatteryTester/battery-tester/biologic.h"
 Exclude = False
 Project Flags = 0
 Folder = "Include Files"
@@ -72,6 +72,43 @@ File Type = "Include"
 Res Id = 4
 Path Is Rel = True
 Path Rel To = "Project"
+Path Rel Path = "BLFunctions.h"
+Path Line0001 = "/c/Users/CV166/Documents/LabWindowsCVI/BatteryTester/battery-tester/BLFunctions."
+Path Line0002 = "h"
+Exclude = False
+Project Flags = 0
+Folder = "Include Files"
+Folder Id = 1
+
+[File 0005]
+File Type = "Include"
+Res Id = 5
+Path Is Rel = True
+Path Rel To = "Project"
+Path Rel Path = "BLStructs.h"
+Path = "/c/Users/CV166/Documents/LabWindowsCVI/BatteryTester/battery-tester/BLStructs.h"
+Exclude = False
+Project Flags = 0
+Folder = "Include Files"
+Folder Id = 1
+
+[File 0006]
+File Type = "Include"
+Res Id = 6
+Path Is Rel = True
+Path Rel To = "Project"
+Path Rel Path = "psb10000.h"
+Path = "/c/Users/CV166/Documents/LabWindowsCVI/BatteryTester/battery-tester/psb10000.h"
+Exclude = False
+Project Flags = 0
+Folder = "Include Files"
+Folder Id = 1
+
+[File 0007]
+File Type = "Include"
+Res Id = 7
+Path Is Rel = True
+Path Rel To = "Project"
 Path Rel Path = "psb10000_test.h"
 Path Line0001 = "/c/Users/CV166/Documents/LabWindowsCVI/BatteryTester/battery-tester/psb10000_tes"
 Path Line0002 = "t.h"
@@ -80,9 +117,9 @@ Project Flags = 0
 Folder = "Include Files"
 Folder Id = 1
 
-[File 0005]
+[File 0008]
 File Type = "CSource"
-Res Id = 5
+Res Id = 8
 Path Is Rel = True
 Path Rel To = "Project"
 Path Rel Path = "BatteryTester.c"
@@ -94,9 +131,22 @@ Project Flags = 0
 Folder = "Source Files"
 Folder Id = 2
 
-[File 0006]
+[File 0009]
 File Type = "CSource"
-Res Id = 6
+Res Id = 9
+Path Is Rel = True
+Path Rel To = "Project"
+Path Rel Path = "biologic.c"
+Path = "/c/Users/CV166/Documents/LabWindowsCVI/BatteryTester/battery-tester/biologic.c"
+Exclude = False
+Compile Into Object File = False
+Project Flags = 0
+Folder = "Source Files"
+Folder Id = 2
+
+[File 0010]
+File Type = "CSource"
+Res Id = 10
 Path Is Rel = True
 Path Rel To = "Project"
 Path Rel Path = "psb10000.c"
@@ -107,9 +157,9 @@ Project Flags = 0
 Folder = "Source Files"
 Folder Id = 2
 
-[File 0007]
+[File 0011]
 File Type = "CSource"
-Res Id = 7
+Res Id = 11
 Path Is Rel = True
 Path Rel To = "Project"
 Path Rel Path = "psb10000_test.c"
@@ -178,7 +228,7 @@ Embed Project .UIRs = False
 Generate Map File = False
 Embed Timestamp = True
 Create Console Application = False
-Using LoadExternalModule = False
+Using LoadExternalModule = True
 DLL Exports = "Include File Symbols"
 Register ActiveX Server = False
 Numeric File Version = "1,0,0,0"
@@ -440,6 +490,12 @@ Image Base Address x64 = 4194304
 [Compiler Defines]
 Compiler Defines = "/DWIN32_LEAN_AND_MEAN"
 
+[Include Paths]
+Include Path 1 Is Rel = True
+Include Path 1 Rel To = "Project"
+Include Path 1 Rel Path = "lib"
+Include Path 1 = "/c/Users/CV166/Documents/LabWindowsCVI/BatteryTester/battery-tester/lib"
+
 [Create Executable]
 Executable File_Debug Is Rel = True
 Executable File_Debug Rel To = "Project"
@@ -485,14 +541,18 @@ Generate Map File = False
 
 [External Compiler Support]
 UIR Callbacks File Option = 0
-Using LoadExternalModule = False
-Create Project Symbols File = True
+Using LoadExternalModule = True
+Create Project Symbols File = False
 UIR Callbacks Obj File Is Rel = False
 UIR Callbacks Obj File = ""
 Project Symbols H File Is Rel = False
 Project Symbols H File = ""
 Project Symbols Obj File Is Rel = False
 Project Symbols Obj File = ""
+
+[Modules Forced Into Executable]
+Module 0001 Is Rel = False
+Module 0001 = "EClib.lib"
 
 [ActiveX Server Options]
 Specification File Is Rel = False

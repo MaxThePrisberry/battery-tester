@@ -3,14 +3,15 @@
  * LabWindows/CVI Application with Auto-Discovery and Test Suite
  ******************************************************************************/
 
+#include "biologic.h"
+#include "BatteryTester.h"  
+#include "psb10000.h"
+#include "psb10000_test.h"
 #include <ansi_c.h>
 #include <cvirte.h>
 #include <userint.h>
 #include <utility.h>
 #include <stdio.h>
-#include "BatteryTester.h"  
-#include "psb10000.h"
-#include "psb10000_test.h"
 
 /******************************************************************************
  * Function Prototypes
@@ -23,6 +24,7 @@ int CVICALLBACK PSBDiscoveryThread(void *functionData);
 int CVICALLBACK TestSuiteThread(void *functionData);
 void UpdateStatus(const char* message);
 int AutoDiscoverPSB(void);
+static void ShowManualConnectionDialog();
 
 /******************************************************************************
  * Global Variables
@@ -75,6 +77,8 @@ int CVICALLBACK PSBDiscoveryThread(void *functionData) {
     if (result == PSB_SUCCESS) {
 	    connected = 1;
 	    discoveryComplete = 1;
+		
+		UpdateStatus("PSB found! Connected.");
 	    
 	    // Read status once to establish communication
 	    PSB_Status status;
@@ -355,6 +359,166 @@ int CVICALLBACK TestButtonCallback(int panel, int control, int event, void *call
     CmtScheduleThreadPoolFunction(threadPoolHandle, TestSuiteThread, NULL, &testSuiteThreadID);
     
     // Note: Button will be re-enabled when test completes
+    
+    return 0;
+}
+
+/******************************************************************************
+ * Callback function to connect to Bio-Logic SP-150e, test it, and disconnect
+ * 
+ * This function can be called from a LabWindows/CVI button callback or timer
+ ******************************************************************************/
+int CVICALLBACK ConnectBiologicCallback(int panel, int control, int event,
+                                        void *callbackData, int eventData1, int eventData2) {
+    switch (event) {
+        case EVENT_COMMIT: {
+            int result;
+            char message[512];
+            int32_t deviceID = -1;
+            TDeviceInfos_t deviceInfo;
+            const char* deviceAddress = "USB0";
+            
+            // Disable the button to prevent multiple clicks during connection
+            SetCtrlAttribute(panel, control, ATTR_DIMMED, 1);
+            
+            // Update UI to show we're connecting
+            SetCtrlVal(panel, PANEL_STATUS_TEXT, "Initializing BioLogic DLL...");
+            ProcessDrawEvents();
+            
+            // Initialize the BioLogic DLL if not already done
+            if (!IsBioLogicInitialized()) {
+                result = InitializeBioLogic();
+                if (result != 0) {
+                    sprintf(message, "Failed to initialize BioLogic DLL. Error: %d", result);
+                    SetCtrlVal(panel, PANEL_STATUS_TEXT, message);
+                    MessagePopup("Connection Error", message);
+                    
+                    // Re-enable the button
+                    SetCtrlAttribute(panel, control, ATTR_DIMMED, 0);
+                    return 0;
+                }
+            }
+            
+            // Initialize device info structure
+            memset(&deviceInfo, 0, sizeof(TDeviceInfos_t));
+            
+            // Update status
+            sprintf(message, "Connecting to SP-150e on %s...", deviceAddress);
+            SetCtrlVal(panel, PANEL_STATUS_TEXT, message);
+            ProcessDrawEvents();
+            
+            // Connect to the device
+            result = BL_Connect(deviceAddress, TIMEOUT, &deviceID, &deviceInfo);
+            
+            if (result == 0) {
+                // Connection successful
+                sprintf(message, "Connected! Device ID: %d", deviceID);
+                SetCtrlVal(panel, PANEL_STATUS_TEXT, message);
+                ProcessDrawEvents();
+                
+                // Verify it's an SP-150e
+                const char* deviceTypeName = "Unknown";
+                switch(deviceInfo.DeviceCode) {
+                    case KBIO_DEV_SP150E: 
+                        deviceTypeName = "SP-150e"; 
+                        break;
+                    case KBIO_DEV_SP150: 
+                        deviceTypeName = "SP-150"; 
+                        break;
+                    default: 
+                        deviceTypeName = "Unknown device"; 
+                        break;
+                }
+                
+                // Display device information
+                sprintf(message, 
+                    "Connected to: %s\n"
+                    "Firmware Version: %d\n"
+                    "Channels: %d\n"
+                    "Firmware Date: %04d-%02d-%02d",
+                    deviceTypeName,
+                    deviceInfo.FirmwareVersion,
+                    deviceInfo.NumberOfChannels,
+                    deviceInfo.FirmwareDate_yyyy,
+                    deviceInfo.FirmwareDate_mm,
+                    deviceInfo.FirmwareDate_dd);
+                
+                MessagePopup("Device Connected", message);
+                
+                // Test the connection
+                SetCtrlVal(panel, PANEL_STATUS_TEXT, "Testing connection...");
+                ProcessDrawEvents();
+                
+                result = BL_TestConnection(deviceID);
+                if (result == 0) {
+                    SetCtrlVal(panel, PANEL_STATUS_TEXT, "Connection test passed!");
+                    Delay(0.5);  // Brief pause to show the message
+                } else {
+                    sprintf(message, "Connection test failed: %s", GetErrorString(result));
+                    SetCtrlVal(panel, PANEL_STATUS_TEXT, message);
+                    MessagePopup("Test Failed", message);
+                }
+                
+                // Always disconnect after testing
+                SetCtrlVal(panel, PANEL_STATUS_TEXT, "Disconnecting...");
+                ProcessDrawEvents();
+                
+                result = BL_Disconnect(deviceID);
+                if (result == 0) {
+                    SetCtrlVal(panel, PANEL_STATUS_TEXT, "Test complete - Disconnected");
+                    
+                    // If you have an LED indicator, turn it green
+                    // SetCtrlAttribute(panel, PANEL_LED, ATTR_ON_COLOR, VAL_GREEN);
+                    // SetCtrlVal(panel, PANEL_LED, 1);
+                    
+                    MessagePopup("Success", "Connection test completed successfully!\nDevice has been disconnected.");
+                } else {
+                    sprintf(message, "Warning: Disconnect failed! Error: %s", GetErrorString(result));
+                    SetCtrlVal(panel, PANEL_STATUS_TEXT, message);
+                    MessagePopup("Disconnect Error", message);
+                }
+                
+            } else {
+                // Connection failed
+                sprintf(message, "Connection failed. Error %d: %s", result, GetErrorString(result));
+                SetCtrlVal(panel, PANEL_STATUS_TEXT, message);
+                
+                // If you have an LED indicator, turn it red
+                // SetCtrlAttribute(panel, PANEL_LED, ATTR_ON_COLOR, VAL_RED);
+                // SetCtrlVal(panel, PANEL_LED, 1);
+                
+                MessagePopup("Connection Error", message);
+                
+                // Offer to scan for devices
+                int response = ConfirmPopup("Device Not Found", 
+                    "Would you like to scan for available devices?");
+                
+                if (response == 1) {  // Yes
+                    SetCtrlVal(panel, PANEL_STATUS_TEXT, "Scanning for devices...");
+                    ProcessDrawEvents();
+                    
+                    // Initialize BLFind if needed
+                    if (!IsBLFindInitialized()) {
+                        InitializeBLFind();
+                    }
+                    
+                    // Run scan
+                    ScanForBioLogicDevices();
+                    
+                    SetCtrlVal(panel, PANEL_STATUS_TEXT, "Scan complete - check console");
+                    MessagePopup("Scan Complete", 
+                        "Device scan complete.\n"
+                        "Check the console output for available devices.\n"
+                        "Try connecting with the address shown in the scan results.");
+                }
+            }
+            
+            // Re-enable the button
+            SetCtrlAttribute(panel, control, ATTR_DIMMED, 0);
+            
+            break;
+        }
+    }
     
     return 0;
 }
