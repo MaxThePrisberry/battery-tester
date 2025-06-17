@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include <string.h>
-#include "biologic.h"
+#include "biologic_dll.h"
 #include <ansi_c.h>
 
 // ============================================================================

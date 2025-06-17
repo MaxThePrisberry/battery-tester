@@ -6,7 +6,7 @@
 #ifndef PSB10000_TEST_H
 #define PSB10000_TEST_H
 
-#include "psb10000.h"
+#include "psb10000_dll.h"
 #include <userint.h>
 
 /******************************************************************************

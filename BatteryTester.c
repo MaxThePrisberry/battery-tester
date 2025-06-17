@@ -1,89 +1,107 @@
 /******************************************************************************
- * Simple Battery Tester for PSB 10000 Power Supply
- * LabWindows/CVI Application with Auto-Discovery and Test Suite
+ * BatteryTester.c
+ * 
+ * Main application file for PSB 10000 Power Supply and Bio-Logic SP-150e
+ * Battery Tester with Auto-Discovery and Test Suite
  ******************************************************************************/
 
-#include "biologic.h"
+#include "Common.h"
 #include "BatteryTester.h"  
-#include "psb10000.h"
+#include "biologic_dll.h"
+#include "psb10000_dll.h"
 #include "psb10000_test.h"
-#include <ansi_c.h>
-#include <cvirte.h>
-#include <userint.h>
-#include <utility.h>
-#include <stdio.h>
+
+/******************************************************************************
+ * Module Constants
+ ******************************************************************************/
+#define TARGET_PSB_SERIAL       "2872380001"
+#define DISCOVERY_DELAY         0.5
+#define STATUS_UPDATE_DELAY     0.5
+#define THREAD_POOL_SIZE        3
 
 /******************************************************************************
  * Function Prototypes
  ******************************************************************************/
-void CVICALLBACK UpdateUI(void *callbackData);
-int CVICALLBACK UpdateThread(void *functionData);
-int CVICALLBACK PSBDiscoveryThread(void *functionData);
-int CVICALLBACK TestSuiteThread(void *functionData);
-void UpdateStatus(const char* message);
-int AutoDiscoverPSB(void);
-static void ShowManualConnectionDialog();
+static void CVICALLBACK UpdateUI(void *callbackData);
+static int CVICALLBACK UpdateThread(void *functionData);
+static int CVICALLBACK PSBDiscoveryThread(void *functionData);
+static int CVICALLBACK TestSuiteThread(void *functionData);
+static void UpdateStatus(const char* message);
+static void TestProgressCallback(const char *message);
 
 /******************************************************************************
- * Global Variables
+ * Global Variables (defined here, declared extern in Common.h)
  ******************************************************************************/
-static int panelHandle = 0;
+int g_mainPanelHandle = 0;
+int g_debugMode = 0;
+CmtThreadPoolHandle g_threadPool = 0;
+
+/******************************************************************************
+ * Module-Specific Global Variables
+ ******************************************************************************/
 static PSB_Handle psb;
-static int connected = 0;
+static DeviceState psbState = DEVICE_STATE_DISCONNECTED;
 static int discoveryComplete = 0;
 static int remoteToggleInitialized = 0;
-static CmtThreadPoolHandle threadPoolHandle = 0;
 static CmtThreadFunctionID discoveryThreadID = 0;
 static CmtThreadFunctionID testSuiteThreadID = 0;
-static int testButtonControl = 0;  // Store test button control ID
+static int testButtonControl = 0;
 
 // Test suite context
 static TestSuiteContext testContext;
-static int testSuiteRunning = 0;
-
-// Target PSB serial number
-static const char TARGET_SERIAL[] = "2872380001";
+static TestState testSuiteState = TEST_STATE_IDLE;
 
 /******************************************************************************
  * Status Update Function (thread-safe)
  ******************************************************************************/
-void UpdateStatus(const char* message) {
-    if (panelHandle > 0) {
-        SetCtrlVal(panelHandle, PANEL_STR_PSB_STATUS, message);
+static void UpdateStatus(const char* message) {
+    if (g_mainPanelHandle > 0) {
+        SetCtrlVal(g_mainPanelHandle, PANEL_STR_PSB_STATUS, message);
         ProcessSystemEvents();
+        
+        // Also log to console/file
+        LogMessage("[PSB] %s", message);
     }
 }
 
 /******************************************************************************
  * Test Suite Progress Callback
  ******************************************************************************/
-void TestProgressCallback(const char *message) {
+static void TestProgressCallback(const char *message) {
     UpdateStatus(message);
 }
 
 /******************************************************************************
  * PSB Discovery Thread Function
  ******************************************************************************/
-int CVICALLBACK PSBDiscoveryThread(void *functionData) {
+static int CVICALLBACK PSBDiscoveryThread(void *functionData) {
+    psbState = DEVICE_STATE_CONNECTING;
     UpdateStatus("Initializing PSB discovery...");
-    Delay(0.5);
+    Delay(DISCOVERY_DELAY);
     
     UpdateStatus("Searching for PSB devices...");
     
-    int result = PSB_AutoDiscover(TARGET_SERIAL, &psb);
+    int result = PSB_AutoDiscover(TARGET_PSB_SERIAL, &psb);
     
-    if (result == PSB_SUCCESS) {
-	    connected = 1;
-	    discoveryComplete = 1;
-		
-		UpdateStatus("PSB found! Connected.");
-	    
-	    // Read status once to establish communication
-	    PSB_Status status;
-	    PSB_GetStatus(&psb, &status);
-	    Delay(0.5);
-	} else {
+    if (result == SUCCESS) {  // Using Common.h SUCCESS instead of PSB_SUCCESS
+        psbState = DEVICE_STATE_CONNECTED;
+        discoveryComplete = 1;
+        
+        UpdateStatus("PSB found! Connected.");
+        
+        // Read status once to establish communication
+        PSB_Status status;
+        result = PSB_GetStatus(&psb, &status);
+        if (result == SUCCESS) {
+            psbState = DEVICE_STATE_READY;
+            Delay(STATUS_UPDATE_DELAY);
+        } else {
+            LogError("Failed to read initial PSB status");
+        }
+    } else {
+        psbState = DEVICE_STATE_ERROR;
         UpdateStatus("No PSB found. Check connections and power.");
+        LogError("PSB discovery failed: %s", PSB_GetErrorString(result));
         discoveryComplete = 1;
     }
     
@@ -93,13 +111,13 @@ int CVICALLBACK PSBDiscoveryThread(void *functionData) {
 /******************************************************************************
  * Test Suite Thread Function
  ******************************************************************************/
-int CVICALLBACK TestSuiteThread(void *functionData) {
-    testSuiteRunning = 1;
+static int CVICALLBACK TestSuiteThread(void *functionData) {
+    testSuiteState = TEST_STATE_RUNNING;
     
     UpdateStatus("Initializing test suite...");
     
     // Initialize test context
-    PSB_TestSuite_Initialize(&testContext, &psb, panelHandle, PANEL_STR_PSB_STATUS);
+    PSB_TestSuite_Initialize(&testContext, &psb, g_mainPanelHandle, PANEL_STR_PSB_STATUS);
     testContext.progressCallback = TestProgressCallback;
     
     // Run the test suite
@@ -109,115 +127,152 @@ int CVICALLBACK TestSuiteThread(void *functionData) {
     PSB_TestSuite_Cleanup(&testContext);
     
     // Final status
-    char finalMsg[256];
+    char finalMsg[MEDIUM_BUFFER_SIZE];
     if (result > 0) {
-        snprintf(finalMsg, sizeof(finalMsg), 
+        SAFE_SPRINTF(finalMsg, sizeof(finalMsg), 
                 "Test Suite PASSED! All %d tests completed successfully.", 
                 testContext.summary.totalTests);
+        testSuiteState = TEST_STATE_COMPLETED;
     } else {
-        snprintf(finalMsg, sizeof(finalMsg), 
+        SAFE_SPRINTF(finalMsg, sizeof(finalMsg), 
                 "Test Suite FAILED: %d passed, %d failed out of %d tests.", 
                 testContext.summary.passedTests,
                 testContext.summary.failedTests,
                 testContext.summary.totalTests);
+        testSuiteState = TEST_STATE_ERROR;
     }
     UpdateStatus(finalMsg);
     
     // Re-enable the test button
     if (testButtonControl > 0) {
-        SetCtrlAttribute(panelHandle, testButtonControl, ATTR_DIMMED, 0);
+        SetCtrlAttribute(g_mainPanelHandle, testButtonControl, ATTR_DIMMED, 0);
     }
     
-    testSuiteRunning = 0;
     return 0;
 }
 
 /******************************************************************************
  * Deferred UI Update Function (runs in main thread)
  ******************************************************************************/
-void CVICALLBACK UpdateUI(void *callbackData) {
+static void CVICALLBACK UpdateUI(void *callbackData) {
     PSB_Status *status = (PSB_Status*)callbackData;
     
-    if (panelHandle > 0 && !testSuiteRunning) {
+    if (g_mainPanelHandle > 0 && testSuiteState != TEST_STATE_RUNNING) {
         // Update voltage and current readings
-        SetCtrlVal(panelHandle, PANEL_NUM_VOLTAGE, status->voltage);
-        SetCtrlVal(panelHandle, PANEL_NUM_CURRENT, status->current);
+        SetCtrlVal(g_mainPanelHandle, PANEL_NUM_VOLTAGE, status->voltage);
+        SetCtrlVal(g_mainPanelHandle, PANEL_NUM_CURRENT, status->current);
         
         // Initialize toggle once
         if (!remoteToggleInitialized) {
-            SetCtrlVal(panelHandle, PANEL_TOGGLE_REMOTE_MODE, status->remoteMode);
+            SetCtrlVal(g_mainPanelHandle, PANEL_TOGGLE_REMOTE_MODE, status->remoteMode);
             remoteToggleInitialized = 1;
         }
         
         // Update LED
-        SetCtrlVal(panelHandle, PANEL_LED_REMOTE_MODE, status->remoteMode);
+        SetCtrlVal(g_mainPanelHandle, PANEL_LED_REMOTE_MODE, status->remoteMode);
         
         // Change LED color
         if (status->remoteMode) {
-            SetCtrlAttribute(panelHandle, PANEL_LED_REMOTE_MODE, ATTR_ON_COLOR, VAL_GREEN);
+            SetCtrlAttribute(g_mainPanelHandle, PANEL_LED_REMOTE_MODE, ATTR_ON_COLOR, VAL_GREEN);
         } else {
-            SetCtrlAttribute(panelHandle, PANEL_LED_REMOTE_MODE, ATTR_ON_COLOR, VAL_RED);
+            SetCtrlAttribute(g_mainPanelHandle, PANEL_LED_REMOTE_MODE, ATTR_ON_COLOR, VAL_RED);
         }
     }
+    
+    // Free the allocated status structure
+    SAFE_FREE(status);
 }
 
 /******************************************************************************
  * Main Function
  ******************************************************************************/
 int main(int argc, char *argv[]) {
-    if (InitCVIRTE(0, argv, 0) == 0) return -1;
+    int error = SUCCESS;
     
-    // Load UI
-    panelHandle = LoadPanel(0, "BatteryTester.uir", PANEL);
-    if (panelHandle < 0) {
-        printf("Failed to load UI panel\n");
+    // Initialize CVI runtime
+    if (InitCVIRTE(0, argv, 0) == 0) {
         return -1;
     }
     
+    // Initialize logging
+    LogMessage("=== Battery Tester Starting ===");
+    LogMessage("Version: %s", PROJECT_VERSION);
+    
+    // Load UI
+    g_mainPanelHandle = LoadPanel(0, "BatteryTester.uir", PANEL);
+    if (g_mainPanelHandle < 0) {
+        LogError("Failed to load UI panel");
+        return ERR_UI - 1;
+    }
+    
     // Show UI
-    DisplayPanel(panelHandle);
-    UpdateStatus("Starting PSB Battery Tester...");
+    DisplayPanel(g_mainPanelHandle);
+    UpdateStatus("Starting Battery Tester...");
     
     // Create thread pool
-    if (CmtNewThreadPool(3, &threadPoolHandle) != 0) {
+    error = CmtNewThreadPool(THREAD_POOL_SIZE, &g_threadPool);
+    if (error != 0) {
+        LogError("Failed to create thread pool: %d", error);
         UpdateStatus("Failed to create thread pool");
         RunUserInterface();
-        DiscardPanel(panelHandle);
-        return -1;
+        DiscardPanel(g_mainPanelHandle);
+        return ERR_THREAD_POOL;
     }
     
     // Start PSB discovery
     UpdateStatus("Initializing PSB discovery...");
-    CmtScheduleThreadPoolFunction(threadPoolHandle, PSBDiscoveryThread, NULL, &discoveryThreadID);
+    error = CmtScheduleThreadPoolFunction(g_threadPool, PSBDiscoveryThread, NULL, &discoveryThreadID);
+    if (error != 0) {
+        LogError("Failed to schedule discovery thread: %d", error);
+    }
     
     // Run the UI
     RunUserInterface();
     
     // Cleanup
-    connected = 0;
+    LogMessage("Shutting down Battery Tester...");
     
-    if (testSuiteRunning) {
+    // Cancel any running test suite
+    if (testSuiteState == TEST_STATE_RUNNING) {
         PSB_TestSuite_Cancel(&testContext);
+        
+        // Wait for test suite thread to complete
+        CmtWaitForThreadPoolFunctionCompletion(g_threadPool, testSuiteThreadID, 
+                                             OPT_TP_PROCESS_EVENTS_WHILE_WAITING);
     }
     
-    if (threadPoolHandle > 0) {
-        // Wait for threads
-        if (testSuiteRunning) {
-            CmtWaitForThreadPoolFunctionCompletion(threadPoolHandle, testSuiteThreadID, 
-                                                  OPT_TP_PROCESS_EVENTS_WHILE_WAITING);
-        }
-        CmtWaitForThreadPoolFunctionCompletion(threadPoolHandle, discoveryThreadID, 
-                                              OPT_TP_PROCESS_EVENTS_WHILE_WAITING);
-        CmtDiscardThreadPool(threadPoolHandle);
+    // Wait for discovery thread if still running
+    if (psbState == DEVICE_STATE_CONNECTING) {
+        CmtWaitForThreadPoolFunctionCompletion(g_threadPool, discoveryThreadID, 
+                                             OPT_TP_PROCESS_EVENTS_WHILE_WAITING);
     }
     
-    if (connected) {
+    // Discard thread pool
+    if (g_threadPool > 0) {
+        CmtDiscardThreadPool(g_threadPool);
+        g_threadPool = 0;
+    }
+    
+    // Disconnect PSB if connected
+    if (psbState >= DEVICE_STATE_CONNECTED) {
+        LogMessage("Disconnecting PSB...");
         PSB_SetOutputEnable(&psb, 0);
         PSB_SetRemoteMode(&psb, 0);
         PSB_Close(&psb);
     }
     
-    DiscardPanel(panelHandle);
+    // Cleanup BioLogic DLL if initialized
+    if (IsBioLogicInitialized()) {
+        CleanupBioLogic();
+    }
+    
+    // Discard panel
+    if (g_mainPanelHandle > 0) {
+        DiscardPanel(g_mainPanelHandle);
+    }
+    
+    LogMessage("=== Battery Tester Shutdown Complete ===");
+    
     return 0;
 }
 
@@ -241,220 +296,233 @@ int CVICALLBACK RemoteModeToggle(int panel, int control, int event, void *callba
         return 0;
     }
     
-    if (!connected || testSuiteRunning) {
-        printf("ERROR: Cannot change remote mode - %s\n", 
-               !connected ? "not connected" : "test suite running");
+    if (psbState != DEVICE_STATE_READY || testSuiteState == TEST_STATE_RUNNING) {
+        LogWarning("Cannot change remote mode - PSB %s, test suite %s", 
+                   psbState != DEVICE_STATE_READY ? "not ready" : "ready",
+                   testSuiteState == TEST_STATE_RUNNING ? "running" : "not running");
         return 0;
     }
     
     int toggleState;
     GetCtrlVal(panel, PANEL_TOGGLE_REMOTE_MODE, &toggleState);
     
-    printf("=== User requesting Remote Mode: %s ===\n", toggleState ? "ON" : "OFF");
+    DEBUG_PRINT("User requesting Remote Mode: %s", toggleState ? "ON" : "OFF");
     
     int result = PSB_SetRemoteMode(&psb, toggleState);
-    if (result != PSB_SUCCESS) {
-        printf("FAILED to set remote mode: %s\n", PSB_GetErrorString(result));
+    if (result != SUCCESS) {
+        LogError("Failed to set remote mode: %s", PSB_GetErrorString(result));
         UpdateStatus("Failed to set remote mode");
         SetCtrlVal(panel, PANEL_TOGGLE_REMOTE_MODE, !toggleState);
         return 0;
     }
     
-    char statusMsg[100];
-    snprintf(statusMsg, sizeof(statusMsg), "Remote mode %s", toggleState ? "ON" : "OFF");
+    char statusMsg[SMALL_BUFFER_SIZE];
+    SAFE_SPRINTF(statusMsg, sizeof(statusMsg), "Remote mode %s", toggleState ? "ON" : "OFF");
     UpdateStatus(statusMsg);
     
     return 0;
 }
 
 /******************************************************************************
- * Test Button Callback - Runs Test Suite
+ * Test PSB Button Callback - Runs Test Suite
  ******************************************************************************/
 int CVICALLBACK TestPSBCallback(int panel, int control, int event, void *callbackData,
-                                   int eventData1, int eventData2) {
+                                int eventData1, int eventData2) {
     if (event != EVENT_COMMIT) {
         return 0;
     }
     
-    if (!connected) {
-        UpdateStatus("Not connected to PSB - cannot run tests");
-        printf("ERROR: Not connected to PSB\n");
+    if (psbState != DEVICE_STATE_READY) {
+        UpdateStatus("PSB not ready - cannot run tests");
+        LogError("Cannot run tests - PSB state: %d", psbState);
         return 0;
     }
     
-    if (testSuiteRunning) {
+    if (testSuiteState == TEST_STATE_RUNNING) {
         UpdateStatus("Test suite already running");
         return 0;
     }
     
     // Disable test button during execution
     SetCtrlAttribute(panel, control, ATTR_DIMMED, 1);
-    testButtonControl = control;  // Store control ID for later
+    testButtonControl = control;
     
     // Run test suite on background thread
-    CmtScheduleThreadPoolFunction(threadPoolHandle, TestSuiteThread, NULL, &testSuiteThreadID);
-    
-    // Note: Button will be re-enabled when test completes
+    int error = CmtScheduleThreadPoolFunction(g_threadPool, TestSuiteThread, NULL, &testSuiteThreadID);
+    if (error != 0) {
+        LogError("Failed to schedule test suite thread: %d", error);
+        SetCtrlAttribute(panel, control, ATTR_DIMMED, 0);
+        UpdateStatus("Failed to start test suite");
+        return 0;
+    }
     
     return 0;
 }
 
 /******************************************************************************
- * Callback function to connect to Bio-Logic SP-150e, test it, and disconnect
- * 
- * This function can be called from a LabWindows/CVI button callback or timer
+ * Test BioLogic Button Callback
  ******************************************************************************/
 int CVICALLBACK TestBiologicCallback(int panel, int control, int event,
-                                        void *callbackData, int eventData1, int eventData2) {
-    switch (event) {
-        case EVENT_COMMIT: {
-            int result;
-            char message[512];
-            int32_t deviceID = -1;
-            TDeviceInfos_t deviceInfo;
-            const char* deviceAddress = "USB0";
-            
-            // Disable the button to prevent multiple clicks during connection
-            SetCtrlAttribute(panel, control, ATTR_DIMMED, 1);
-            
-            // Update UI to show we're connecting
-            SetCtrlVal(panel, PANEL_STR_BIOLOGIC_STATUS, "Initializing BioLogic DLL...");
-            ProcessDrawEvents();
-            
-            // Initialize the BioLogic DLL if not already done
-            if (!IsBioLogicInitialized()) {
-                result = InitializeBioLogic();
-                if (result != 0) {
-                    sprintf(message, "Failed to initialize BioLogic DLL. Error: %d", result);
-                    SetCtrlVal(panel, PANEL_STR_BIOLOGIC_STATUS, message);
-                    MessagePopup("Connection Error", message);
-                    
-                    // Re-enable the button
-                    SetCtrlAttribute(panel, control, ATTR_DIMMED, 0);
-                    return 0;
-                }
-            }
-            
-            // Initialize device info structure
-            memset(&deviceInfo, 0, sizeof(TDeviceInfos_t));
-            
-            // Update status
-            sprintf(message, "Connecting to SP-150e on %s...", deviceAddress);
+                                     void *callbackData, int eventData1, int eventData2) {
+    if (event != EVENT_COMMIT) {
+        return 0;
+    }
+    
+    int result;
+    char message[LARGE_BUFFER_SIZE];
+    int32_t deviceID = -1;
+    TDeviceInfos_t deviceInfo;
+    const char* deviceAddress = "USB0";
+    
+    // Disable the button to prevent multiple clicks
+    SetCtrlAttribute(panel, control, ATTR_DIMMED, 1);
+    
+    // Update UI
+    SetCtrlVal(panel, PANEL_STR_BIOLOGIC_STATUS, "Initializing BioLogic DLL...");
+    ProcessDrawEvents();
+    
+    // Initialize the BioLogic DLL if needed
+    if (!IsBioLogicInitialized()) {
+        result = InitializeBioLogic();
+        if (result != SUCCESS) {
+            SAFE_SPRINTF(message, sizeof(message), 
+                        "Failed to initialize BioLogic DLL. Error: %d", result);
             SetCtrlVal(panel, PANEL_STR_BIOLOGIC_STATUS, message);
-            ProcessDrawEvents();
             
-            // Connect to the device
-            result = BL_Connect(deviceAddress, TIMEOUT, &deviceID, &deviceInfo);
+            // Log error to textbox instead of popup
+            LogError("Connection Error: %s", message);
+            LogError("BioLogic initialization failed: %d", result);
             
-            if (result == 0) {
-                // Connection successful
-                sprintf(message, "Connected! Device ID: %d", deviceID);
-                SetCtrlVal(panel, PANEL_STR_BIOLOGIC_STATUS, message);
-                ProcessDrawEvents();
-                
-                // Verify it's an SP-150e
-                const char* deviceTypeName = "Unknown";
-                switch(deviceInfo.DeviceCode) {
-                    case KBIO_DEV_SP150E: 
-                        deviceTypeName = "SP-150e"; 
-                        break;
-                    case KBIO_DEV_SP150: 
-                        deviceTypeName = "SP-150"; 
-                        break;
-                    default: 
-                        deviceTypeName = "Unknown device"; 
-                        break;
-                }
-                
-                // Display device information
-                sprintf(message, 
-                    "Connected to: %s\n"
-                    "Firmware Version: %d\n"
-                    "Channels: %d\n"
-                    "Firmware Date: %04d-%02d-%02d",
-                    deviceTypeName,
-                    deviceInfo.FirmwareVersion,
-                    deviceInfo.NumberOfChannels,
-                    deviceInfo.FirmwareDate_yyyy,
-                    deviceInfo.FirmwareDate_mm,
-                    deviceInfo.FirmwareDate_dd);
-                
-                MessagePopup("Device Connected", message);
-                
-                // Test the connection
-                SetCtrlVal(panel, PANEL_STR_BIOLOGIC_STATUS, "Testing connection...");
-                ProcessDrawEvents();
-                
-                result = BL_TestConnection(deviceID);
-                if (result == 0) {
-                    SetCtrlVal(panel, PANEL_STR_BIOLOGIC_STATUS, "Connection test passed!");
-                    Delay(0.5);  // Brief pause to show the message
-                } else {
-                    sprintf(message, "Connection test failed: %s", GetErrorString(result));
-                    SetCtrlVal(panel, PANEL_STR_BIOLOGIC_STATUS, message);
-                    MessagePopup("Test Failed", message);
-                }
-                
-                // Always disconnect after testing
-                SetCtrlVal(panel, PANEL_STR_BIOLOGIC_STATUS, "Disconnecting...");
-                ProcessDrawEvents();
-                
-                result = BL_Disconnect(deviceID);
-                if (result == 0) {
-                    SetCtrlVal(panel, PANEL_STR_BIOLOGIC_STATUS, "Test complete - Disconnected");
-                    
-                    // If you have an LED indicator, turn it green
-                    // SetCtrlAttribute(panel, PANEL_LED, ATTR_ON_COLOR, VAL_GREEN);
-                    // SetCtrlVal(panel, PANEL_LED, 1);
-                    
-                    MessagePopup("Success", "Connection test completed successfully!\nDevice has been disconnected.");
-                } else {
-                    sprintf(message, "Warning: Disconnect failed! Error: %s", GetErrorString(result));
-                    SetCtrlVal(panel, PANEL_STR_BIOLOGIC_STATUS, message);
-                    MessagePopup("Disconnect Error", message);
-                }
-                
-            } else {
-                // Connection failed
-                sprintf(message, "Connection failed. Error %d: %s", result, GetErrorString(result));
-                SetCtrlVal(panel, PANEL_STR_BIOLOGIC_STATUS, message);
-                
-                // If you have an LED indicator, turn it red
-                // SetCtrlAttribute(panel, PANEL_LED, ATTR_ON_COLOR, VAL_RED);
-                // SetCtrlVal(panel, PANEL_LED, 1);
-                
-                MessagePopup("Connection Error", message);
-                
-                // Offer to scan for devices
-                int response = ConfirmPopup("Device Not Found", 
-                    "Would you like to scan for available devices?");
-                
-                if (response == 1) {  // Yes
-                    SetCtrlVal(panel, PANEL_STR_BIOLOGIC_STATUS, "Scanning for devices...");
-                    ProcessDrawEvents();
-                    
-                    // Initialize BLFind if needed
-                    if (!IsBLFindInitialized()) {
-                        InitializeBLFind();
-                    }
-                    
-                    // Run scan
-                    ScanForBioLogicDevices();
-                    
-                    SetCtrlVal(panel, PANEL_STR_BIOLOGIC_STATUS, "Scan complete - check console");
-                    MessagePopup("Scan Complete", 
-                        "Device scan complete.\n"
-                        "Check the console output for available devices.\n"
-                        "Try connecting with the address shown in the scan results.");
-                }
-            }
-            
-            // Re-enable the button
             SetCtrlAttribute(panel, control, ATTR_DIMMED, 0);
-            
-            break;
+            return 0;
         }
     }
+    
+    // Initialize device info structure
+    memset(&deviceInfo, 0, sizeof(TDeviceInfos_t));
+    
+    // Update status
+    SAFE_SPRINTF(message, sizeof(message), "Connecting to SP-150e on %s...", deviceAddress);
+    SetCtrlVal(panel, PANEL_STR_BIOLOGIC_STATUS, message);
+    ProcessDrawEvents();
+    
+    // Connect to the device
+    result = BL_Connect(deviceAddress, TIMEOUT, &deviceID, &deviceInfo);
+    
+    if (result == SUCCESS) {
+        // Connection successful
+        SAFE_SPRINTF(message, sizeof(message), "Connected! Device ID: %d", deviceID);
+        SetCtrlVal(panel, PANEL_STR_BIOLOGIC_STATUS, message);
+        ProcessDrawEvents();
+        
+        LogMessage("BioLogic connected - Device ID: %d", deviceID);
+        
+        // Verify device type
+        const char* deviceTypeName = "Unknown";
+        switch(deviceInfo.DeviceCode) {
+            case KBIO_DEV_SP150E: 
+                deviceTypeName = "SP-150e"; 
+                break;
+            case KBIO_DEV_SP150: 
+                deviceTypeName = "SP-150"; 
+                break;
+            default: 
+                deviceTypeName = "Unknown device"; 
+                LogWarning("Unknown BioLogic device code: %d", deviceInfo.DeviceCode);
+                break;
+        }
+        
+        // Display device information in textbox instead of popup
+        LogMessage("=== Device Connected ===");
+        LogMessage("Connected to: %s", deviceTypeName);
+        LogMessage("Firmware Version: %d", deviceInfo.FirmwareVersion);
+        LogMessage("Channels: %d", deviceInfo.NumberOfChannels);
+        LogMessage("Firmware Date: %04d-%02d-%02d",
+                   deviceInfo.FirmwareDate_yyyy,
+                   deviceInfo.FirmwareDate_mm,
+                   deviceInfo.FirmwareDate_dd);
+        LogMessage("=======================");
+        
+        // Test the connection
+        SetCtrlVal(panel, PANEL_STR_BIOLOGIC_STATUS, "Testing connection...");
+        ProcessDrawEvents();
+        
+        result = BL_TestConnection(deviceID);
+        if (result == SUCCESS) {
+            SetCtrlVal(panel, PANEL_STR_BIOLOGIC_STATUS, "Connection test passed!");
+            LogMessage("Connection test PASSED!");
+            Delay(STATUS_UPDATE_DELAY);
+        } else {
+            SAFE_SPRINTF(message, sizeof(message), 
+                        "Connection test failed: %s", GetErrorString(result));
+            SetCtrlVal(panel, PANEL_STR_BIOLOGIC_STATUS, message);
+            LogError("Test Failed: %s", message);
+        }
+        
+        // Always disconnect after testing
+        SetCtrlVal(panel, PANEL_STR_BIOLOGIC_STATUS, "Disconnecting...");
+        ProcessDrawEvents();
+        
+        result = BL_Disconnect(deviceID);
+        if (result == SUCCESS) {
+            SetCtrlVal(panel, PANEL_STR_BIOLOGIC_STATUS, "Test complete - Disconnected");
+            
+            // Update LED if present
+            int isVisible = 0;
+            GetCtrlAttribute(panel, PANEL_LED_BIOLOGIC_STATUS, ATTR_VISIBLE, &isVisible);
+            if (isVisible) {
+                SetCtrlAttribute(panel, PANEL_LED_BIOLOGIC_STATUS, ATTR_ON_COLOR, VAL_GREEN);
+                SetCtrlVal(panel, PANEL_LED_BIOLOGIC_STATUS, 1);
+            }
+            
+            LogMessage("SUCCESS: Connection test completed successfully!");
+            LogMessage("Device has been disconnected.");
+        } else {
+            SAFE_SPRINTF(message, sizeof(message), 
+                        "Warning: Disconnect failed! Error: %s", 
+                        GetErrorString(result));
+            SetCtrlVal(panel, PANEL_STR_BIOLOGIC_STATUS, message);
+            LogError("Disconnect Error: %s", message);
+        }
+        
+    } else {
+        // Connection failed
+        SAFE_SPRINTF(message, sizeof(message), 
+                    "Connection failed. Error %d: %s", 
+                    result, GetErrorString(result));
+        SetCtrlVal(panel, PANEL_STR_BIOLOGIC_STATUS, message);
+        
+        // Update LED if present
+        int isVisible = 0;
+        GetCtrlAttribute(panel, PANEL_LED_BIOLOGIC_STATUS, ATTR_VISIBLE, &isVisible);
+        if (isVisible) {
+            SetCtrlAttribute(panel, PANEL_LED_BIOLOGIC_STATUS, ATTR_ON_COLOR, VAL_RED);
+            SetCtrlVal(panel, PANEL_LED_BIOLOGIC_STATUS, 1);
+        }
+        
+        LogError("Connection Error: %s", message);
+        
+        // Automatically scan for devices instead of asking
+        LogMessage("Device not found. Scanning for available devices...");
+        SetCtrlVal(panel, PANEL_STR_BIOLOGIC_STATUS, "Scanning for devices...");
+        ProcessDrawEvents();
+        
+        // Initialize BLFind if needed
+        if (!IsBLFindInitialized()) {
+            InitializeBLFind();
+        }
+        
+        // Run scan
+        ScanForBioLogicDevices();
+        
+        SetCtrlVal(panel, PANEL_STR_BIOLOGIC_STATUS, "Scan complete - check output");
+        LogMessage("Device scan complete.");
+        LogMessage("Check the output above for available devices.");
+        LogMessage("Try connecting with the address shown in the scan results.");
+    }
+    
+    // Re-enable the button
+    SetCtrlAttribute(panel, control, ATTR_DIMMED, 0);
     
     return 0;
 }

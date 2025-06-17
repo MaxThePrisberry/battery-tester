@@ -5,7 +5,7 @@
  * Configured for 60V/60A derated version
  ******************************************************************************/
 
-#include "psb10000.h"
+#include "psb10000_dll.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdarg.h>

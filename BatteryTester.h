@@ -36,7 +36,8 @@
 #define  PANEL_DEC_STATUS                 21      /* control type: deco, callback function: (none) */
 #define  PANEL_CONTROL_LABEL              22      /* control type: textMsg, callback function: (none) */
 #define  PANEL_STATUS_LABEL               23      /* control type: textMsg, callback function: (none) */
-#define  PANEL_DEC_MANUAL_CONTROL         24      /* control type: deco, callback function: (none) */
+#define  PANEL_OUTPUT_TEXTBOX             24      /* control type: textBox, callback function: (none) */
+#define  PANEL_DEC_MANUAL_CONTROL         25      /* control type: deco, callback function: (none) */
 
 
      /* Control Arrays: */
