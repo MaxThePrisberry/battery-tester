@@ -16,8 +16,6 @@
 /******************************************************************************
  * Function Prototypes
  ******************************************************************************/
-int CVICALLBACK TestButtonCallback(int panel, int control, int event, void *callbackData,
-                                   int eventData1, int eventData2);
 void CVICALLBACK UpdateUI(void *callbackData);
 int CVICALLBACK UpdateThread(void *functionData);
 int CVICALLBACK PSBDiscoveryThread(void *functionData);
@@ -51,7 +49,7 @@ static const char TARGET_SERIAL[] = "2872380001";
  ******************************************************************************/
 void UpdateStatus(const char* message) {
     if (panelHandle > 0) {
-        SetCtrlVal(panelHandle, PANEL_STRING_STATUS, message);
+        SetCtrlVal(panelHandle, PANEL_STR_PSB_STATUS, message);
         ProcessSystemEvents();
     }
 }
@@ -101,7 +99,7 @@ int CVICALLBACK TestSuiteThread(void *functionData) {
     UpdateStatus("Initializing test suite...");
     
     // Initialize test context
-    PSB_TestSuite_Initialize(&testContext, &psb, panelHandle, PANEL_STRING_STATUS);
+    PSB_TestSuite_Initialize(&testContext, &psb, panelHandle, PANEL_STR_PSB_STATUS);
     testContext.progressCallback = TestProgressCallback;
     
     // Run the test suite
@@ -270,71 +268,9 @@ int CVICALLBACK RemoteModeToggle(int panel, int control, int event, void *callba
 }
 
 /******************************************************************************
- * Set Values Button Callback
- ******************************************************************************/
-int CVICALLBACK SetValuesCallback(int panel, int control, int event, void *callbackData,
-                                  int eventData1, int eventData2) {
-    if (event != EVENT_COMMIT) {
-        return 0;
-    }
-    
-    if (!connected || testSuiteRunning) {
-        printf("ERROR: Cannot set values - %s\n", 
-               !connected ? "not connected" : "test suite running");
-        return 0;
-    }
-    
-    double voltage, current;
-    int remoteModeState;
-    
-    // Check remote mode
-    GetCtrlVal(panel, PANEL_TOGGLE_REMOTE_MODE, &remoteModeState);
-    if (!remoteModeState) {
-        printf("ERROR: Remote mode must be enabled first!\n");
-        UpdateStatus("Enable remote mode first");
-        return 0;
-    }
-    
-    // Get values
-    GetCtrlVal(panel, PANEL_NUM_SET_VOLTAGE, &voltage);
-    GetCtrlVal(panel, PANEL_NUM_SET_CURRENT, &current);
-    
-    printf("=== Setting PSB values: %.2fV, %.2fA ===\n", voltage, current);
-    
-    // Set voltage
-    int result = PSB_SetVoltage(&psb, voltage);
-    if (result != PSB_SUCCESS) {
-        printf("Failed to set voltage: %s\n", PSB_GetErrorString(result));
-        UpdateStatus("Failed to set voltage");
-        return 0;
-    }
-    
-    // Set current
-    result = PSB_SetCurrent(&psb, current);
-    if (result != PSB_SUCCESS) {
-        printf("Failed to set current: %s\n", PSB_GetErrorString(result));
-        UpdateStatus("Failed to set current");
-        return 0;
-    }
-    
-    // Enable output
-    result = PSB_SetOutputEnable(&psb, 1);
-    if (result != PSB_SUCCESS) {
-        printf("Failed to enable output: %s\n", PSB_GetErrorString(result));
-        UpdateStatus("Failed to enable output");
-        return 0;
-    }
-    
-    UpdateStatus("Values set successfully");
-    printf("=== PSB configuration completed ===\n");
-    
-    return 0;
-}
-
-/******************************************************************************
  * Test Button Callback - Runs Test Suite
  ******************************************************************************/
-int CVICALLBACK TestButtonCallback(int panel, int control, int event, void *callbackData,
+int CVICALLBACK TestPSBCallback(int panel, int control, int event, void *callbackData,
                                    int eventData1, int eventData2) {
     if (event != EVENT_COMMIT) {
         return 0;
@@ -368,7 +304,7 @@ int CVICALLBACK TestButtonCallback(int panel, int control, int event, void *call
  * 
  * This function can be called from a LabWindows/CVI button callback or timer
  ******************************************************************************/
-int CVICALLBACK ConnectBiologicCallback(int panel, int control, int event,
+int CVICALLBACK TestBiologicCallback(int panel, int control, int event,
                                         void *callbackData, int eventData1, int eventData2) {
     switch (event) {
         case EVENT_COMMIT: {
@@ -382,7 +318,7 @@ int CVICALLBACK ConnectBiologicCallback(int panel, int control, int event,
             SetCtrlAttribute(panel, control, ATTR_DIMMED, 1);
             
             // Update UI to show we're connecting
-            SetCtrlVal(panel, PANEL_STATUS_TEXT, "Initializing BioLogic DLL...");
+            SetCtrlVal(panel, PANEL_STR_BIOLOGIC_STATUS, "Initializing BioLogic DLL...");
             ProcessDrawEvents();
             
             // Initialize the BioLogic DLL if not already done
@@ -390,7 +326,7 @@ int CVICALLBACK ConnectBiologicCallback(int panel, int control, int event,
                 result = InitializeBioLogic();
                 if (result != 0) {
                     sprintf(message, "Failed to initialize BioLogic DLL. Error: %d", result);
-                    SetCtrlVal(panel, PANEL_STATUS_TEXT, message);
+                    SetCtrlVal(panel, PANEL_STR_BIOLOGIC_STATUS, message);
                     MessagePopup("Connection Error", message);
                     
                     // Re-enable the button
@@ -404,7 +340,7 @@ int CVICALLBACK ConnectBiologicCallback(int panel, int control, int event,
             
             // Update status
             sprintf(message, "Connecting to SP-150e on %s...", deviceAddress);
-            SetCtrlVal(panel, PANEL_STATUS_TEXT, message);
+            SetCtrlVal(panel, PANEL_STR_BIOLOGIC_STATUS, message);
             ProcessDrawEvents();
             
             // Connect to the device
@@ -413,7 +349,7 @@ int CVICALLBACK ConnectBiologicCallback(int panel, int control, int event,
             if (result == 0) {
                 // Connection successful
                 sprintf(message, "Connected! Device ID: %d", deviceID);
-                SetCtrlVal(panel, PANEL_STATUS_TEXT, message);
+                SetCtrlVal(panel, PANEL_STR_BIOLOGIC_STATUS, message);
                 ProcessDrawEvents();
                 
                 // Verify it's an SP-150e
@@ -446,26 +382,26 @@ int CVICALLBACK ConnectBiologicCallback(int panel, int control, int event,
                 MessagePopup("Device Connected", message);
                 
                 // Test the connection
-                SetCtrlVal(panel, PANEL_STATUS_TEXT, "Testing connection...");
+                SetCtrlVal(panel, PANEL_STR_BIOLOGIC_STATUS, "Testing connection...");
                 ProcessDrawEvents();
                 
                 result = BL_TestConnection(deviceID);
                 if (result == 0) {
-                    SetCtrlVal(panel, PANEL_STATUS_TEXT, "Connection test passed!");
+                    SetCtrlVal(panel, PANEL_STR_BIOLOGIC_STATUS, "Connection test passed!");
                     Delay(0.5);  // Brief pause to show the message
                 } else {
                     sprintf(message, "Connection test failed: %s", GetErrorString(result));
-                    SetCtrlVal(panel, PANEL_STATUS_TEXT, message);
+                    SetCtrlVal(panel, PANEL_STR_BIOLOGIC_STATUS, message);
                     MessagePopup("Test Failed", message);
                 }
                 
                 // Always disconnect after testing
-                SetCtrlVal(panel, PANEL_STATUS_TEXT, "Disconnecting...");
+                SetCtrlVal(panel, PANEL_STR_BIOLOGIC_STATUS, "Disconnecting...");
                 ProcessDrawEvents();
                 
                 result = BL_Disconnect(deviceID);
                 if (result == 0) {
-                    SetCtrlVal(panel, PANEL_STATUS_TEXT, "Test complete - Disconnected");
+                    SetCtrlVal(panel, PANEL_STR_BIOLOGIC_STATUS, "Test complete - Disconnected");
                     
                     // If you have an LED indicator, turn it green
                     // SetCtrlAttribute(panel, PANEL_LED, ATTR_ON_COLOR, VAL_GREEN);
@@ -474,14 +410,14 @@ int CVICALLBACK ConnectBiologicCallback(int panel, int control, int event,
                     MessagePopup("Success", "Connection test completed successfully!\nDevice has been disconnected.");
                 } else {
                     sprintf(message, "Warning: Disconnect failed! Error: %s", GetErrorString(result));
-                    SetCtrlVal(panel, PANEL_STATUS_TEXT, message);
+                    SetCtrlVal(panel, PANEL_STR_BIOLOGIC_STATUS, message);
                     MessagePopup("Disconnect Error", message);
                 }
                 
             } else {
                 // Connection failed
                 sprintf(message, "Connection failed. Error %d: %s", result, GetErrorString(result));
-                SetCtrlVal(panel, PANEL_STATUS_TEXT, message);
+                SetCtrlVal(panel, PANEL_STR_BIOLOGIC_STATUS, message);
                 
                 // If you have an LED indicator, turn it red
                 // SetCtrlAttribute(panel, PANEL_LED, ATTR_ON_COLOR, VAL_RED);
@@ -494,7 +430,7 @@ int CVICALLBACK ConnectBiologicCallback(int panel, int control, int event,
                     "Would you like to scan for available devices?");
                 
                 if (response == 1) {  // Yes
-                    SetCtrlVal(panel, PANEL_STATUS_TEXT, "Scanning for devices...");
+                    SetCtrlVal(panel, PANEL_STR_BIOLOGIC_STATUS, "Scanning for devices...");
                     ProcessDrawEvents();
                     
                     // Initialize BLFind if needed
@@ -505,7 +441,7 @@ int CVICALLBACK ConnectBiologicCallback(int panel, int control, int event,
                     // Run scan
                     ScanForBioLogicDevices();
                     
-                    SetCtrlVal(panel, PANEL_STATUS_TEXT, "Scan complete - check console");
+                    SetCtrlVal(panel, PANEL_STR_BIOLOGIC_STATUS, "Scan complete - check console");
                     MessagePopup("Scan Complete", 
                         "Device scan complete.\n"
                         "Check the console output for available devices.\n"
@@ -521,27 +457,4 @@ int CVICALLBACK ConnectBiologicCallback(int panel, int control, int event,
     }
     
     return 0;
-}
-
-/******************************************************************************
- * Manual Auto-Discovery Function (kept for reference)
- ******************************************************************************/
-int AutoDiscoverPSB(void) {
-    printf("\n=== AUTO-DISCOVERING PSB 10000 ===\n");
-    printf("Searching for PSB with serial number: %s\n", TARGET_SERIAL);
-    
-    int result = PSB_AutoDiscover(TARGET_SERIAL, &psb);
-    
-    if (result == PSB_SUCCESS) {
-        printf("? Successfully connected to PSB %s\n", TARGET_SERIAL);
-        return 1;
-    } else {
-        printf("? PSB with serial number %s not found\n", TARGET_SERIAL);
-        printf("Please check:\n");
-        printf("1. PSB is powered on\n");
-        printf("2. USB cable is connected\n");
-        printf("3. PSB appears in Device Manager\n");
-        printf("4. Correct serial number: %s\n", TARGET_SERIAL);
-        return 0;
-    }
 }

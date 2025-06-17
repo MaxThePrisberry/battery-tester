@@ -15,35 +15,49 @@
 
 #define  PANEL                            1       /* callback function: PanelCallback */
 #define  PANEL_LED_REMOTE_MODE            2       /* control type: LED, callback function: (none) */
-#define  PANEL_NUM_SET_VOLTAGE            3       /* control type: numeric, callback function: (none) */
-#define  PANEL_NUM_SET_CURRENT            4       /* control type: numeric, callback function: (none) */
-#define  PANEL_NUM_CURRENT                5       /* control type: numeric, callback function: (none) */
-#define  PANEL_NUM_VOLTAGE                6       /* control type: numeric, callback function: (none) */
-#define  PANEL_BTN_SET_VALUES             7       /* control type: command, callback function: SetValuesCallback */
-#define  PANEL_TOGGLE_REMOTE_MODE         8       /* control type: binary, callback function: RemoteModeToggle */
-#define  PANEL_BTN_TEST_PSB               9       /* control type: command, callback function: TestButtonCallback */
-#define  PANEL_STRING_STATUS              10      /* control type: string, callback function: (none) */
-#define  PANEL_BTN_TEST_BIOLOGIC          11      /* control type: command, callback function: ConnectBiologicCallback */
-#define  PANEL_STATUS_TEXT                12      /* control type: string, callback function: (none) */
+#define  PANEL_NUM_SET_CHARGE_V           3       /* control type: numeric, callback function: (none) */
+#define  PANEL_NUM_SET_DISCHARGE_V        4       /* control type: numeric, callback function: (none) */
+#define  PANEL_NUM_SET_CHARGE_I           5       /* control type: numeric, callback function: (none) */
+#define  PANEL_NUM_SET_DISCHARGE_I        6       /* control type: numeric, callback function: (none) */
+#define  PANEL_NUM_POWER                  7       /* control type: numeric, callback function: (none) */
+#define  PANEL_NUM_CURRENT                8       /* control type: numeric, callback function: (none) */
+#define  PANEL_NUM_VOLTAGE                9       /* control type: numeric, callback function: (none) */
+#define  PANEL_TOGGLE_REMOTE_MODE         10      /* control type: binary, callback function: RemoteModeToggle */
+#define  PANEL_BTN_TEST_PSB               11      /* control type: command, callback function: TestPSBCallback */
+#define  PANEL_STR_PSB_STATUS             12      /* control type: string, callback function: (none) */
+#define  PANEL_BTN_TEST_BIOLOGIC          13      /* control type: command, callback function: TestBiologicCallback */
+#define  PANEL_STR_BIOLOGIC_STATUS        14      /* control type: string, callback function: (none) */
+#define  PANEL_DEC_BAT_CONSTS             15      /* control type: deco, callback function: (none) */
+#define  PANEL_BAT_CONSTS_LABEL           16      /* control type: textMsg, callback function: (none) */
+#define  PANEL_BAT_CONSTS_LABEL_2         17      /* control type: textMsg, callback function: (none) */
+#define  PANEL_BAT_CONSTS_LABEL_3         18      /* control type: textMsg, callback function: (none) */
+#define  PANEL_LED_BIOLOGIC_STATUS        19      /* control type: LED, callback function: (none) */
+#define  PANEL_LED_PSB_STATUS             20      /* control type: LED, callback function: (none) */
+#define  PANEL_DEC_STATUS                 21      /* control type: deco, callback function: (none) */
+#define  PANEL_CONTROL_LABEL              22      /* control type: textMsg, callback function: (none) */
+#define  PANEL_STATUS_LABEL               23      /* control type: textMsg, callback function: (none) */
+#define  PANEL_DEC_MANUAL_CONTROL         24      /* control type: deco, callback function: (none) */
 
 
      /* Control Arrays: */
 
-          /* (no control arrays in the resource file) */
-
+#define  BATTERY_CONSTANTS_ARR            1
+#define  MANUAL_CONTROL_ARR               2
+#define  STATUS_ARR                       3
 
      /* Menu Bars, Menus, and Menu Items: */
 
-          /* (no menu bars in the resource file) */
+#define  MENUBAR                          1
+#define  MENUBAR_MENU1                    2
+#define  MENUBAR_MENU2                    3
 
 
      /* Callback Prototypes: */
 
-int  CVICALLBACK ConnectBiologicCallback(int panel, int control, int event, void *callbackData, int eventData1, int eventData2);
 int  CVICALLBACK PanelCallback(int panel, int event, void *callbackData, int eventData1, int eventData2);
 int  CVICALLBACK RemoteModeToggle(int panel, int control, int event, void *callbackData, int eventData1, int eventData2);
-int  CVICALLBACK SetValuesCallback(int panel, int control, int event, void *callbackData, int eventData1, int eventData2);
-int  CVICALLBACK TestButtonCallback(int panel, int control, int event, void *callbackData, int eventData1, int eventData2);
+int  CVICALLBACK TestBiologicCallback(int panel, int control, int event, void *callbackData, int eventData1, int eventData2);
+int  CVICALLBACK TestPSBCallback(int panel, int control, int event, void *callbackData, int eventData1, int eventData2);
 
 
 #ifdef __cplusplus
