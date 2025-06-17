@@ -11,9 +11,8 @@
 #ifndef PSB10000_H
 #define PSB10000_H
 
-#include <ansi_c.h>
+#include "common.h"
 #include <rs232.h>
-#include <utility.h>
 
 /******************************************************************************
  * Constants and Definitions
@@ -24,15 +23,15 @@
 #define PSB_NOMINAL_CURRENT     60.0    // A
 #define PSB_NOMINAL_POWER       1200.0  // W (derated due to the outlet)
 
-// Error codes
-#define PSB_SUCCESS                 0
-#define PSB_ERROR_COMM             -1
-#define PSB_ERROR_CRC              -2
-#define PSB_ERROR_TIMEOUT          -3
-#define PSB_ERROR_INVALID_PARAM    -4
-#define PSB_ERROR_BUSY             -5
-#define PSB_ERROR_NOT_CONNECTED    -6
-#define PSB_ERROR_RESPONSE         -7
+// PSB-specific error codes (using base from common.h)
+#define PSB_SUCCESS                 SUCCESS
+#define PSB_ERROR_COMM             (ERR_BASE_PSB - 1)
+#define PSB_ERROR_CRC              (ERR_BASE_PSB - 2)
+#define PSB_ERROR_TIMEOUT          (ERR_BASE_PSB - 3)
+#define PSB_ERROR_INVALID_PARAM    (ERR_BASE_PSB - 4)
+#define PSB_ERROR_BUSY             (ERR_BASE_PSB - 5)
+#define PSB_ERROR_NOT_CONNECTED    (ERR_BASE_PSB - 6)
+#define PSB_ERROR_RESPONSE         (ERR_BASE_PSB - 7)
 
 // Modbus function codes
 #define MODBUS_READ_HOLDING_REGISTERS       0x03
@@ -89,8 +88,9 @@ typedef struct {
     int comPort;
     int slaveAddress;
     int timeoutMs;
-    int isConnected;
-    char serialNumber[50];
+    int isConnected;        // 1 = connected, 0 = not connected
+    char serialNumber[52];  // Increased to 52 for better alignment
+    DeviceState state;      // Using common DeviceState enum
 } PSB_Handle;
 
 // Device status structure

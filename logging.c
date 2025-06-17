@@ -47,6 +47,13 @@ static const char* g_logLevelNames[] = {
     "DEBUG"
 };
 
+// Device names for display
+static const char* g_deviceNames[] = {
+    "",     // LOG_DEVICE_NONE - no prefix
+    "PSB",  // LOG_DEVICE_PSB
+    "BIO"   // LOG_DEVICE_BIO
+};
+
 typedef enum {
     LOG_LEVEL_INFO = 0,
     LOG_LEVEL_WARNING,
@@ -64,8 +71,8 @@ typedef struct {
 /******************************************************************************
  * Internal Function Prototypes
  ******************************************************************************/
-static void LogMessageInternal(LogLevel level, const char *format, va_list args);
-static void WriteToLogFile(const char *timestamp, const char *levelStr, const char *message);
+static void LogMessageInternalEx(LogDevice device, LogLevel level, const char *format, va_list args);
+static void WriteToLogFile(const char *timestamp, const char *deviceStr, const char *levelStr, const char *message);
 static void WriteToUI(const char *message);
 static char* ProcessTabs(const char *input);
 static int InitializeLogging(void);
@@ -333,7 +340,7 @@ static void CleanupLogging(void) {
 /******************************************************************************
  * Internal Logging Implementation
  ******************************************************************************/
-static void LogMessageInternal(LogLevel level, const char *format, va_list args) {
+static void LogMessageInternalEx(LogDevice device, LogLevel level, const char *format, va_list args) {
     char rawBuffer[MAX_LOG_LINE_LEN];
     char timeStr[64];
     time_t now;
@@ -355,30 +362,52 @@ static void LogMessageInternal(LogLevel level, const char *format, va_list args)
     const char *levelStr = (level >= 0 && level < ARRAY_SIZE(g_logLevelNames)) 
                           ? g_logLevelNames[level] : "UNKNOWN";
     
+    // Get device string
+    const char *deviceStr = (device >= 0 && device < ARRAY_SIZE(g_deviceNames))
+                           ? g_deviceNames[device] : "";
+    
     // Write to log file
     if (g_logToFile && g_logFile) {
-        WriteToLogFile(timeStr, levelStr, rawBuffer);
+        WriteToLogFile(timeStr, deviceStr, levelStr, rawBuffer);
     }
     
     // Write to UI (if not debug or if debug mode is on)
     if (g_logToUI && g_mainPanelHandle > 0) {
         if (level != LOG_LEVEL_DEBUG || g_debugMode) {
             char uiMessage[MAX_LOG_LINE_LEN + 100];
-            SAFE_SPRINTF(uiMessage, sizeof(uiMessage), "[%s] %s", levelStr, rawBuffer);
+            
+            // Format message with level and device prefixes (level first)
+            if (device != LOG_DEVICE_NONE && strlen(deviceStr) > 0) {
+                SAFE_SPRINTF(uiMessage, sizeof(uiMessage), "[%s] [%s] %s", 
+                           levelStr, deviceStr, rawBuffer);
+            } else {
+                SAFE_SPRINTF(uiMessage, sizeof(uiMessage), "[%s] %s", 
+                           levelStr, rawBuffer);
+            }
+            
             WriteToUI(uiMessage);
         }
     }
     
     // Also write to console in debug builds
     #ifdef _DEBUG
-    fprintf(stderr, "[%s] %s: %s\n", timeStr, levelStr, rawBuffer);
+    if (device != LOG_DEVICE_NONE && strlen(deviceStr) > 0) {
+        fprintf(stderr, "[%s] %s [%s]: %s\n", timeStr, levelStr, deviceStr, rawBuffer);
+    } else {
+        fprintf(stderr, "[%s] %s: %s\n", timeStr, levelStr, rawBuffer);
+    }
     #endif
 }
 
-static void WriteToLogFile(const char *timestamp, const char *levelStr, const char *message) {
+static void WriteToLogFile(const char *timestamp, const char *deviceStr, const char *levelStr, const char *message) {
     if (!g_logFile) return;
     
-    fprintf(g_logFile, "%s [%s] %s\n", timestamp, levelStr, message);
+    if (deviceStr && strlen(deviceStr) > 0) {
+        fprintf(g_logFile, "%s [%s] [%s] %s\n", timestamp, levelStr, deviceStr, message);
+    } else {
+        fprintf(g_logFile, "%s [%s] %s\n", timestamp, levelStr, message);
+    }
+    
     fflush(g_logFile);  // Ensure immediate write
 }
 
@@ -469,26 +498,59 @@ static char* ProcessTabs(const char *input) {
 }
 
 /******************************************************************************
- * Public Logging Functions
+ * Public Logging Functions - Extended versions with device support
+ ******************************************************************************/
+void LogMessageEx(LogDevice device, const char *format, ...) {
+    va_list args;
+    va_start(args, format);
+    LogMessageInternalEx(device, LOG_LEVEL_INFO, format, args);
+    va_end(args);
+}
+
+void LogErrorEx(LogDevice device, const char *format, ...) {
+    va_list args;
+    va_start(args, format);
+    LogMessageInternalEx(device, LOG_LEVEL_ERROR, format, args);
+    va_end(args);
+}
+
+void LogWarningEx(LogDevice device, const char *format, ...) {
+    va_list args;
+    va_start(args, format);
+    LogMessageInternalEx(device, LOG_LEVEL_WARNING, format, args);
+    va_end(args);
+}
+
+void LogDebugEx(LogDevice device, const char *format, ...) {
+    if (!g_debugMode) return;
+    
+    va_list args;
+    va_start(args, format);
+    LogMessageInternalEx(device, LOG_LEVEL_DEBUG, format, args);
+    va_end(args);
+}
+
+/******************************************************************************
+ * Public Logging Functions - Original versions (no device prefix)
  ******************************************************************************/
 void LogMessage(const char *format, ...) {
     va_list args;
     va_start(args, format);
-    LogMessageInternal(LOG_LEVEL_INFO, format, args);
+    LogMessageInternalEx(LOG_DEVICE_NONE, LOG_LEVEL_INFO, format, args);
     va_end(args);
 }
 
 void LogError(const char *format, ...) {
     va_list args;
     va_start(args, format);
-    LogMessageInternal(LOG_LEVEL_ERROR, format, args);
+    LogMessageInternalEx(LOG_DEVICE_NONE, LOG_LEVEL_ERROR, format, args);
     va_end(args);
 }
 
 void LogWarning(const char *format, ...) {
     va_list args;
     va_start(args, format);
-    LogMessageInternal(LOG_LEVEL_WARNING, format, args);
+    LogMessageInternalEx(LOG_DEVICE_NONE, LOG_LEVEL_WARNING, format, args);
     va_end(args);
 }
 
@@ -497,7 +559,7 @@ void LogDebug(const char *format, ...) {
     
     va_list args;
     va_start(args, format);
-    LogMessageInternal(LOG_LEVEL_DEBUG, format, args);
+    LogMessageInternalEx(LOG_DEVICE_NONE, LOG_LEVEL_DEBUG, format, args);
     va_end(args);
 }
 

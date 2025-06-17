@@ -5,11 +5,12 @@
  * Battery Tester with Auto-Discovery and Test Suite
  ******************************************************************************/
 
-#include "Common.h"
+#include "common.h"
 #include "BatteryTester.h"  
 #include "biologic_dll.h"
 #include "psb10000_dll.h"
 #include "psb10000_test.h"
+#include "logging.h"
 
 /******************************************************************************
  * Module Constants
@@ -22,7 +23,6 @@
 /******************************************************************************
  * Function Prototypes
  ******************************************************************************/
-static void CVICALLBACK UpdateUI(void *callbackData);
 static int CVICALLBACK UpdateThread(void *functionData);
 static int CVICALLBACK PSBDiscoveryThread(void *functionData);
 static int CVICALLBACK TestSuiteThread(void *functionData);
@@ -30,7 +30,7 @@ static void UpdateStatus(const char* message);
 static void TestProgressCallback(const char *message);
 
 /******************************************************************************
- * Global Variables (defined here, declared extern in Common.h)
+ * Global Variables (defined here, declared extern in common.h)
  ******************************************************************************/
 int g_mainPanelHandle = 0;
 int g_debugMode = 0;
@@ -42,7 +42,6 @@ CmtThreadPoolHandle g_threadPool = 0;
 static PSB_Handle psb;
 static DeviceState psbState = DEVICE_STATE_DISCONNECTED;
 static int discoveryComplete = 0;
-static int remoteToggleInitialized = 0;
 static CmtThreadFunctionID discoveryThreadID = 0;
 static CmtThreadFunctionID testSuiteThreadID = 0;
 static int testButtonControl = 0;
@@ -59,8 +58,8 @@ static void UpdateStatus(const char* message) {
         SetCtrlVal(g_mainPanelHandle, PANEL_STR_PSB_STATUS, message);
         ProcessSystemEvents();
         
-        // Also log to console/file
-        LogMessage("[PSB] %s", message);
+        // Log with PSB device identifier
+        LogMessageEx(LOG_DEVICE_PSB, "%s", message);
     }
 }
 
@@ -83,7 +82,7 @@ static int CVICALLBACK PSBDiscoveryThread(void *functionData) {
     
     int result = PSB_AutoDiscover(TARGET_PSB_SERIAL, &psb);
     
-    if (result == SUCCESS) {  // Using Common.h SUCCESS instead of PSB_SUCCESS
+    if (result == SUCCESS) {
         psbState = DEVICE_STATE_CONNECTED;
         discoveryComplete = 1;
         
@@ -96,12 +95,12 @@ static int CVICALLBACK PSBDiscoveryThread(void *functionData) {
             psbState = DEVICE_STATE_READY;
             Delay(STATUS_UPDATE_DELAY);
         } else {
-            LogError("Failed to read initial PSB status");
+            LogErrorEx(LOG_DEVICE_PSB, "Failed to read initial PSB status");
         }
     } else {
         psbState = DEVICE_STATE_ERROR;
         UpdateStatus("No PSB found. Check connections and power.");
-        LogError("PSB discovery failed: %s", PSB_GetErrorString(result));
+        LogErrorEx(LOG_DEVICE_PSB, "PSB discovery failed: %s", PSB_GetErrorString(result));
         discoveryComplete = 1;
     }
     
@@ -149,38 +148,6 @@ static int CVICALLBACK TestSuiteThread(void *functionData) {
     }
     
     return 0;
-}
-
-/******************************************************************************
- * Deferred UI Update Function (runs in main thread)
- ******************************************************************************/
-static void CVICALLBACK UpdateUI(void *callbackData) {
-    PSB_Status *status = (PSB_Status*)callbackData;
-    
-    if (g_mainPanelHandle > 0 && testSuiteState != TEST_STATE_RUNNING) {
-        // Update voltage and current readings
-        SetCtrlVal(g_mainPanelHandle, PANEL_NUM_VOLTAGE, status->voltage);
-        SetCtrlVal(g_mainPanelHandle, PANEL_NUM_CURRENT, status->current);
-        
-        // Initialize toggle once
-        if (!remoteToggleInitialized) {
-            SetCtrlVal(g_mainPanelHandle, PANEL_TOGGLE_REMOTE_MODE, status->remoteMode);
-            remoteToggleInitialized = 1;
-        }
-        
-        // Update LED
-        SetCtrlVal(g_mainPanelHandle, PANEL_LED_REMOTE_MODE, status->remoteMode);
-        
-        // Change LED color
-        if (status->remoteMode) {
-            SetCtrlAttribute(g_mainPanelHandle, PANEL_LED_REMOTE_MODE, ATTR_ON_COLOR, VAL_GREEN);
-        } else {
-            SetCtrlAttribute(g_mainPanelHandle, PANEL_LED_REMOTE_MODE, ATTR_ON_COLOR, VAL_RED);
-        }
-    }
-    
-    // Free the allocated status structure
-    SAFE_FREE(status);
 }
 
 /******************************************************************************
@@ -255,7 +222,7 @@ int main(int argc, char *argv[]) {
     
     // Disconnect PSB if connected
     if (psbState >= DEVICE_STATE_CONNECTED) {
-        LogMessage("Disconnecting PSB...");
+        LogMessageEx(LOG_DEVICE_PSB, "Disconnecting PSB...");
         PSB_SetOutputEnable(&psb, 0);
         PSB_SetRemoteMode(&psb, 0);
         PSB_Close(&psb);
@@ -270,8 +237,6 @@ int main(int argc, char *argv[]) {
     if (g_mainPanelHandle > 0) {
         DiscardPanel(g_mainPanelHandle);
     }
-    
-    LogMessage("=== Battery Tester Shutdown Complete ===");
     
     return 0;
 }
@@ -297,9 +262,9 @@ int CVICALLBACK RemoteModeToggle(int panel, int control, int event, void *callba
     }
     
     if (psbState != DEVICE_STATE_READY || testSuiteState == TEST_STATE_RUNNING) {
-        LogWarning("Cannot change remote mode - PSB %s, test suite %s", 
-                   psbState != DEVICE_STATE_READY ? "not ready" : "ready",
-                   testSuiteState == TEST_STATE_RUNNING ? "running" : "not running");
+        LogWarningEx(LOG_DEVICE_PSB, "Cannot change remote mode - PSB %s, test suite %s", 
+                     psbState != DEVICE_STATE_READY ? "not ready" : "ready",
+                     testSuiteState == TEST_STATE_RUNNING ? "running" : "not running");
         return 0;
     }
     
@@ -310,7 +275,7 @@ int CVICALLBACK RemoteModeToggle(int panel, int control, int event, void *callba
     
     int result = PSB_SetRemoteMode(&psb, toggleState);
     if (result != SUCCESS) {
-        LogError("Failed to set remote mode: %s", PSB_GetErrorString(result));
+        LogErrorEx(LOG_DEVICE_PSB, "Failed to set remote mode: %s", PSB_GetErrorString(result));
         UpdateStatus("Failed to set remote mode");
         SetCtrlVal(panel, PANEL_TOGGLE_REMOTE_MODE, !toggleState);
         return 0;
@@ -334,7 +299,7 @@ int CVICALLBACK TestPSBCallback(int panel, int control, int event, void *callbac
     
     if (psbState != DEVICE_STATE_READY) {
         UpdateStatus("PSB not ready - cannot run tests");
-        LogError("Cannot run tests - PSB state: %d", psbState);
+        LogErrorEx(LOG_DEVICE_PSB, "Cannot run tests - PSB state: %d", psbState);
         return 0;
     }
     
@@ -350,7 +315,7 @@ int CVICALLBACK TestPSBCallback(int panel, int control, int event, void *callbac
     // Run test suite on background thread
     int error = CmtScheduleThreadPoolFunction(g_threadPool, TestSuiteThread, NULL, &testSuiteThreadID);
     if (error != 0) {
-        LogError("Failed to schedule test suite thread: %d", error);
+        LogErrorEx(LOG_DEVICE_PSB, "Failed to schedule test suite thread: %d", error);
         SetCtrlAttribute(panel, control, ATTR_DIMMED, 0);
         UpdateStatus("Failed to start test suite");
         return 0;
@@ -389,9 +354,9 @@ int CVICALLBACK TestBiologicCallback(int panel, int control, int event,
                         "Failed to initialize BioLogic DLL. Error: %d", result);
             SetCtrlVal(panel, PANEL_STR_BIOLOGIC_STATUS, message);
             
-            // Log error to textbox instead of popup
-            LogError("Connection Error: %s", message);
-            LogError("BioLogic initialization failed: %d", result);
+            // Log error to textbox
+            LogErrorEx(LOG_DEVICE_BIO, "Connection Error: %s", message);
+            LogErrorEx(LOG_DEVICE_BIO, "BioLogic initialization failed: %d", result);
             
             SetCtrlAttribute(panel, control, ATTR_DIMMED, 0);
             return 0;
@@ -415,7 +380,7 @@ int CVICALLBACK TestBiologicCallback(int panel, int control, int event,
         SetCtrlVal(panel, PANEL_STR_BIOLOGIC_STATUS, message);
         ProcessDrawEvents();
         
-        LogMessage("BioLogic connected - Device ID: %d", deviceID);
+        LogMessageEx(LOG_DEVICE_BIO, "BioLogic connected - Device ID: %d", deviceID);
         
         // Verify device type
         const char* deviceTypeName = "Unknown";
@@ -428,20 +393,20 @@ int CVICALLBACK TestBiologicCallback(int panel, int control, int event,
                 break;
             default: 
                 deviceTypeName = "Unknown device"; 
-                LogWarning("Unknown BioLogic device code: %d", deviceInfo.DeviceCode);
+                LogWarningEx(LOG_DEVICE_BIO, "Unknown BioLogic device code: %d", deviceInfo.DeviceCode);
                 break;
         }
         
-        // Display device information in textbox instead of popup
-        LogMessage("=== Device Connected ===");
-        LogMessage("Connected to: %s", deviceTypeName);
-        LogMessage("Firmware Version: %d", deviceInfo.FirmwareVersion);
-        LogMessage("Channels: %d", deviceInfo.NumberOfChannels);
-        LogMessage("Firmware Date: %04d-%02d-%02d",
-                   deviceInfo.FirmwareDate_yyyy,
-                   deviceInfo.FirmwareDate_mm,
-                   deviceInfo.FirmwareDate_dd);
-        LogMessage("=======================");
+        // Display device information in textbox
+        LogMessageEx(LOG_DEVICE_BIO, "=== Device Connected ===");
+        LogMessageEx(LOG_DEVICE_BIO, "Connected to: %s", deviceTypeName);
+        LogMessageEx(LOG_DEVICE_BIO, "Firmware Version: %d", deviceInfo.FirmwareVersion);
+        LogMessageEx(LOG_DEVICE_BIO, "Channels: %d", deviceInfo.NumberOfChannels);
+        LogMessageEx(LOG_DEVICE_BIO, "Firmware Date: %04d-%02d-%02d",
+                     deviceInfo.FirmwareDate_yyyy,
+                     deviceInfo.FirmwareDate_mm,
+                     deviceInfo.FirmwareDate_dd);
+        LogMessageEx(LOG_DEVICE_BIO, "=======================");
         
         // Test the connection
         SetCtrlVal(panel, PANEL_STR_BIOLOGIC_STATUS, "Testing connection...");
@@ -450,13 +415,13 @@ int CVICALLBACK TestBiologicCallback(int panel, int control, int event,
         result = BL_TestConnection(deviceID);
         if (result == SUCCESS) {
             SetCtrlVal(panel, PANEL_STR_BIOLOGIC_STATUS, "Connection test passed!");
-            LogMessage("Connection test PASSED!");
+            LogMessageEx(LOG_DEVICE_BIO, "Connection test PASSED!");
             Delay(STATUS_UPDATE_DELAY);
         } else {
             SAFE_SPRINTF(message, sizeof(message), 
                         "Connection test failed: %s", GetErrorString(result));
             SetCtrlVal(panel, PANEL_STR_BIOLOGIC_STATUS, message);
-            LogError("Test Failed: %s", message);
+            LogErrorEx(LOG_DEVICE_BIO, "Test Failed: %s", message);
         }
         
         // Always disconnect after testing
@@ -475,14 +440,14 @@ int CVICALLBACK TestBiologicCallback(int panel, int control, int event,
                 SetCtrlVal(panel, PANEL_LED_BIOLOGIC_STATUS, 1);
             }
             
-            LogMessage("SUCCESS: Connection test completed successfully!");
-            LogMessage("Device has been disconnected.");
+            LogMessageEx(LOG_DEVICE_BIO, "SUCCESS: Connection test completed successfully!");
+            LogMessageEx(LOG_DEVICE_BIO, "Device has been disconnected.");
         } else {
             SAFE_SPRINTF(message, sizeof(message), 
                         "Warning: Disconnect failed! Error: %s", 
                         GetErrorString(result));
             SetCtrlVal(panel, PANEL_STR_BIOLOGIC_STATUS, message);
-            LogError("Disconnect Error: %s", message);
+            LogErrorEx(LOG_DEVICE_BIO, "Disconnect Error: %s", message);
         }
         
     } else {
@@ -500,10 +465,10 @@ int CVICALLBACK TestBiologicCallback(int panel, int control, int event,
             SetCtrlVal(panel, PANEL_LED_BIOLOGIC_STATUS, 1);
         }
         
-        LogError("Connection Error: %s", message);
+        LogErrorEx(LOG_DEVICE_BIO, "Connection Error: %s", message);
         
-        // Automatically scan for devices instead of asking
-        LogMessage("Device not found. Scanning for available devices...");
+        // Automatically scan for devices
+        LogMessageEx(LOG_DEVICE_BIO, "Device not found. Scanning for available devices...");
         SetCtrlVal(panel, PANEL_STR_BIOLOGIC_STATUS, "Scanning for devices...");
         ProcessDrawEvents();
         
@@ -516,9 +481,9 @@ int CVICALLBACK TestBiologicCallback(int panel, int control, int event,
         ScanForBioLogicDevices();
         
         SetCtrlVal(panel, PANEL_STR_BIOLOGIC_STATUS, "Scan complete - check output");
-        LogMessage("Device scan complete.");
-        LogMessage("Check the output above for available devices.");
-        LogMessage("Try connecting with the address shown in the scan results.");
+        LogMessageEx(LOG_DEVICE_BIO, "Device scan complete.");
+        LogMessageEx(LOG_DEVICE_BIO, "Check the output above for available devices.");
+        LogMessageEx(LOG_DEVICE_BIO, "Try connecting with the address shown in the scan results.");
     }
     
     // Re-enable the button

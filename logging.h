@@ -9,11 +9,98 @@
 #define LOGGING_H
 
 //==============================================================================
+// Device Identifiers
+//==============================================================================
+typedef enum {
+    LOG_DEVICE_NONE = 0,    // No device prefix
+    LOG_DEVICE_PSB,         // [PSB] prefix
+    LOG_DEVICE_BIO          // [BIO] prefix
+} LogDevice;
+
+//==============================================================================
 // Public Function Declarations
 //==============================================================================
 
 // Note: Core logging functions are declared in Common.h
 // This header provides additional logging-specific functionality
+
+/******************************************************************************
+ * Enhanced Logging Functions with Device Support
+ ******************************************************************************/
+
+/**
+ * Log an informational message with optional device prefix
+ * @param device - Device identifier (LOG_DEVICE_NONE, LOG_DEVICE_PSB, LOG_DEVICE_BIO)
+ * @param format - printf-style format string
+ * @param ... - Variable arguments
+ */
+void LogMessageEx(LogDevice device, const char *format, ...);
+
+/**
+ * Log an error message with optional device prefix
+ * @param device - Device identifier
+ * @param format - printf-style format string
+ * @param ... - Variable arguments
+ */
+void LogErrorEx(LogDevice device, const char *format, ...);
+
+/**
+ * Log a warning message with optional device prefix
+ * @param device - Device identifier
+ * @param format - printf-style format string
+ * @param ... - Variable arguments
+ */
+void LogWarningEx(LogDevice device, const char *format, ...);
+
+/**
+ * Log a debug message with optional device prefix
+ * @param device - Device identifier
+ * @param format - printf-style format string
+ * @param ... - Variable arguments
+ */
+void LogDebugEx(LogDevice device, const char *format, ...);
+
+/******************************************************************************
+ * Original Logging Functions (now call extended versions with LOG_DEVICE_NONE)
+ ******************************************************************************/
+
+/**
+ * Log an informational message
+ * @param format - printf-style format string
+ * @param ... - Variable arguments
+ */
+void LogMessage(const char *format, ...);
+
+/**
+ * Log an error message
+ * @param format - printf-style format string
+ * @param ... - Variable arguments
+ */
+void LogError(const char *format, ...);
+
+/**
+ * Log a warning message
+ * @param format - printf-style format string
+ * @param ... - Variable arguments
+ */
+void LogWarning(const char *format, ...);
+
+/**
+ * Log a debug message (only if debug mode is enabled)
+ * @param format - printf-style format string
+ * @param ... - Variable arguments
+ */
+void LogDebug(const char *format, ...);
+
+/******************************************************************************
+ * Special Purpose Logging Functions
+ ******************************************************************************/
+
+/**
+ * Log a startup message (used before full initialization)
+ * @param message - Message to log
+ */
+void LogStartupMessage(const char *message);
 
 /******************************************************************************
  * Configuration Functions
