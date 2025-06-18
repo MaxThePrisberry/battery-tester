@@ -1,7 +1,8 @@
+#include "common.h"
+#include "biologic_dll.h"
+#include "logging.h"
 #include <stdio.h>
 #include <string.h>
-#include "biologic_dll.h"
-#include <ansi_c.h>
 
 // ============================================================================
 // EClib.dll Function Pointers - ALL 58 functions
@@ -180,7 +181,7 @@ static void* LoadFunctionFromDLL(HINSTANCE hDLL, const char* funcName, const cha
     }
     
     if (func == NULL) {
-        printf("Warning: Could not load function %s\n", funcName);
+        LogWarningEx(LOG_DEVICE_BIO, "Could not load function %s", funcName);
     }
     
     return func;
@@ -219,15 +220,15 @@ static char* my_strdup(const char* s) {
 
 // Initialize the EClib DLL
 int InitializeBioLogic(void) {
-    char dllPath[MAX_PATHNAME_LEN];
+    char dllPath[MAX_PATH_LENGTH];
     
     // If already initialized, return success
     if (g_hEClibDLL != NULL) {
-        return 0;
+        return SUCCESS;
     }
     
     // Try to load from current directory first
-    GetCurrentDirectory(MAX_PATHNAME_LEN, dllPath);
+    GetCurrentDirectory(MAX_PATH_LENGTH, dllPath);
     strcat(dllPath, "\\EClib.dll");
     
     g_hEClibDLL = LoadLibrary(dllPath);
@@ -239,12 +240,12 @@ int InitializeBioLogic(void) {
     
     if (g_hEClibDLL == NULL) {
         DWORD error = GetLastError();
-        printf("Failed to load EClib.dll. Error code: %d\n", error);
-        printf("Make sure EClib.dll is in the executable directory or in PATH\n");
-        return -1;
+        LogErrorEx(LOG_DEVICE_BIO, "Failed to load EClib.dll. Error code: %d", error);
+        LogErrorEx(LOG_DEVICE_BIO, "Make sure EClib.dll is in the executable directory or in PATH");
+        return ERR_NOT_INITIALIZED;
     }
     
-    printf("EClib.dll loaded successfully\n");
+    LogMessageEx(LOG_DEVICE_BIO, "EClib.dll loaded successfully");
     
     // Load all functions
     g_BL_Connect = (PFN_BL_Connect)LoadFunctionFromDLL(g_hEClibDLL, "BL_Connect", "_BL_Connect@16");
@@ -308,9 +309,9 @@ int InitializeBioLogic(void) {
     
     // Check if critical functions were loaded
     if (g_BL_Connect == NULL || g_BL_Disconnect == NULL) {
-        printf("Failed to load critical functions from EClib.dll\n");
+        LogErrorEx(LOG_DEVICE_BIO, "Failed to load critical functions from EClib.dll");
         CleanupBioLogic();
-        return -1;
+        return ERR_NOT_INITIALIZED;
     }
     
     // Get and display library version if available
@@ -318,11 +319,11 @@ int InitializeBioLogic(void) {
         char version[256];
         unsigned int size = sizeof(version);
         if (g_BL_GetLibVersion(version, &size) == 0) {
-            printf("EClib version: %s\n", version);
+            LogMessageEx(LOG_DEVICE_BIO, "EClib version: %s", version);
         }
     }
     
-    return 0;
+    return SUCCESS;
 }
 
 // Cleanup and unload the EClib DLL
@@ -404,14 +405,14 @@ bool IsBioLogicInitialized(void) {
 
 // Initialize the BLFind DLL
 int InitializeBLFind(void) {
-    char dllPath[MAX_PATHNAME_LEN];
+    char dllPath[MAX_PATH_LENGTH];
     
     if (g_hBLFindDLL != NULL) {
-        return 0; // Already initialized
+        return SUCCESS; // Already initialized
     }
     
     // Try to load from current directory first
-    GetCurrentDirectory(MAX_PATHNAME_LEN, dllPath);
+    GetCurrentDirectory(MAX_PATH_LENGTH, dllPath);
     strcat(dllPath, "\\blfind.dll");
     
     g_hBLFindDLL = LoadLibrary(dllPath);
@@ -422,11 +423,11 @@ int InitializeBLFind(void) {
     }
     
     if (g_hBLFindDLL == NULL) {
-        printf("Failed to load blfind.dll. Error: %d\n", GetLastError());
-        return -1;
+        LogErrorEx(LOG_DEVICE_BIO, "Failed to load blfind.dll. Error: %d", GetLastError());
+        return ERR_NOT_INITIALIZED;
     }
     
-    printf("blfind.dll loaded successfully\n");
+    LogMessageEx(LOG_DEVICE_BIO, "blfind.dll loaded successfully");
     
     // Load all functions
     g_BL_EChemBCSEthDEV = (PFN_BL_EChemBCSEthDEV)LoadFunctionFromDLL(g_hBLFindDLL, "BL_EChemBCSEthDEV", "_BL_EChemBCSEthDEV@8");
@@ -443,12 +444,12 @@ int InitializeBLFind(void) {
     g_BL_SetMAC = (PFN_BL_SetMAC)LoadFunctionFromDLL(g_hBLFindDLL, "BL_SetMAC", "_BL_SetMAC@4");
     
     if (g_BL_FindEChemDev == NULL && g_BL_FindEChemEthDev == NULL && g_BL_FindEChemUsbDev == NULL) {
-        printf("Failed to load any scanning functions from blfind.dll\n");
+        LogErrorEx(LOG_DEVICE_BIO, "Failed to load any scanning functions from blfind.dll");
         CleanupBLFind();
-        return -1;
+        return ERR_NOT_INITIALIZED;
     }
     
-    return 0;
+    return SUCCESS;
 }
 
 // Cleanup BLFind DLL
@@ -547,28 +548,28 @@ const char* GetErrorString(int errorCode) {
 
 // Connection functions
 int BL_Connect(const char* address, uint8_t timeout, int* pID, TDeviceInfos_t* pInfos) {
-    if (!IsBioLogicInitialized() || g_BL_Connect == NULL) return -10;
+    if (!IsBioLogicInitialized() || g_BL_Connect == NULL) return BL_ERR_LIBRARYNOTLOADED;
     return g_BL_Connect(address, timeout, pID, pInfos);
 }
 
 int BL_Disconnect(int ID) {
-    if (!IsBioLogicInitialized() || g_BL_Disconnect == NULL) return -10;
+    if (!IsBioLogicInitialized() || g_BL_Disconnect == NULL) return BL_ERR_LIBRARYNOTLOADED;
     return g_BL_Disconnect(ID);
 }
 
 int BL_TestConnection(int ID) {
-    if (!IsBioLogicInitialized() || g_BL_TestConnection == NULL) return -10;
+    if (!IsBioLogicInitialized() || g_BL_TestConnection == NULL) return BL_ERR_LIBRARYNOTLOADED;
     return g_BL_TestConnection(ID);
 }
 
 int BL_TestCommSpeed(int ID, uint8_t channel, int* spd_rcvt, int* spd_kernel) {
-    if (!IsBioLogicInitialized() || g_BL_TestCommSpeed == NULL) return -10;
+    if (!IsBioLogicInitialized() || g_BL_TestCommSpeed == NULL) return BL_ERR_LIBRARYNOTLOADED;
     return g_BL_TestCommSpeed(ID, channel, spd_rcvt, spd_kernel);
 }
 
 // General functions
 int BL_GetLibVersion(char* pVersion, unsigned int* psize) {
-    if (!IsBioLogicInitialized() || g_BL_GetLibVersion == NULL) return -10;
+    if (!IsBioLogicInitialized() || g_BL_GetLibVersion == NULL) return BL_ERR_LIBRARYNOTLOADED;
     return g_BL_GetLibVersion(pVersion, psize);
 }
 
@@ -578,7 +579,7 @@ unsigned int BL_GetVolumeSerialNumber(void) {
 }
 
 int BL_GetErrorMsg(int errorcode, char* pmsg, unsigned int* psize) {
-    if (!IsBioLogicInitialized() || g_BL_GetErrorMsg == NULL) return -10;
+    if (!IsBioLogicInitialized() || g_BL_GetErrorMsg == NULL) return BL_ERR_LIBRARYNOTLOADED;
     return g_BL_GetErrorMsg(errorcode, pmsg, psize);
 }
 
@@ -591,12 +592,12 @@ int BL_GetUSBdeviceinfos(unsigned int USBindex, char* pcompany, unsigned int* pc
 // Firmware functions
 int BL_LoadFirmware(int ID, uint8_t* pChannels, int* pResults, uint8_t Length, 
                     bool ShowGauge, bool ForceReload, const char* BinFile, const char* XlxFile) {
-    if (!IsBioLogicInitialized() || g_BL_LoadFirmware == NULL) return -10;
+    if (!IsBioLogicInitialized() || g_BL_LoadFirmware == NULL) return BL_ERR_LIBRARYNOTLOADED;
     return g_BL_LoadFirmware(ID, pChannels, pResults, Length, ShowGauge, ForceReload, BinFile, XlxFile);
 }
 
 int BL_LoadFlash(int ID, const char* pfname, bool ShowGauge) {
-    if (!IsBioLogicInitialized() || g_BL_LoadFlash == NULL) return -10;
+    if (!IsBioLogicInitialized() || g_BL_LoadFlash == NULL) return BL_ERR_LIBRARYNOTLOADED;
     return g_BL_LoadFlash(ID, pfname, ShowGauge);
 }
 
@@ -607,32 +608,32 @@ bool BL_IsChannelPlugged(int ID, uint8_t ch) {
 }
 
 int BL_GetChannelsPlugged(int ID, uint8_t* pChPlugged, uint8_t Size) {
-    if (!IsBioLogicInitialized() || g_BL_GetChannelsPlugged == NULL) return -10;
+    if (!IsBioLogicInitialized() || g_BL_GetChannelsPlugged == NULL) return BL_ERR_LIBRARYNOTLOADED;
     return g_BL_GetChannelsPlugged(ID, pChPlugged, Size);
 }
 
 int BL_GetChannelInfos(int ID, uint8_t ch, TChannelInfos_t* pInfos) {
-    if (!IsBioLogicInitialized() || g_BL_GetChannelInfos == NULL) return -10;
+    if (!IsBioLogicInitialized() || g_BL_GetChannelInfos == NULL) return BL_ERR_LIBRARYNOTLOADED;
     return g_BL_GetChannelInfos(ID, ch, pInfos);
 }
 
 int BL_GetMessage(int ID, uint8_t ch, char* msg, unsigned int* size) {
-    if (!IsBioLogicInitialized() || g_BL_GetMessage == NULL) return -10;
+    if (!IsBioLogicInitialized() || g_BL_GetMessage == NULL) return BL_ERR_LIBRARYNOTLOADED;
     return g_BL_GetMessage(ID, ch, msg, size);
 }
 
 int BL_GetHardConf(int ID, uint8_t ch, THardwareConf_t* pHardConf) {
-    if (!IsBioLogicInitialized() || g_BL_GetHardConf == NULL) return -10;
+    if (!IsBioLogicInitialized() || g_BL_GetHardConf == NULL) return BL_ERR_LIBRARYNOTLOADED;
     return g_BL_GetHardConf(ID, ch, pHardConf);
 }
 
 int BL_SetHardConf(int ID, uint8_t ch, THardwareConf_t HardConf) {
-    if (!IsBioLogicInitialized() || g_BL_SetHardConf == NULL) return -10;
+    if (!IsBioLogicInitialized() || g_BL_SetHardConf == NULL) return BL_ERR_LIBRARYNOTLOADED;
     return g_BL_SetHardConf(ID, ch, HardConf);
 }
 
 int BL_GetChannelBoardType(int ID, uint8_t Channel, uint32_t* pChannelType) {
-    if (!IsBioLogicInitialized() || g_BL_GetChannelBoardType == NULL) return -10;
+    if (!IsBioLogicInitialized() || g_BL_GetChannelBoardType == NULL) return BL_ERR_LIBRARYNOTLOADED;
     return g_BL_GetChannelBoardType(ID, Channel, pChannelType);
 }
 
@@ -643,213 +644,213 @@ bool BL_IsModulePlugged(int ID, uint8_t module) {
 }
 
 int BL_GetModulesPlugged(int ID, uint8_t* pModPlugged, uint8_t Size) {
-    if (!IsBioLogicInitialized() || g_BL_GetModulesPlugged == NULL) return -10;
+    if (!IsBioLogicInitialized() || g_BL_GetModulesPlugged == NULL) return BL_ERR_LIBRARYNOTLOADED;
     return g_BL_GetModulesPlugged(ID, pModPlugged, Size);
 }
 
 int BL_GetModuleInfos(int ID, uint8_t module, void* pInfos) {
-    if (!IsBioLogicInitialized() || g_BL_GetModuleInfos == NULL) return -10;
+    if (!IsBioLogicInitialized() || g_BL_GetModuleInfos == NULL) return BL_ERR_LIBRARYNOTLOADED;
     return g_BL_GetModuleInfos(ID, module, pInfos);
 }
 
 // Technique functions
 int BL_LoadTechnique(int ID, uint8_t channel, const char* pFName, TEccParams_t Params, 
                      bool FirstTechnique, bool LastTechnique, bool DisplayParams) {
-    if (!IsBioLogicInitialized() || g_BL_LoadTechnique == NULL) return -10;
+    if (!IsBioLogicInitialized() || g_BL_LoadTechnique == NULL) return BL_ERR_LIBRARYNOTLOADED;
     return g_BL_LoadTechnique(ID, channel, pFName, Params, FirstTechnique, LastTechnique, DisplayParams);
 }
 
 int BL_DefineBoolParameter(const char* lbl, bool value, int index, TEccParam_t* pParam) {
-    if (!IsBioLogicInitialized() || g_BL_DefineBoolParameter == NULL) return -10;
+    if (!IsBioLogicInitialized() || g_BL_DefineBoolParameter == NULL) return BL_ERR_LIBRARYNOTLOADED;
     return g_BL_DefineBoolParameter(lbl, value, index, pParam);
 }
 
 int BL_DefineSglParameter(const char* lbl, float value, int index, TEccParam_t* pParam) {
-    if (!IsBioLogicInitialized() || g_BL_DefineSglParameter == NULL) return -10;
+    if (!IsBioLogicInitialized() || g_BL_DefineSglParameter == NULL) return BL_ERR_LIBRARYNOTLOADED;
     return g_BL_DefineSglParameter(lbl, value, index, pParam);
 }
 
 int BL_DefineIntParameter(const char* lbl, int value, int index, TEccParam_t* pParam) {
-    if (!IsBioLogicInitialized() || g_BL_DefineIntParameter == NULL) return -10;
+    if (!IsBioLogicInitialized() || g_BL_DefineIntParameter == NULL) return BL_ERR_LIBRARYNOTLOADED;
     return g_BL_DefineIntParameter(lbl, value, index, pParam);
 }
 
 int BL_UpdateParameters(int ID, uint8_t channel, int TechIndx, TEccParams_t Params, const char* EccFileName) {
-    if (!IsBioLogicInitialized() || g_BL_UpdateParameters == NULL) return -10;
+    if (!IsBioLogicInitialized() || g_BL_UpdateParameters == NULL) return BL_ERR_LIBRARYNOTLOADED;
     return g_BL_UpdateParameters(ID, channel, TechIndx, Params, EccFileName);
 }
 
 int BL_GetTechniqueInfos(int ID, uint8_t channel, int TechIndx, void* pInfos) {
-    if (!IsBioLogicInitialized() || g_BL_GetTechniqueInfos == NULL) return -10;
+    if (!IsBioLogicInitialized() || g_BL_GetTechniqueInfos == NULL) return BL_ERR_LIBRARYNOTLOADED;
     return g_BL_GetTechniqueInfos(ID, channel, TechIndx, pInfos);
 }
 
 int BL_GetParamInfos(int ID, uint8_t channel, int TechIndx, int ParamIndx, void* pInfos) {
-    if (!IsBioLogicInitialized() || g_BL_GetParamInfos == NULL) return -10;
+    if (!IsBioLogicInitialized() || g_BL_GetParamInfos == NULL) return BL_ERR_LIBRARYNOTLOADED;
     return g_BL_GetParamInfos(ID, channel, TechIndx, ParamIndx, pInfos);
 }
 
 // Start/Stop functions
 int BL_StartChannel(int ID, uint8_t channel) {
-    if (!IsBioLogicInitialized() || g_BL_StartChannel == NULL) return -10;
+    if (!IsBioLogicInitialized() || g_BL_StartChannel == NULL) return BL_ERR_LIBRARYNOTLOADED;
     return g_BL_StartChannel(ID, channel);
 }
 
 int BL_StartChannels(int ID, uint8_t* pChannels, int* pResults, uint8_t length) {
-    if (!IsBioLogicInitialized() || g_BL_StartChannels == NULL) return -10;
+    if (!IsBioLogicInitialized() || g_BL_StartChannels == NULL) return BL_ERR_LIBRARYNOTLOADED;
     return g_BL_StartChannels(ID, pChannels, pResults, length);
 }
 
 int BL_StopChannel(int ID, uint8_t channel) {
-    if (!IsBioLogicInitialized() || g_BL_StopChannel == NULL) return -10;
+    if (!IsBioLogicInitialized() || g_BL_StopChannel == NULL) return BL_ERR_LIBRARYNOTLOADED;
     return g_BL_StopChannel(ID, channel);
 }
 
 int BL_StopChannels(int ID, uint8_t* pChannels, int* pResults, uint8_t length) {
-    if (!IsBioLogicInitialized() || g_BL_StopChannels == NULL) return -10;
+    if (!IsBioLogicInitialized() || g_BL_StopChannels == NULL) return BL_ERR_LIBRARYNOTLOADED;
     return g_BL_StopChannels(ID, pChannels, pResults, length);
 }
 
 // Data functions
 int BL_GetCurrentValues(int ID, uint8_t channel, TCurrentValues_t* pValues) {
-    if (!IsBioLogicInitialized() || g_BL_GetCurrentValues == NULL) return -10;
+    if (!IsBioLogicInitialized() || g_BL_GetCurrentValues == NULL) return BL_ERR_LIBRARYNOTLOADED;
     return g_BL_GetCurrentValues(ID, channel, pValues);
 }
 
 int BL_GetData(int ID, uint8_t channel, TDataBuffer_t* pBuf, TDataInfos_t* pInfos, TCurrentValues_t* pValues) {
-    if (!IsBioLogicInitialized() || g_BL_GetData == NULL) return -10;
+    if (!IsBioLogicInitialized() || g_BL_GetData == NULL) return BL_ERR_LIBRARYNOTLOADED;
     return g_BL_GetData(ID, channel, pBuf, pInfos, pValues);
 }
 
 int BL_GetFCTData(int ID, uint8_t channel, TDataBuffer_t* pBuf, TDataInfos_t* pInfos, TCurrentValues_t* pValues) {
-    if (!IsBioLogicInitialized() || g_BL_GetFCTData == NULL) return -10;
+    if (!IsBioLogicInitialized() || g_BL_GetFCTData == NULL) return BL_ERR_LIBRARYNOTLOADED;
     return g_BL_GetFCTData(ID, channel, pBuf, pInfos, pValues);
 }
 
 int BL_ConvertNumericIntoSingle(unsigned int num, float* psgl) {
-    if (!IsBioLogicInitialized() || g_BL_ConvertNumericIntoSingle == NULL) return -10;
+    if (!IsBioLogicInitialized() || g_BL_ConvertNumericIntoSingle == NULL) return BL_ERR_LIBRARYNOTLOADED;
     return g_BL_ConvertNumericIntoSingle(num, psgl);
 }
 
 int BL_ConvertChannelNumericIntoSingle(uint32_t num, float* pRetFloat, uint32_t ChannelType) {
-    if (!IsBioLogicInitialized() || g_BL_ConvertChannelNumericIntoSingle == NULL) return -10;
+    if (!IsBioLogicInitialized() || g_BL_ConvertChannelNumericIntoSingle == NULL) return BL_ERR_LIBRARYNOTLOADED;
     return g_BL_ConvertChannelNumericIntoSingle(num, pRetFloat, ChannelType);
 }
 
 int BL_ConvertTimeChannelNumericIntoSeconds(uint32_t* pnum, double* pRetTime, float Timebase, uint32_t ChannelType) {
-    if (!IsBioLogicInitialized() || g_BL_ConvertTimeChannelNumericIntoSeconds == NULL) return -10;
+    if (!IsBioLogicInitialized() || g_BL_ConvertTimeChannelNumericIntoSeconds == NULL) return BL_ERR_LIBRARYNOTLOADED;
     return g_BL_ConvertTimeChannelNumericIntoSeconds(pnum, pRetTime, Timebase, ChannelType);
 }
 
 // Additional data functions
 int BL_GetCurrentValuesBk(int ID, uint8_t channel, void* pValues) {
-    if (!IsBioLogicInitialized() || g_BL_GetCurrentValuesBk == NULL) return -10;
+    if (!IsBioLogicInitialized() || g_BL_GetCurrentValuesBk == NULL) return BL_ERR_LIBRARYNOTLOADED;
     return g_BL_GetCurrentValuesBk(ID, channel, pValues);
 }
 
 int BL_GetDataBk(int ID, uint8_t channel, void* pBuf, void* pInfos, void* pValues) {
-    if (!IsBioLogicInitialized() || g_BL_GetDataBk == NULL) return -10;
+    if (!IsBioLogicInitialized() || g_BL_GetDataBk == NULL) return BL_ERR_LIBRARYNOTLOADED;
     return g_BL_GetDataBk(ID, channel, pBuf, pInfos, pValues);
 }
 
 int BL_GetData_LV(int ID, uint8_t channel, void* pBuf, void* pInfos, void* pValues) {
-    if (!IsBioLogicInitialized() || g_BL_GetData_LV == NULL) return -10;
+    if (!IsBioLogicInitialized() || g_BL_GetData_LV == NULL) return BL_ERR_LIBRARYNOTLOADED;
     return g_BL_GetData_LV(ID, channel, pBuf, pInfos, pValues);
 }
 
 int BL_GetData_VEE(int ID, uint8_t channel, void* pBuf, void* pInfos, void* pValues) {
-    if (!IsBioLogicInitialized() || g_BL_GetData_VEE == NULL) return -10;
+    if (!IsBioLogicInitialized() || g_BL_GetData_VEE == NULL) return BL_ERR_LIBRARYNOTLOADED;
     return g_BL_GetData_VEE(ID, channel, pBuf, pInfos, pValues);
 }
 
 // Experiment functions
 int BL_SetExperimentInfos(int ID, uint8_t channel, TExperimentInfos_t TExpInfos) {
-    if (!IsBioLogicInitialized() || g_BL_SetExperimentInfos == NULL) return -10;
+    if (!IsBioLogicInitialized() || g_BL_SetExperimentInfos == NULL) return BL_ERR_LIBRARYNOTLOADED;
     return g_BL_SetExperimentInfos(ID, channel, TExpInfos);
 }
 
 int BL_GetExperimentInfos(int ID, uint8_t channel, TExperimentInfos_t* TExpInfos) {
-   if (!IsBioLogicInitialized() || g_BL_GetExperimentInfos == NULL) return -10;
+   if (!IsBioLogicInitialized() || g_BL_GetExperimentInfos == NULL) return BL_ERR_LIBRARYNOTLOADED;
    return g_BL_GetExperimentInfos(ID, channel, TExpInfos);
 }
 
 // Advanced functions
 int BL_SendMsg(int ID, uint8_t ch, void* pBuf, unsigned int* pLen) {
-   if (!IsBioLogicInitialized() || g_BL_SendMsg == NULL) return -10;
+   if (!IsBioLogicInitialized() || g_BL_SendMsg == NULL) return BL_ERR_LIBRARYNOTLOADED;
    return g_BL_SendMsg(ID, ch, pBuf, pLen);
 }
 
 int BL_SendMsgToRcvt(int ID, void* pBuf, unsigned int* pLen) {
-   if (!IsBioLogicInitialized() || g_BL_SendMsgToRcvt == NULL) return -10;
+   if (!IsBioLogicInitialized() || g_BL_SendMsgToRcvt == NULL) return BL_ERR_LIBRARYNOTLOADED;
    return g_BL_SendMsgToRcvt(ID, pBuf, pLen);
 }
 
 int BL_SendMsgToRcvt_g(int ID, uint8_t ch, void* pBuf, unsigned int* pLen) {
-   if (!IsBioLogicInitialized() || g_BL_SendMsgToRcvt_g == NULL) return -10;
+   if (!IsBioLogicInitialized() || g_BL_SendMsgToRcvt_g == NULL) return BL_ERR_LIBRARYNOTLOADED;
    return g_BL_SendMsgToRcvt_g(ID, ch, pBuf, pLen);
 }
 
 int BL_SendEcalMsg(int ID, uint8_t ch, void* pBuf, unsigned int* pLen) {
-   if (!IsBioLogicInitialized() || g_BL_SendEcalMsg == NULL) return -10;
+   if (!IsBioLogicInitialized() || g_BL_SendEcalMsg == NULL) return BL_ERR_LIBRARYNOTLOADED;
    return g_BL_SendEcalMsg(ID, ch, pBuf, pLen);
 }
 
 int BL_SendEcalMsgGroup(int ID, uint8_t* pChannels, uint8_t length, void* pBuf, unsigned int* pLen) {
-   if (!IsBioLogicInitialized() || g_BL_SendEcalMsgGroup == NULL) return -10;
+   if (!IsBioLogicInitialized() || g_BL_SendEcalMsgGroup == NULL) return BL_ERR_LIBRARYNOTLOADED;
    return g_BL_SendEcalMsgGroup(ID, pChannels, length, pBuf, pLen);
 }
 
 // Additional functions
 int BL_GetFPGAVer(int ID, uint8_t channel, uint32_t* pVersion) {
-   if (!IsBioLogicInitialized() || g_BL_GetFPGAVer == NULL) return -10;
+   if (!IsBioLogicInitialized() || g_BL_GetFPGAVer == NULL) return BL_ERR_LIBRARYNOTLOADED;
    return g_BL_GetFPGAVer(ID, channel, pVersion);
 }
 
 int BL_GetOptErr(int ID, uint8_t channel, int* pOptErr, int* pOptPos) {
-   if (!IsBioLogicInitialized() || g_BL_GetOptErr == NULL) return -10;
+   if (!IsBioLogicInitialized() || g_BL_GetOptErr == NULL) return BL_ERR_LIBRARYNOTLOADED;
    return g_BL_GetOptErr(ID, channel, pOptErr, pOptPos);
 }
 
 int BL_ReadParameters(int ID, uint8_t channel, void* pParams) {
-   if (!IsBioLogicInitialized() || g_BL_ReadParameters == NULL) return -10;
+   if (!IsBioLogicInitialized() || g_BL_ReadParameters == NULL) return BL_ERR_LIBRARYNOTLOADED;
    return g_BL_ReadParameters(ID, channel, pParams);
 }
 
 int BL_GetChannelFloatFormat(int ID, uint8_t channel, int* pFormat) {
-   if (!IsBioLogicInitialized() || g_BL_GetChannelFloatFormat == NULL) return -10;
+   if (!IsBioLogicInitialized() || g_BL_GetChannelFloatFormat == NULL) return BL_ERR_LIBRARYNOTLOADED;
    return g_BL_GetChannelFloatFormat(ID, channel, pFormat);
 }
 
 int BL_ConvertNumericIntoFloat(unsigned int num, double* pdbl) {
-   if (!IsBioLogicInitialized() || g_BL_ConvertNumericIntoFloat == NULL) return -10;
+   if (!IsBioLogicInitialized() || g_BL_ConvertNumericIntoFloat == NULL) return BL_ERR_LIBRARYNOTLOADED;
    return g_BL_ConvertNumericIntoFloat(num, pdbl);
 }
 
 int BL_ConvertTimeChannelNumericIntoTimebases(uint32_t* pnum, double* pRetTime, float* pTimebases, uint32_t ChannelType) {
-   if (!IsBioLogicInitialized() || g_BL_ConvertTimeChannelNumericIntoTimebases == NULL) return -10;
+   if (!IsBioLogicInitialized() || g_BL_ConvertTimeChannelNumericIntoTimebases == NULL) return BL_ERR_LIBRARYNOTLOADED;
    return g_BL_ConvertTimeChannelNumericIntoTimebases(pnum, pRetTime, pTimebases, ChannelType);
 }
 
 // Technique loading variants
 int BL_LoadTechnique_LV(int ID, uint8_t channel, const char* pFName, void* Params, 
                        bool FirstTechnique, bool LastTechnique, bool DisplayParams) {
-   if (!IsBioLogicInitialized() || g_BL_LoadTechnique_LV == NULL) return -10;
+   if (!IsBioLogicInitialized() || g_BL_LoadTechnique_LV == NULL) return BL_ERR_LIBRARYNOTLOADED;
    return g_BL_LoadTechnique_LV(ID, channel, pFName, Params, FirstTechnique, LastTechnique, DisplayParams);
 }
 
 int BL_LoadTechnique_VEE(int ID, uint8_t channel, const char* pFName, void* Params, 
                         bool FirstTechnique, bool LastTechnique, bool DisplayParams) {
-   if (!IsBioLogicInitialized() || g_BL_LoadTechnique_VEE == NULL) return -10;
+   if (!IsBioLogicInitialized() || g_BL_LoadTechnique_VEE == NULL) return BL_ERR_LIBRARYNOTLOADED;
    return g_BL_LoadTechnique_VEE(ID, channel, pFName, Params, FirstTechnique, LastTechnique, DisplayParams);
 }
 
 int BL_UpdateParameters_LV(int ID, uint8_t channel, int TechIndx, void* Params, const char* EccFileName) {
-   if (!IsBioLogicInitialized() || g_BL_UpdateParameters_LV == NULL) return -10;
+   if (!IsBioLogicInitialized() || g_BL_UpdateParameters_LV == NULL) return BL_ERR_LIBRARYNOTLOADED;
    return g_BL_UpdateParameters_LV(ID, channel, TechIndx, Params, EccFileName);
 }
 
 int BL_UpdateParameters_VEE(int ID, uint8_t channel, int TechIndx, void* Params, const char* EccFileName) {
-   if (!IsBioLogicInitialized() || g_BL_UpdateParameters_VEE == NULL) return -10;
+   if (!IsBioLogicInitialized() || g_BL_UpdateParameters_VEE == NULL) return BL_ERR_LIBRARYNOTLOADED;
    return g_BL_UpdateParameters_VEE(ID, channel, TechIndx, Params, EccFileName);
 }
 
@@ -858,64 +859,64 @@ int BL_UpdateParameters_VEE(int ID, uint8_t channel, int TechIndx, void* Params,
 // ============================================================================
 
 int BL_FindEChemDev(char* pLstDev, unsigned int* pSize, unsigned int* pNbrDevice) {
-   if (!IsBLFindInitialized() || g_BL_FindEChemDev == NULL) return -10;
+   if (!IsBLFindInitialized() || g_BL_FindEChemDev == NULL) return BL_ERR_LIBRARYNOTLOADED;
    return g_BL_FindEChemDev(pLstDev, pSize, pNbrDevice);
 }
 
 int BL_FindEChemEthDev(char* pLstDev, unsigned int* pSize, unsigned int* pNbrDevice) {
-   if (!IsBLFindInitialized() || g_BL_FindEChemEthDev == NULL) return -10;
+   if (!IsBLFindInitialized() || g_BL_FindEChemEthDev == NULL) return BL_ERR_LIBRARYNOTLOADED;
    return g_BL_FindEChemEthDev(pLstDev, pSize, pNbrDevice);
 }
 
 int BL_FindEChemUsbDev(char* pLstDev, unsigned int* pSize, unsigned int* pNbrDevice) {
-   if (!IsBLFindInitialized() || g_BL_FindEChemUsbDev == NULL) return -10;
+   if (!IsBLFindInitialized() || g_BL_FindEChemUsbDev == NULL) return BL_ERR_LIBRARYNOTLOADED;
    return g_BL_FindEChemUsbDev(pLstDev, pSize, pNbrDevice);
 }
 
 int BL_SetConfig(char* pIp, char* pCfg) {
-   if (!IsBLFindInitialized() || g_BL_SetConfig == NULL) return -10;
+   if (!IsBLFindInitialized() || g_BL_SetConfig == NULL) return BL_ERR_LIBRARYNOTLOADED;
    return g_BL_SetConfig(pIp, pCfg);
 }
 
 // Additional blfind functions
 int BL_FindEChemBCSDev(char* pLstDev, unsigned int* pSize, unsigned int* pNbrDevice) {
-   if (!IsBLFindInitialized() || g_BL_FindEChemBCSDev == NULL) return -10;
+   if (!IsBLFindInitialized() || g_BL_FindEChemBCSDev == NULL) return BL_ERR_LIBRARYNOTLOADED;
    return g_BL_FindEChemBCSDev(pLstDev, pSize, pNbrDevice);
 }
 
 int BL_EChemBCSEthDEV(void* param1, void* param2) {
-   if (!IsBLFindInitialized() || g_BL_EChemBCSEthDEV == NULL) return -10;
+   if (!IsBLFindInitialized() || g_BL_EChemBCSEthDEV == NULL) return BL_ERR_LIBRARYNOTLOADED;
    return g_BL_EChemBCSEthDEV(param1, param2);
 }
 
 int BL_FindKineticDev(char* pLstDev, unsigned int* pSize, unsigned int* pNbrDevice) {
-   if (!IsBLFindInitialized() || g_BL_FindKineticDev == NULL) return -10;
+   if (!IsBLFindInitialized() || g_BL_FindKineticDev == NULL) return BL_ERR_LIBRARYNOTLOADED;
    return g_BL_FindKineticDev(pLstDev, pSize, pNbrDevice);
 }
 
 int BL_FindKineticEthDev(char* pLstDev, unsigned int* pSize, unsigned int* pNbrDevice) {
-   if (!IsBLFindInitialized() || g_BL_FindKineticEthDev == NULL) return -10;
+   if (!IsBLFindInitialized() || g_BL_FindKineticEthDev == NULL) return BL_ERR_LIBRARYNOTLOADED;
    return g_BL_FindKineticEthDev(pLstDev, pSize, pNbrDevice);
 }
 
 int BL_FindKineticUsbDev(char* pLstDev, unsigned int* pSize, unsigned int* pNbrDevice) {
-   if (!IsBLFindInitialized() || g_BL_FindKineticUsbDev == NULL) return -10;
+   if (!IsBLFindInitialized() || g_BL_FindKineticUsbDev == NULL) return BL_ERR_LIBRARYNOTLOADED;
    return g_BL_FindKineticUsbDev(pLstDev, pSize, pNbrDevice);
 }
 
 int BL_Init_Path(const char* path) {
-   if (!IsBLFindInitialized() || g_BL_Init_Path == NULL) return -10;
+   if (!IsBLFindInitialized() || g_BL_Init_Path == NULL) return BL_ERR_LIBRARYNOTLOADED;
    return g_BL_Init_Path(path);
 }
 
 int BL_SetMAC(char* mac) {
-   if (!IsBLFindInitialized() || g_BL_SetMAC == NULL) return -10;
+   if (!IsBLFindInitialized() || g_BL_SetMAC == NULL) return BL_ERR_LIBRARYNOTLOADED;
    return g_BL_SetMAC(mac);
 }
 
 // BLFind error message function
 int BLFind_GetErrorMsg(int errorcode, char* pmsg, unsigned int* psize) {
-   if (!IsBLFindInitialized() || g_BLFind_GetErrorMsg == NULL) return -10;
+   if (!IsBLFindInitialized() || g_BLFind_GetErrorMsg == NULL) return BL_ERR_LIBRARYNOTLOADED;
    return g_BLFind_GetErrorMsg(errorcode, pmsg, psize);
 }
 
@@ -931,26 +932,26 @@ int ScanForBioLogicDevices(void) {
    unsigned int deviceCount;
    int result;
    
-   printf("\n=== Scanning for BioLogic Devices ===\n\n");
+   LogMessageEx(LOG_DEVICE_BIO, "=== Scanning for BioLogic Devices ===");
    
    // Initialize blfind.dll
    if (InitializeBLFind() != 0) {
-       printf("Failed to initialize blfind.dll\n");
-       return -1;
+       LogErrorEx(LOG_DEVICE_BIO, "Failed to initialize blfind.dll");
+       return ERR_NOT_INITIALIZED;
    }
    
    // Initialize EClib.dll too if needed
    if (!IsBioLogicInitialized()) {
        if (InitializeBioLogic() != 0) {
-           printf("Failed to initialize EClib.dll\n");
+           LogErrorEx(LOG_DEVICE_BIO, "Failed to initialize EClib.dll");
            CleanupBLFind();
-           return -1;
+           return ERR_NOT_INITIALIZED;
        }
    }
    
    // Scan for USB devices
    if (g_BL_FindEChemUsbDev != NULL) {
-       printf("Scanning for USB devices...\n");
+       LogMessageEx(LOG_DEVICE_BIO, "Scanning for USB devices...");
        memset(deviceList, 0, sizeof(deviceList));
        bufferSize = sizeof(deviceList);
        deviceCount = 0;
@@ -958,14 +959,14 @@ int ScanForBioLogicDevices(void) {
        result = BL_FindEChemUsbDev(deviceList, &bufferSize, &deviceCount);
        
        if (result == 0) {
-           printf("Found %d USB device(s)\n", deviceCount);
+           LogMessageEx(LOG_DEVICE_BIO, "Found %d USB device(s)", deviceCount);
            if (deviceCount > 0) {
                // Convert from Unicode to ASCII
                ConvertUnicodeToAscii(deviceList, asciiDeviceList, bufferSize);
-               printf("Device string: %s\n", asciiDeviceList);
+               LogMessageEx(LOG_DEVICE_BIO, "Device string: %s", asciiDeviceList);
                
                // Parse the device string
-               // Format appears to be: USB$0$$$$$SP-150e$[serial]$...
+               // Format appears to be: USB$0$$$SP-150e$[serial]$...
                char* deviceCopy = my_strdup(asciiDeviceList);
                char* token = strtok(deviceCopy, "$");
                int fieldCount = 0;
@@ -985,29 +986,29 @@ int ScanForBioLogicDevices(void) {
                            strcpy(deviceType, token);
                            break;
                    }
-                   printf("  Field %d: %s\n", fieldCount, token);
+                   LogDebugEx(LOG_DEVICE_BIO, "  Field %d: %s", fieldCount, token);
                    token = strtok(NULL, "$");
                    fieldCount++;
                }
                
                free(deviceCopy);
                
-               printf("\nParsed information:\n");
-               printf("  Connection: %s\n", connectionType);
-               printf("  Port: %s\n", portNumber);
-               printf("  Device: %s\n", deviceType);
+               LogMessageEx(LOG_DEVICE_BIO, "Parsed information:");
+               LogMessageEx(LOG_DEVICE_BIO, "  Connection: %s", connectionType);
+               LogMessageEx(LOG_DEVICE_BIO, "  Port: %s", portNumber);
+               LogMessageEx(LOG_DEVICE_BIO, "  Device: %s", deviceType);
                
-               printf("\n*** Try connecting with: \"USB%s\" ***\n", portNumber);
+               LogMessageEx(LOG_DEVICE_BIO, "*** Try connecting with: \"USB%s\" ***", portNumber);
            }
        } else {
-           printf("USB scan error: %d\n", result);
+           LogErrorEx(LOG_DEVICE_BIO, "USB scan error: %d", result);
            
            // Try to get error message from blfind
            if (g_BLFind_GetErrorMsg != NULL) {
                char errorMsg[256];
                unsigned int msgSize = sizeof(errorMsg);
                if (BLFind_GetErrorMsg(result, errorMsg, &msgSize) == 0) {
-                   printf("BLFind error: %s\n", errorMsg);
+                   LogErrorEx(LOG_DEVICE_BIO, "BLFind error: %s", errorMsg);
                }
            }
        }
@@ -1015,7 +1016,7 @@ int ScanForBioLogicDevices(void) {
    
    // Scan for Ethernet devices
    if (g_BL_FindEChemEthDev != NULL) {
-       printf("\nScanning for Ethernet devices...\n");
+       LogMessageEx(LOG_DEVICE_BIO, "Scanning for Ethernet devices...");
        memset(deviceList, 0, sizeof(deviceList));
        bufferSize = sizeof(deviceList);
        deviceCount = 0;
@@ -1023,19 +1024,19 @@ int ScanForBioLogicDevices(void) {
        result = BL_FindEChemEthDev(deviceList, &bufferSize, &deviceCount);
        
        if (result == 0) {
-           printf("Found %d Ethernet device(s)\n", deviceCount);
+           LogMessageEx(LOG_DEVICE_BIO, "Found %d Ethernet device(s)", deviceCount);
            if (deviceCount > 0) {
                ConvertUnicodeToAscii(deviceList, asciiDeviceList, bufferSize);
-               printf("Device string: %s\n", asciiDeviceList);
+               LogMessageEx(LOG_DEVICE_BIO, "Device string: %s", asciiDeviceList);
            }
        } else {
-           printf("Ethernet scan error: %d\n", result);
+           LogErrorEx(LOG_DEVICE_BIO, "Ethernet scan error: %d", result);
        }
    }
    
    // Scan for BCS devices (Battery Cycling Systems)
    if (g_BL_FindEChemBCSDev != NULL) {
-       printf("\nScanning for BCS devices...\n");
+       LogMessageEx(LOG_DEVICE_BIO, "Scanning for BCS devices...");
        memset(deviceList, 0, sizeof(deviceList));
        bufferSize = sizeof(deviceList);
        deviceCount = 0;
@@ -1043,19 +1044,19 @@ int ScanForBioLogicDevices(void) {
        result = BL_FindEChemBCSDev(deviceList, &bufferSize, &deviceCount);
        
        if (result == 0) {
-           printf("Found %d BCS device(s)\n", deviceCount);
+           LogMessageEx(LOG_DEVICE_BIO, "Found %d BCS device(s)", deviceCount);
            if (deviceCount > 0) {
                ConvertUnicodeToAscii(deviceList, asciiDeviceList, bufferSize);
-               printf("Device string: %s\n", asciiDeviceList);
+               LogMessageEx(LOG_DEVICE_BIO, "Device string: %s", asciiDeviceList);
            }
        } else {
-           printf("BCS scan error: %d\n", result);
+           LogErrorEx(LOG_DEVICE_BIO, "BCS scan error: %d", result);
        }
    }
    
    // Scan for Kinetic devices
    if (g_BL_FindKineticDev != NULL) {
-       printf("\nScanning for Kinetic devices...\n");
+       LogMessageEx(LOG_DEVICE_BIO, "Scanning for Kinetic devices...");
        memset(deviceList, 0, sizeof(deviceList));
        bufferSize = sizeof(deviceList);
        deviceCount = 0;
@@ -1063,17 +1064,17 @@ int ScanForBioLogicDevices(void) {
        result = BL_FindKineticDev(deviceList, &bufferSize, &deviceCount);
        
        if (result == 0) {
-           printf("Found %d Kinetic device(s)\n", deviceCount);
+           LogMessageEx(LOG_DEVICE_BIO, "Found %d Kinetic device(s)", deviceCount);
            if (deviceCount > 0) {
                ConvertUnicodeToAscii(deviceList, asciiDeviceList, bufferSize);
-               printf("Device string: %s\n", asciiDeviceList);
+               LogMessageEx(LOG_DEVICE_BIO, "Device string: %s", asciiDeviceList);
            }
        } else {
-           printf("Kinetic scan error: %d\n", result);
+           LogErrorEx(LOG_DEVICE_BIO, "Kinetic scan error: %d", result);
        }
    }
    
-   printf("\n=== Scan Complete ===\n");
+   LogMessageEx(LOG_DEVICE_BIO, "=== Scan Complete ===");
    
-   return 0;
+   return SUCCESS;
 }

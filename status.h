@@ -18,8 +18,8 @@
  ******************************************************************************/
 
 // Device enable flags - set to 1 to enable monitoring, 0 to disable
-#define STATUS_MONITOR_PSB         0    // Enable PSB 10000 monitoring
-#define STATUS_MONITOR_BIOLOGIC    0    // Enable BioLogic SP-150e monitoring
+#define STATUS_MONITOR_PSB         1    // Enable PSB 10000 monitoring
+#define STATUS_MONITOR_BIOLOGIC    1    // Enable BioLogic SP-150e monitoring
 
 // Update rates
 #define STATUS_UPDATE_RATE_HZ      5    // Status update frequency in Hz
@@ -115,6 +115,18 @@ int Status_Stop(void);
  * Clean up and release all resources
  */
 void Status_Cleanup(void);
+
+/**
+ * Pause status monitoring (for exclusive access during tests)
+ * @return SUCCESS or error code
+ */
+int Status_Pause(void);
+
+/**
+ * Resume status monitoring after pause
+ * @return SUCCESS or error code
+ */
+int Status_Resume(void);
 
 /**
  * Get current connection state for a device

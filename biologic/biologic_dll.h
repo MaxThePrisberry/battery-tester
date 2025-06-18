@@ -5,12 +5,14 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+// Include common definitions
+#include "common.h"
+
 // Include the ECLab headers for structure definitions
 #include "BLStructs.h"
 
 // Configuration
 #define TIMEOUT  5       // Connection timeout in seconds
-#define MAX_PATHNAME_LEN 260
 
 // ============================================================================
 // Main BioLogic Library Management Functions
@@ -25,11 +27,6 @@ bool IsBioLogicInitialized(void);
 int InitializeBLFind(void);
 void CleanupBLFind(void);
 bool IsBLFindInitialized(void);
-
-// ============================================================================
-// Error Handling
-// ============================================================================
-const char* GetErrorString(int errorCode);
 
 // ============================================================================
 // Helper Functions

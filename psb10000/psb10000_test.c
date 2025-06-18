@@ -4,6 +4,8 @@
  ******************************************************************************/
 
 #include "psb10000_test.h"
+#include "common.h"
+#include "logging.h"
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
@@ -14,7 +16,6 @@
  ******************************************************************************/
 
 static TestCase testCases[] = {
-    {"Connection Status", Test_ConnectionStatus, 0, "", 0.0},
     {"Remote Mode Control", Test_RemoteMode, 0, "", 0.0},
     {"Status Register Reading", Test_StatusRegisterReading, 0, "", 0.0},
     {"Voltage Control", Test_VoltageControl, 0, "", 0.0},
@@ -37,24 +38,10 @@ static int numTestCases = sizeof(testCases) / sizeof(testCases[0]);
  ******************************************************************************/
 
 static int SetWideLimits(PSB_Handle *handle);
+static int EnsureRemoteMode(PSB_Handle *handle);
 
 static double GetTime(void) {
     return Timer();
-}
-
-void PrintTestHeader(const char *testName) {
-    printf("\n--- Testing: %s ---\n", testName);
-}
-
-void PrintTestResult(const char *testName, int passed, const char *errorMsg) {
-    if (passed) {
-        printf("[PASS] %s\n", testName);
-    } else {
-        printf("[FAIL] %s\n", testName);
-        if (errorMsg && strlen(errorMsg) > 0) {
-            printf("       Error: %s\n", errorMsg);
-        }
-    }
 }
 
 void UpdateTestProgress(TestSuiteContext *context, const char *message) {
@@ -96,13 +83,13 @@ static int AcknowledgeAlarms(PSB_Handle *handle) {
     txBuffer[6] = (unsigned char)(crc & 0xFF);
     txBuffer[7] = (unsigned char)((crc >> 8) & 0xFF);
     
-    printf("Acknowledging any pending alarms...\n");
+    LogDebugEx(LOG_DEVICE_PSB, "Acknowledging any pending alarms...");
     
     // Clear input buffer first
     FlushInQ(handle->comPort);
     
     if (ComWrt(handle->comPort, (char*)txBuffer, 8) != 8) {
-        printf("Failed to send alarm acknowledge command\n");
+        LogDebugEx(LOG_DEVICE_PSB, "Failed to send alarm acknowledge command");
         return PSB_ERROR_COMM;
     }
     
@@ -114,61 +101,87 @@ static int AcknowledgeAlarms(PSB_Handle *handle) {
     return PSB_SUCCESS;
 }
 
+// Helper function to ensure remote mode is enabled without spamming commands
+static int EnsureRemoteMode(PSB_Handle *handle) {
+    PSB_Status status;
+    int result = PSB_GetStatus(handle, &status);
+    if (result != PSB_SUCCESS) {
+        LogErrorEx(LOG_DEVICE_PSB, "Failed to get status for remote mode check: %s", 
+                   PSB_GetErrorString(result));
+        return result;
+    }
+    
+    // Only set remote mode if it's not already enabled
+    if (!status.remoteMode) {
+        LogDebugEx(LOG_DEVICE_PSB, "Remote mode is OFF, enabling it...");
+        result = PSB_SetRemoteMode(handle, 1);
+        if (result != PSB_SUCCESS) {
+            LogErrorEx(LOG_DEVICE_PSB, "Failed to enable remote mode: %s", 
+                       PSB_GetErrorString(result));
+            return result;
+        }
+        Delay(0.5); // Give device time to process
+    } else {
+        LogDebugEx(LOG_DEVICE_PSB, "Remote mode already enabled");
+    }
+    
+    return PSB_SUCCESS;
+}
+
 // Helper function to set wide limits for testing
 static int SetWideLimits(PSB_Handle *handle) {
-    printf("\nSetting wide limits for testing...\n");
+    LogDebugEx(LOG_DEVICE_PSB, "Setting wide limits for testing...");
     
     int result;
     int errors = 0;
     
-    // Ensure remote mode is on
-    result = PSB_SetRemoteMode(handle, 1);
+    // Ensure remote mode is on (but don't spam if already on)
+    result = EnsureRemoteMode(handle);
     if (result != PSB_SUCCESS) {
-        printf("Failed to enable remote mode: %s\n", PSB_GetErrorString(result));
         return PSB_ERROR_COMM;
     }
     
     Delay(TEST_DELAY_SHORT);
     
     // For voltage limits, we need to be careful about order
-    printf("Setting voltage limits: %.1fV - %.1fV...", 
+    LogDebugEx(LOG_DEVICE_PSB, "Setting voltage limits: %.1fV - %.1fV...", 
            PSB_TEST_VOLTAGE_MIN_WIDE, PSB_TEST_VOLTAGE_MAX_WIDE);
     result = PSB_SetVoltageLimits(handle, PSB_TEST_VOLTAGE_MIN_WIDE, PSB_TEST_VOLTAGE_MAX_WIDE);
     if (result != PSB_SUCCESS) {
         // If that fails, we might need to set max first (if current max is too low)
         // or min first (if current min is too high)
-        printf("WARNING: Failed to set voltage limits\n");
+        LogWarningEx(LOG_DEVICE_PSB, "Failed to set voltage limits");
         errors++;
     } else {
-        printf("SUCCESS\n");
+        LogDebugEx(LOG_DEVICE_PSB, "Voltage limits set successfully");
     }
     
     // Set current limits
-    printf("Setting current limits: %.1fA - %.1fA...", 
+    LogDebugEx(LOG_DEVICE_PSB, "Setting current limits: %.1fA - %.1fA...", 
            PSB_TEST_CURRENT_MIN_WIDE, PSB_TEST_CURRENT_MAX_WIDE);
     result = PSB_SetCurrentLimits(handle, PSB_TEST_CURRENT_MIN_WIDE, PSB_TEST_CURRENT_MAX_WIDE);
     if (result != PSB_SUCCESS) {
-        printf("WARNING: Failed to set current limits: %s\n", PSB_GetErrorString(result));
+        LogWarningEx(LOG_DEVICE_PSB, "Failed to set current limits: %s", PSB_GetErrorString(result));
         errors++;
     } else {
-        printf("SUCCESS\n");
+        LogDebugEx(LOG_DEVICE_PSB, "Current limits set successfully");
     }
     
     // Set power limit
-    printf("Setting power limit: %.1fW...", PSB_TEST_POWER_MAX_WIDE);
+    LogDebugEx(LOG_DEVICE_PSB, "Setting power limit: %.1fW...", PSB_TEST_POWER_MAX_WIDE);
     result = PSB_SetPowerLimit(handle, PSB_TEST_POWER_MAX_WIDE);
     if (result != PSB_SUCCESS) {
-        printf("WARNING: Failed to set power limit: %s\n", PSB_GetErrorString(result));
+        LogWarningEx(LOG_DEVICE_PSB, "Failed to set power limit: %s", PSB_GetErrorString(result));
         errors++;
     } else {
-        printf("SUCCESS\n");
+        LogDebugEx(LOG_DEVICE_PSB, "Power limit set successfully");
     }
     
     if (errors == 0) {
-        printf("? All wide limits set successfully\n");
+        LogDebugEx(LOG_DEVICE_PSB, "All wide limits set successfully");
         return PSB_SUCCESS;
     } else {
-        printf("Failed to set %d limit(s)\n", errors);
+        LogWarningEx(LOG_DEVICE_PSB, "Failed to set %d limit(s)", errors);
         return PSB_ERROR_COMM;
     }
 }
@@ -209,17 +222,17 @@ int PSB_TestSuite_Run(TestSuiteContext *context) {
     
     double suiteStartTime = GetTime();
     
-    printf("\n========================================\n");
-    printf("PSB 10000 TEST SUITE STARTING\n");
-    printf("========================================\n");
+    LogMessageEx(LOG_DEVICE_PSB, "========================================");
+    LogMessageEx(LOG_DEVICE_PSB, "PSB 10000 TEST SUITE STARTING");
+    LogMessageEx(LOG_DEVICE_PSB, "========================================");
     
     UpdateTestProgress(context, "PSB Test Suite Starting...");
     
     // Enable debug output for detailed analysis
-    PSB_EnableDebugOutput(1);
+    PSB_EnableDebugOutput(g_debugMode);
     
     // IMPORTANT: Acknowledge any pending alarms before starting tests
-    printf("\nPreparing device for testing...\n");
+    LogDebugEx(LOG_DEVICE_PSB, "Preparing device for testing...");
     AcknowledgeAlarms(context->psbHandle);
     Delay(0.5); // Give device time to settle
     
@@ -231,7 +244,7 @@ int PSB_TestSuite_Run(TestSuiteContext *context) {
     // Run each test
     for (int i = 0; i < numTestCases; i++) {
         if (context->cancelRequested) {
-            printf("\n*** TEST SUITE CANCELLED BY USER ***\n");
+            LogWarningEx(LOG_DEVICE_PSB, "TEST SUITE CANCELLED BY USER");
             UpdateTestProgress(context, "Test suite cancelled");
             break;
         }
@@ -241,7 +254,7 @@ int PSB_TestSuite_Run(TestSuiteContext *context) {
                 i + 1, numTestCases, testCases[i].testName);
         UpdateTestProgress(context, progressMsg);
         
-        PrintTestHeader(testCases[i].testName);
+        LogMessageEx(LOG_DEVICE_PSB, "--- Testing: %s ---", testCases[i].testName);
         
         double testStartTime = GetTime();
         
@@ -254,57 +267,59 @@ int PSB_TestSuite_Run(TestSuiteContext *context) {
         
         testCases[i].executionTime = GetTime() - testStartTime;
         
-        // Update counts
+        // Update counts and log result
         if (testCases[i].result > 0) {
             context->summary.passedTests++;
-            PrintTestResult(testCases[i].testName, 1, NULL);
+            LogMessageEx(LOG_DEVICE_PSB, "[PASS] %s", testCases[i].testName);
         } else {
             context->summary.failedTests++;
-            PrintTestResult(testCases[i].testName, 0, testCases[i].errorMessage);
+            LogMessageEx(LOG_DEVICE_PSB, "[FAIL] %s", testCases[i].testName);
+            if (strlen(testCases[i].errorMessage) > 0) {
+                LogMessageEx(LOG_DEVICE_PSB, "       Error: %s", testCases[i].errorMessage);
+            }
             strncpy(context->summary.lastError, testCases[i].errorMessage, 
                    sizeof(context->summary.lastError) - 1);
         }
         
-        printf("Test execution time: %.2f seconds\n", testCases[i].executionTime);
+        LogDebugEx(LOG_DEVICE_PSB, "Test execution time: %.2f seconds", testCases[i].executionTime);
         
         // Small delay between tests
         Delay(0.5);
     }
     
     // Restore wide limits AFTER all tests complete
-    printf("\n--- Cleanup ---\n");
+    LogDebugEx(LOG_DEVICE_PSB, "--- Cleanup ---");
     UpdateTestProgress(context, "Restoring wide limits...");
     SetWideLimits(context->psbHandle);
     
-    // Ensure safe state
+    // Leave the PSB in the state that status.c expects (remote mode ON, output OFF)
+    EnsureRemoteMode(context->psbHandle);
     PSB_SetOutputEnable(context->psbHandle, 0);
-    PSB_SetRemoteMode(context->psbHandle, 0);
     
     context->summary.executionTime = GetTime() - suiteStartTime;
     
     // Print summary
-    printf("\n========================================\n");
-    printf("TEST SUITE SUMMARY\n");
-    printf("========================================\n");
-    printf("Total Tests: %d\n", context->summary.totalTests);
-    printf("Passed: %d\n", context->summary.passedTests);
-    printf("Failed: %d\n", context->summary.failedTests);
-    printf("Total Time: %.2f seconds\n", context->summary.executionTime);
+    LogMessageEx(LOG_DEVICE_PSB, "========================================");
+    LogMessageEx(LOG_DEVICE_PSB, "TEST SUITE SUMMARY");
+    LogMessageEx(LOG_DEVICE_PSB, "========================================");
+    LogMessageEx(LOG_DEVICE_PSB, "Total Tests: %d", context->summary.totalTests);
+    LogMessageEx(LOG_DEVICE_PSB, "Passed: %d", context->summary.passedTests);
+    LogMessageEx(LOG_DEVICE_PSB, "Failed: %d", context->summary.failedTests);
+    LogMessageEx(LOG_DEVICE_PSB, "Total Time: %.2f seconds", context->summary.executionTime);
     
     if (context->summary.failedTests > 0) {
-        printf("\nLast Error: %s\n", context->summary.lastError);
+        LogMessageEx(LOG_DEVICE_PSB, "Last Error: %s", context->summary.lastError);
     }
     
-    printf("\nDetailed Results:\n");
+    LogDebugEx(LOG_DEVICE_PSB, "Detailed Results:");
     for (int i = 0; i < numTestCases; i++) {
-        printf("  %-30s: %s (%.2fs)", 
+        LogDebugEx(LOG_DEVICE_PSB, "  %-30s: %s (%.2fs)", 
                testCases[i].testName,
                testCases[i].result > 0 ? "PASS" : "FAIL",
                testCases[i].executionTime);
         if (testCases[i].result <= 0 && strlen(testCases[i].errorMessage) > 0) {
-            printf(" - %s", testCases[i].errorMessage);
+            LogDebugEx(LOG_DEVICE_PSB, "                                  %s", testCases[i].errorMessage);
         }
-        printf("\n");
     }
     
     char summaryMsg[256];
@@ -327,14 +342,14 @@ void PSB_TestSuite_Cancel(TestSuiteContext *context) {
 
 void PSB_TestSuite_Cleanup(TestSuiteContext *context) {
     if (context) {
-        // Ensure PSB is in safe state
+        // Ensure PSB is in safe state expected by status.c
         if (context->psbHandle && context->psbHandle->isConnected) {
             // Restore wide limits
             SetWideLimits(context->psbHandle);
             
-            // Turn off output and remote mode
+            // Ensure output is off but keep remote mode ON (expected by status.c)
             PSB_SetOutputEnable(context->psbHandle, 0);
-            PSB_SetRemoteMode(context->psbHandle, 0);
+            EnsureRemoteMode(context->psbHandle);
         }
     }
 }
@@ -343,38 +358,17 @@ void PSB_TestSuite_Cleanup(TestSuiteContext *context) {
  * Individual Test Implementations
  ******************************************************************************/
 
-int Test_ConnectionStatus(PSB_Handle *handle, char *errorMsg, int errorMsgSize) {
-    printf("Testing connection to PSB...\n");
-    
-    if (!handle->isConnected) {
-        snprintf(errorMsg, errorMsgSize, "PSB handle reports not connected");
-        return -1;
-    }
-    
-    // Try to read device status to verify connection
-    PSB_Status status;
-    int result = PSB_GetStatus(handle, &status);
-    
-    if (result != PSB_SUCCESS) {
-        snprintf(errorMsg, errorMsgSize, "Failed to read status: %s", 
-                PSB_GetErrorString(result));
-        return -1;
-    }
-    
-    printf("Connection verified - PSB is responding\n");
-    PSB_PrintStatus(&status);
-    
-    return 1;
-}
+// Connection Status test removed - handled by status.c module
 
 int Test_RemoteMode(PSB_Handle *handle, char *errorMsg, int errorMsgSize) {
-    printf("Testing remote mode control...\n");
+    LogDebugEx(LOG_DEVICE_PSB, "Testing remote mode control...");
     
     PSB_Status status;
     int result;
+    int initialRemoteState;
     
     // First, check initial state
-    printf("Reading initial state...\n");
+    LogDebugEx(LOG_DEVICE_PSB, "Reading initial state...");
     result = PSB_GetStatus(handle, &status);
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to read initial status: %s", 
@@ -382,94 +376,119 @@ int Test_RemoteMode(PSB_Handle *handle, char *errorMsg, int errorMsgSize) {
         return -1;
     }
     
-    printf("Initial state - Remote mode: %s, Control location: 0x%02X\n", 
+    initialRemoteState = status.remoteMode;
+    LogDebugEx(LOG_DEVICE_PSB, "Initial state - Remote mode: %s, Control location: 0x%02X", 
            status.remoteMode ? "ON" : "OFF", 
            status.controlLocation);
     
     // Check if device is in local mode (which would prevent remote control)
     if (status.controlLocation == CONTROL_LOCAL) {
-        printf("WARNING: Device is in LOCAL mode - remote control may be blocked\n");
-        printf("Please ensure 'Allow remote control' is enabled on the device\n");
+        LogWarningEx(LOG_DEVICE_PSB, "Device is in LOCAL mode - remote control may be blocked");
+        LogWarningEx(LOG_DEVICE_PSB, "Please ensure 'Allow remote control' is enabled on the device");
     }
     
     // Acknowledge any pending alarms
     AcknowledgeAlarms(handle);
     Delay(0.2);
     
-    // First, turn OFF remote mode
-    printf("Setting remote mode OFF...\n");
-    result = PSB_SetRemoteMode(handle, 0);
-    if (result != PSB_SUCCESS) {
-        snprintf(errorMsg, errorMsgSize, "Failed to turn off remote mode: %s", 
-                PSB_GetErrorString(result));
-        return -1;
-    }
+    // Only test toggling if we won't break the system state
+    // Since status.c expects remote mode to be ON, we'll test turning it OFF and back ON
+    // but ensure we leave it in the ON state
     
-    Delay(1.0); // Increased delay to ensure device processes the command
-    
-    // Verify it's off
-    result = PSB_GetStatus(handle, &status);
-    if (result != PSB_SUCCESS) {
-        snprintf(errorMsg, errorMsgSize, "Failed to read status after turning off remote: %s", 
-                PSB_GetErrorString(result));
-        return -1;
-    }
-    
-    printf("After OFF command - Remote mode: %s, Raw state: 0x%08lX\n", 
-           status.remoteMode ? "ON" : "OFF", status.rawState);
-    
-    if (status.remoteMode != 0) {
-        snprintf(errorMsg, errorMsgSize, "Remote mode should be OFF but status shows ON");
-        return -1;
-    }
-    printf("? Remote mode successfully turned OFF\n");
-    
-    // Now turn ON remote mode
-    printf("Setting remote mode ON...\n");
-    result = PSB_SetRemoteMode(handle, 1);
-    if (result != PSB_SUCCESS) {
-        snprintf(errorMsg, errorMsgSize, "Failed to turn on remote mode: %s", 
-                PSB_GetErrorString(result));
-        return -1;
-    }
-    
-    Delay(1.0); // Increased delay
-    
-    // Verify it's on
-    result = PSB_GetStatus(handle, &status);
-    if (result != PSB_SUCCESS) {
-        snprintf(errorMsg, errorMsgSize, "Failed to read status after turning on remote: %s", 
-                PSB_GetErrorString(result));
-        return -1;
-    }
-    
-    printf("After ON command - Remote mode: %s, Raw state: 0x%08lX\n", 
-           status.remoteMode ? "ON" : "OFF", status.rawState);
-    
-    if (status.remoteMode != 1) {
-        // Print more diagnostic information
-        printf("ERROR: Remote mode not set correctly\n");
-        printf("Control location: 0x%02X\n", status.controlLocation);
-        printf("Alarms active: %s\n", status.alarmsActive ? "YES" : "NO");
+    if (initialRemoteState) {
+        // Remote mode is already ON (expected from status.c)
+        LogDebugEx(LOG_DEVICE_PSB, "Remote mode is already ON (expected state)");
         
-        snprintf(errorMsg, errorMsgSize, 
-                "Remote mode should be ON but status shows OFF. Control location: 0x%02X", 
-                status.controlLocation);
-        return -1;
+        // Test turning it OFF briefly
+        LogDebugEx(LOG_DEVICE_PSB, "Testing toggle: turning remote mode OFF...");
+        result = PSB_SetRemoteMode(handle, 0);
+        if (result != PSB_SUCCESS) {
+            snprintf(errorMsg, errorMsgSize, "Failed to turn off remote mode: %s", 
+                    PSB_GetErrorString(result));
+            return -1;
+        }
+        
+        Delay(0.5); // Brief delay
+        
+        // Verify it's off
+        result = PSB_GetStatus(handle, &status);
+        if (result != PSB_SUCCESS) {
+            snprintf(errorMsg, errorMsgSize, "Failed to read status after turning off remote: %s", 
+                    PSB_GetErrorString(result));
+            return -1;
+        }
+        
+        if (status.remoteMode != 0) {
+            snprintf(errorMsg, errorMsgSize, "Remote mode should be OFF but status shows ON");
+            return -1;
+        }
+        LogDebugEx(LOG_DEVICE_PSB, "Remote mode successfully turned OFF");
+        
+        // Turn it back ON immediately
+        LogDebugEx(LOG_DEVICE_PSB, "Restoring remote mode to ON...");
+        result = PSB_SetRemoteMode(handle, 1);
+        if (result != PSB_SUCCESS) {
+            snprintf(errorMsg, errorMsgSize, "Failed to restore remote mode: %s", 
+                    PSB_GetErrorString(result));
+            return -1;
+        }
+        
+        Delay(0.5);
+        
+        // Verify it's back on
+        result = PSB_GetStatus(handle, &status);
+        if (result != PSB_SUCCESS) {
+            snprintf(errorMsg, errorMsgSize, "Failed to read status after restoring remote: %s", 
+                    PSB_GetErrorString(result));
+            return -1;
+        }
+        
+        if (status.remoteMode != 1) {
+            snprintf(errorMsg, errorMsgSize, "Failed to restore remote mode to ON");
+            return -1;
+        }
+        LogDebugEx(LOG_DEVICE_PSB, "Remote mode successfully restored to ON");
+        
+    } else {
+        // Remote mode is OFF (unexpected, but let's handle it)
+        LogWarningEx(LOG_DEVICE_PSB, "Remote mode is OFF (unexpected) - turning it ON");
+        
+        result = PSB_SetRemoteMode(handle, 1);
+        if (result != PSB_SUCCESS) {
+            snprintf(errorMsg, errorMsgSize, "Failed to turn on remote mode: %s", 
+                    PSB_GetErrorString(result));
+            return -1;
+        }
+        
+        Delay(0.5);
+        
+        // Verify it's on
+        result = PSB_GetStatus(handle, &status);
+        if (result != PSB_SUCCESS) {
+            snprintf(errorMsg, errorMsgSize, "Failed to read status after turning on remote: %s", 
+                    PSB_GetErrorString(result));
+            return -1;
+        }
+        
+        if (status.remoteMode != 1) {
+            snprintf(errorMsg, errorMsgSize, "Remote mode should be ON but status shows OFF");
+            return -1;
+        }
+        LogDebugEx(LOG_DEVICE_PSB, "Remote mode successfully turned ON");
     }
-    printf("? Remote mode successfully turned ON\n");
     
+    LogDebugEx(LOG_DEVICE_PSB, "Remote mode control test completed - left in ON state");
     return 1;
 }
 
 int Test_StatusRegisterReading(PSB_Handle *handle, char *errorMsg, int errorMsgSize) {
-    printf("Testing status register reading (debugging focus)...\n");
+    LogDebugEx(LOG_DEVICE_PSB, "Testing status register reading (debugging focus)...");
     
     PSB_Status status;
     int result;
     
     // Read status multiple times to check consistency
-    printf("Reading status 5 times to check consistency...\n");
+    LogDebugEx(LOG_DEVICE_PSB, "Reading status 5 times to check consistency...");
     
     for (int i = 0; i < 5; i++) {
         result = PSB_GetStatus(handle, &status);
@@ -479,7 +498,7 @@ int Test_StatusRegisterReading(PSB_Handle *handle, char *errorMsg, int errorMsgS
             return -1;
         }
         
-        printf("\nRead #%d:\n", i + 1);
+        LogDebugEx(LOG_DEVICE_PSB, "Read #%d:", i + 1);
         PSB_PrintStatus(&status);
         
         // Sanity checks
@@ -501,17 +520,17 @@ int Test_StatusRegisterReading(PSB_Handle *handle, char *errorMsg, int errorMsgS
         Delay(0.2);
     }
     
-    printf("\n? Status register reading is consistent and valid\n");
+    LogDebugEx(LOG_DEVICE_PSB, "Status register reading is consistent and valid");
     return 1;
 }
 
 int Test_VoltageControl(PSB_Handle *handle, char *errorMsg, int errorMsgSize) {
-    printf("Testing voltage control...\n");
+    LogDebugEx(LOG_DEVICE_PSB, "Testing voltage control...");
     
-    // Ensure remote mode is on
-    int result = PSB_SetRemoteMode(handle, 1);
+    // Ensure remote mode is on (without spamming if already on)
+    int result = EnsureRemoteMode(handle);
     if (result != PSB_SUCCESS) {
-        snprintf(errorMsg, errorMsgSize, "Failed to enable remote mode: %s", 
+        snprintf(errorMsg, errorMsgSize, "Failed to ensure remote mode: %s", 
                 PSB_GetErrorString(result));
         return -1;
     }
@@ -522,7 +541,7 @@ int Test_VoltageControl(PSB_Handle *handle, char *errorMsg, int errorMsgSize) {
     double testVoltages[] = {TEST_VOLTAGE_LOW, TEST_VOLTAGE_MID, TEST_VOLTAGE_HIGH};
     
     for (int i = 0; i < 3; i++) {
-        printf("Setting voltage to %.2fV...\n", testVoltages[i]);
+        LogDebugEx(LOG_DEVICE_PSB, "Setting voltage to %.2fV...", testVoltages[i]);
         
         result = PSB_SetVoltage(handle, testVoltages[i]);
         if (result != PSB_SUCCESS) {
@@ -542,19 +561,19 @@ int Test_VoltageControl(PSB_Handle *handle, char *errorMsg, int errorMsgSize) {
             return -1;
         }
         
-        printf("? Voltage set command accepted for %.2fV\n", testVoltages[i]);
+        LogDebugEx(LOG_DEVICE_PSB, "Voltage set command accepted for %.2fV", testVoltages[i]);
     }
     
     return 1;
 }
 
 int Test_VoltageLimits(PSB_Handle *handle, char *errorMsg, int errorMsgSize) {
-    printf("Testing voltage limits...\n");
+    LogDebugEx(LOG_DEVICE_PSB, "Testing voltage limits...");
     
-    // Ensure remote mode is on
-    int result = PSB_SetRemoteMode(handle, 1);
+    // Ensure remote mode is on (without spamming if already on)
+    int result = EnsureRemoteMode(handle);
     if (result != PSB_SUCCESS) {
-        snprintf(errorMsg, errorMsgSize, "Failed to enable remote mode: %s", 
+        snprintf(errorMsg, errorMsgSize, "Failed to ensure remote mode: %s", 
                 PSB_GetErrorString(result));
         return -1;
     }
@@ -565,7 +584,7 @@ int Test_VoltageLimits(PSB_Handle *handle, char *errorMsg, int errorMsgSize) {
     double minVoltage = 15.0;
     double maxVoltage = 45.0;
     
-    printf("Setting voltage limits: min=%.2fV, max=%.2fV\n", minVoltage, maxVoltage);
+    LogDebugEx(LOG_DEVICE_PSB, "Setting voltage limits: min=%.2fV, max=%.2fV", minVoltage, maxVoltage);
     
     result = PSB_SetVoltageLimits(handle, minVoltage, maxVoltage);
     if (result != PSB_SUCCESS) {
@@ -574,31 +593,31 @@ int Test_VoltageLimits(PSB_Handle *handle, char *errorMsg, int errorMsgSize) {
         return -1;
     }
     
-    printf("? Voltage limits set successfully\n");
+    LogDebugEx(LOG_DEVICE_PSB, "Voltage limits set successfully");
     
     // Test invalid limits (min > max)
-    printf("Testing invalid limits (min > max)...\n");
+    LogDebugEx(LOG_DEVICE_PSB, "Testing invalid limits (min > max)...");
     result = PSB_SetVoltageLimits(handle, 40.0, 20.0);
     if (result == PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Should have failed with min > max");
         return -1;
     }
-    printf("? Correctly rejected invalid limits\n");
+    LogDebugEx(LOG_DEVICE_PSB, "Correctly rejected invalid limits");
     
     // IMPORTANT: Reset to wide limits after test
-    printf("Resetting to wide limits...\n");
+    LogDebugEx(LOG_DEVICE_PSB, "Resetting to wide limits...");
     SetWideLimits(handle);
     
     return 1;
 }
 
 int Test_CurrentControl(PSB_Handle *handle, char *errorMsg, int errorMsgSize) {
-    printf("Testing current control...\n");
+    LogDebugEx(LOG_DEVICE_PSB, "Testing current control...");
     
-    // Ensure remote mode is on
-    int result = PSB_SetRemoteMode(handle, 1);
+    // Ensure remote mode is on (without spamming if already on)
+    int result = EnsureRemoteMode(handle);
     if (result != PSB_SUCCESS) {
-        snprintf(errorMsg, errorMsgSize, "Failed to enable remote mode: %s", 
+        snprintf(errorMsg, errorMsgSize, "Failed to ensure remote mode: %s", 
                 PSB_GetErrorString(result));
         return -1;
     }
@@ -609,7 +628,7 @@ int Test_CurrentControl(PSB_Handle *handle, char *errorMsg, int errorMsgSize) {
     double testCurrents[] = {TEST_CURRENT_LOW, TEST_CURRENT_MID, TEST_CURRENT_HIGH};
     
     for (int i = 0; i < 3; i++) {
-        printf("Setting current to %.2fA...\n", testCurrents[i]);
+        LogDebugEx(LOG_DEVICE_PSB, "Setting current to %.2fA...", testCurrents[i]);
         
         result = PSB_SetCurrent(handle, testCurrents[i]);
         if (result != PSB_SUCCESS) {
@@ -619,19 +638,19 @@ int Test_CurrentControl(PSB_Handle *handle, char *errorMsg, int errorMsgSize) {
         }
         
         Delay(TEST_DELAY_SHORT);
-        printf("? Current set command accepted for %.2fA\n", testCurrents[i]);
+        LogDebugEx(LOG_DEVICE_PSB, "Current set command accepted for %.2fA", testCurrents[i]);
     }
     
     return 1;
 }
 
 int Test_CurrentLimits(PSB_Handle *handle, char *errorMsg, int errorMsgSize) {
-    printf("Testing current limits...\n");
+    LogDebugEx(LOG_DEVICE_PSB, "Testing current limits...");
     
-    // Ensure remote mode is on
-    int result = PSB_SetRemoteMode(handle, 1);
+    // Ensure remote mode is on (without spamming if already on)
+    int result = EnsureRemoteMode(handle);
     if (result != PSB_SUCCESS) {
-        snprintf(errorMsg, errorMsgSize, "Failed to enable remote mode: %s", 
+        snprintf(errorMsg, errorMsgSize, "Failed to ensure remote mode: %s", 
                 PSB_GetErrorString(result));
         return -1;
     }
@@ -642,7 +661,7 @@ int Test_CurrentLimits(PSB_Handle *handle, char *errorMsg, int errorMsgSize) {
     double minCurrent = 10.0;
     double maxCurrent = 50.0;
     
-    printf("Setting current limits: min=%.2fA, max=%.2fA\n", minCurrent, maxCurrent);
+    LogDebugEx(LOG_DEVICE_PSB, "Setting current limits: min=%.2fA, max=%.2fA", minCurrent, maxCurrent);
     
     result = PSB_SetCurrentLimits(handle, minCurrent, maxCurrent);
     if (result != PSB_SUCCESS) {
@@ -651,22 +670,22 @@ int Test_CurrentLimits(PSB_Handle *handle, char *errorMsg, int errorMsgSize) {
         return -1;
     }
     
-    printf("? Current limits set successfully\n");
+    LogDebugEx(LOG_DEVICE_PSB, "Current limits set successfully");
     
     // IMPORTANT: Reset to wide limits after test
-    printf("Resetting to wide limits...\n");
+    LogDebugEx(LOG_DEVICE_PSB, "Resetting to wide limits...");
     SetWideLimits(handle);
     
     return 1;
 }
 
 int Test_PowerControl(PSB_Handle *handle, char *errorMsg, int errorMsgSize) {
-    printf("Testing power control...\n");
+    LogDebugEx(LOG_DEVICE_PSB, "Testing power control...");
     
-    // Ensure remote mode is on
-    int result = PSB_SetRemoteMode(handle, 1);
+    // Ensure remote mode is on (without spamming if already on)
+    int result = EnsureRemoteMode(handle);
     if (result != PSB_SUCCESS) {
-        snprintf(errorMsg, errorMsgSize, "Failed to enable remote mode: %s", 
+        snprintf(errorMsg, errorMsgSize, "Failed to ensure remote mode: %s", 
                 PSB_GetErrorString(result));
         return -1;
     }
@@ -677,7 +696,7 @@ int Test_PowerControl(PSB_Handle *handle, char *errorMsg, int errorMsgSize) {
     double testPowers[] = {TEST_POWER_LOW, TEST_POWER_MID, TEST_POWER_HIGH};
     
     for (int i = 0; i < 3; i++) {
-        printf("Setting power to %.2fW...\n", testPowers[i]);
+        LogDebugEx(LOG_DEVICE_PSB, "Setting power to %.2fW...", testPowers[i]);
         
         result = PSB_SetPower(handle, testPowers[i]);
         if (result != PSB_SUCCESS) {
@@ -687,19 +706,19 @@ int Test_PowerControl(PSB_Handle *handle, char *errorMsg, int errorMsgSize) {
         }
         
         Delay(TEST_DELAY_SHORT);
-        printf("? Power set command accepted for %.2fW\n", testPowers[i]);
+        LogDebugEx(LOG_DEVICE_PSB, "Power set command accepted for %.2fW", testPowers[i]);
     }
     
     return 1;
 }
 
 int Test_PowerLimit(PSB_Handle *handle, char *errorMsg, int errorMsgSize) {
-    printf("Testing power limit...\n");
+    LogDebugEx(LOG_DEVICE_PSB, "Testing power limit...");
     
-    // Ensure remote mode is on
-    int result = PSB_SetRemoteMode(handle, 1);
+    // Ensure remote mode is on (without spamming if already on)
+    int result = EnsureRemoteMode(handle);
     if (result != PSB_SUCCESS) {
-        snprintf(errorMsg, errorMsgSize, "Failed to enable remote mode: %s", 
+        snprintf(errorMsg, errorMsgSize, "Failed to ensure remote mode: %s", 
                 PSB_GetErrorString(result));
         return -1;
     }
@@ -708,7 +727,7 @@ int Test_PowerLimit(PSB_Handle *handle, char *errorMsg, int errorMsgSize) {
     
     double maxPower = 1000.0;
     
-    printf("Setting power limit to %.2fW\n", maxPower);
+    LogDebugEx(LOG_DEVICE_PSB, "Setting power limit to %.2fW", maxPower);
     
     result = PSB_SetPowerLimit(handle, maxPower);
     if (result != PSB_SUCCESS) {
@@ -717,28 +736,28 @@ int Test_PowerLimit(PSB_Handle *handle, char *errorMsg, int errorMsgSize) {
         return -1;
     }
     
-    printf("? Power limit set successfully\n");
+    LogDebugEx(LOG_DEVICE_PSB, "Power limit set successfully");
     
     // IMPORTANT: Reset to wide limit after test
-    printf("Resetting to wide power limit...\n");
+    LogDebugEx(LOG_DEVICE_PSB, "Resetting to wide power limit...");
     result = PSB_SetPowerLimit(handle, PSB_TEST_POWER_MAX_WIDE);
     if (result != PSB_SUCCESS) {
-        printf("Warning: Failed to reset power limit\n");
+        LogWarningEx(LOG_DEVICE_PSB, "Failed to reset power limit");
     }
     
     return 1;
 }
 
 int Test_OutputControl(PSB_Handle *handle, char *errorMsg, int errorMsgSize) {
-    printf("Testing output control...\n");
+    LogDebugEx(LOG_DEVICE_PSB, "Testing output control...");
     
     PSB_Status status;
     int result;
     
-    // Ensure remote mode is on
-    result = PSB_SetRemoteMode(handle, 1);
+    // Ensure remote mode is on (without spamming if already on)
+    result = EnsureRemoteMode(handle);
     if (result != PSB_SUCCESS) {
-        snprintf(errorMsg, errorMsgSize, "Failed to enable remote mode: %s", 
+        snprintf(errorMsg, errorMsgSize, "Failed to ensure remote mode: %s", 
                 PSB_GetErrorString(result));
         return -1;
     }
@@ -746,7 +765,7 @@ int Test_OutputControl(PSB_Handle *handle, char *errorMsg, int errorMsgSize) {
     Delay(TEST_DELAY_SHORT);
     
     // Ensure output is OFF first
-    printf("Turning output OFF...\n");
+    LogDebugEx(LOG_DEVICE_PSB, "Turning output OFF...");
     result = PSB_SetOutputEnable(handle, 0);
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to turn off output: %s", 
@@ -768,20 +787,20 @@ int Test_OutputControl(PSB_Handle *handle, char *errorMsg, int errorMsgSize) {
         snprintf(errorMsg, errorMsgSize, "Output should be OFF but status shows ON");
         return -1;
     }
-    printf("? Output successfully turned OFF\n");
+    LogDebugEx(LOG_DEVICE_PSB, "Output successfully turned OFF");
     
     return 1;
 }
 
 int Test_InvalidParameters(PSB_Handle *handle, char *errorMsg, int errorMsgSize) {
-    printf("Testing invalid parameter handling...\n");
+    LogDebugEx(LOG_DEVICE_PSB, "Testing invalid parameter handling...");
     
     int result;
     
-    // Ensure remote mode is on
-    result = PSB_SetRemoteMode(handle, 1);
+    // Ensure remote mode is on (without spamming if already on)
+    result = EnsureRemoteMode(handle);
     if (result != PSB_SUCCESS) {
-        snprintf(errorMsg, errorMsgSize, "Failed to enable remote mode: %s", 
+        snprintf(errorMsg, errorMsgSize, "Failed to ensure remote mode: %s", 
                 PSB_GetErrorString(result));
         return -1;
     }
@@ -789,56 +808,56 @@ int Test_InvalidParameters(PSB_Handle *handle, char *errorMsg, int errorMsgSize)
     Delay(TEST_DELAY_SHORT);
     
     // Test voltage beyond OVP limit
-    printf("Testing voltage beyond limit (%.2fV)...\n", TEST_VOLTAGE_INVALID);
+    LogDebugEx(LOG_DEVICE_PSB, "Testing voltage beyond limit (%.2fV)...", TEST_VOLTAGE_INVALID);
     result = PSB_SetVoltage(handle, TEST_VOLTAGE_INVALID);
     if (result == PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Should have rejected voltage %.2fV", 
                 TEST_VOLTAGE_INVALID);
         return -1;
     }
-    printf("? Correctly rejected invalid voltage\n");
+    LogDebugEx(LOG_DEVICE_PSB, "Correctly rejected invalid voltage");
     
     // Test negative voltage
-    printf("Testing negative voltage...\n");
+    LogDebugEx(LOG_DEVICE_PSB, "Testing negative voltage...");
     result = PSB_SetVoltage(handle, -5.0);
     if (result == PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Should have rejected negative voltage");
         return -1;
     }
-    printf("? Correctly rejected negative voltage\n");
+    LogDebugEx(LOG_DEVICE_PSB, "Correctly rejected negative voltage");
     
     // Test current beyond OCP limit
-    printf("Testing current beyond limit (%.2fA)...\n", TEST_CURRENT_INVALID);
+    LogDebugEx(LOG_DEVICE_PSB, "Testing current beyond limit (%.2fA)...", TEST_CURRENT_INVALID);
     result = PSB_SetCurrent(handle, TEST_CURRENT_INVALID);
     if (result == PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Should have rejected current %.2fA", 
                 TEST_CURRENT_INVALID);
         return -1;
     }
-    printf("? Correctly rejected invalid current\n");
+    LogDebugEx(LOG_DEVICE_PSB, "Correctly rejected invalid current");
     
     // Test power beyond OPP limit
-    printf("Testing power beyond limit (%.2fW)...\n", TEST_POWER_INVALID);
+    LogDebugEx(LOG_DEVICE_PSB, "Testing power beyond limit (%.2fW)...", TEST_POWER_INVALID);
     result = PSB_SetPower(handle, TEST_POWER_INVALID);
     if (result == PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Should have rejected power %.2fW", 
                 TEST_POWER_INVALID);
         return -1;
     }
-    printf("? Correctly rejected invalid power\n");
+    LogDebugEx(LOG_DEVICE_PSB, "Correctly rejected invalid power");
     
     return 1;
 }
 
 int Test_BoundaryConditions(PSB_Handle *handle, char *errorMsg, int errorMsgSize) {
-    printf("Testing boundary conditions...\n");
+    LogDebugEx(LOG_DEVICE_PSB, "Testing boundary conditions...");
     
     int result;
     
-    // Ensure remote mode is on
-    result = PSB_SetRemoteMode(handle, 1);
+    // Ensure remote mode is on (without spamming if already on)
+    result = EnsureRemoteMode(handle);
     if (result != PSB_SUCCESS) {
-        snprintf(errorMsg, errorMsgSize, "Failed to enable remote mode: %s", 
+        snprintf(errorMsg, errorMsgSize, "Failed to ensure remote mode: %s", 
                 PSB_GetErrorString(result));
         return -1;
     }
@@ -847,86 +866,87 @@ int Test_BoundaryConditions(PSB_Handle *handle, char *errorMsg, int errorMsgSize
     
     // At this point, we should have wide limits from the previous tests
     // But let's make sure
-    printf("Ensuring wide limits are set...\n");
+    LogDebugEx(LOG_DEVICE_PSB, "Ensuring wide limits are set...");
     SetWideLimits(handle);
     Delay(0.5);
     
     // Test minimum allowed values
-    printf("Testing minimum voltage...\n");
+    LogDebugEx(LOG_DEVICE_PSB, "Testing minimum voltage...");
     result = PSB_SetVoltage(handle, PSB_TEST_VOLTAGE_MIN_WIDE);  // Device minimum
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to set minimum voltage: %s", 
                 PSB_GetErrorString(result));
         return -1;
     }
-    printf("? Minimum voltage accepted\n");
+    LogDebugEx(LOG_DEVICE_PSB, "Minimum voltage accepted");
     
-    printf("Testing minimum current...\n");
+    LogDebugEx(LOG_DEVICE_PSB, "Testing minimum current...");
     result = PSB_SetCurrent(handle, PSB_TEST_CURRENT_MIN_WIDE);  // Device minimum
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to set minimum current: %s", 
                 PSB_GetErrorString(result));
         return -1;
     }
-    printf("? Minimum current accepted\n");
+    LogDebugEx(LOG_DEVICE_PSB, "Minimum current accepted");
     
     // Test values below minimum (should fail)
-    printf("Testing below minimum voltage...\n");
+    LogDebugEx(LOG_DEVICE_PSB, "Testing below minimum voltage...");
     result = PSB_SetVoltage(handle, -2.0);
     if (result == PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Should have rejected voltage below minimum");
         return -1;
     }
-    printf("? Correctly rejected voltage below minimum\n");
+    LogDebugEx(LOG_DEVICE_PSB, "Correctly rejected voltage below minimum");
     
-    printf("Testing below minimum current...\n");
+    LogDebugEx(LOG_DEVICE_PSB, "Testing below minimum current...");
     result = PSB_SetCurrent(handle, -2.0);
     if (result == PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Should have rejected current below minimum");
         return -1;
     }
-    printf("? Correctly rejected current below minimum\n");
+    LogDebugEx(LOG_DEVICE_PSB, "Correctly rejected current below minimum");
     
-    printf("Testing maximum voltage (%.2fV)...\n", PSB_TEST_VOLTAGE_MAX_WIDE);
+    LogDebugEx(LOG_DEVICE_PSB, "Testing maximum voltage (%.2fV)...", PSB_TEST_VOLTAGE_MAX_WIDE);
     result = PSB_SetVoltage(handle, PSB_TEST_VOLTAGE_MAX_WIDE);
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to set max voltage: %s", 
                 PSB_GetErrorString(result));
         return -1;
     }
-    printf("? Maximum voltage accepted\n");
+    LogDebugEx(LOG_DEVICE_PSB, "Maximum voltage accepted");
     
-    printf("Testing maximum current (%.2fA)...\n", PSB_TEST_CURRENT_MAX_WIDE);
+    LogDebugEx(LOG_DEVICE_PSB, "Testing maximum current (%.2fA)...", PSB_TEST_CURRENT_MAX_WIDE);
     result = PSB_SetCurrent(handle, PSB_TEST_CURRENT_MAX_WIDE);
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to set max current: %s", 
                 PSB_GetErrorString(result));
         return -1;
     }
-    printf("? Maximum current accepted\n");
+    LogDebugEx(LOG_DEVICE_PSB, "Maximum current accepted");
     
     return 1;
 }
 
 int Test_SequenceOperations(PSB_Handle *handle, char *errorMsg, int errorMsgSize) {
-    printf("Testing sequence of operations...\n");
+    LogDebugEx(LOG_DEVICE_PSB, "Testing sequence of operations...");
     
     int result;
     PSB_Status status;
     
-    // Step 1: Start with remote mode OFF
-    printf("Step 1: Setting remote mode OFF...\n");
+    // This test explicitly tests remote mode transitions, but respects the final state
+    
+    // Step 1: Turn remote mode OFF to test the sequence
+    LogDebugEx(LOG_DEVICE_PSB, "Step 1: Setting remote mode OFF for sequence test...");
     result = PSB_SetRemoteMode(handle, 0);
     if (result != PSB_SUCCESS) {
-        snprintf(errorMsg, errorMsgSize, "Failed to turn off remote mode: %s", 
+        LogWarningEx(LOG_DEVICE_PSB, "Failed to turn off remote mode, continuing anyway: %s", 
                 PSB_GetErrorString(result));
-        return -1;
+    } else {
+        Delay(TEST_DELAY_SHORT);
     }
     
-    Delay(TEST_DELAY_SHORT);
-    
-    // Step 2: Enable remote mode first
-    printf("Step 2: Enabling remote mode...\n");
+    // Step 2: Enable remote mode
+    LogDebugEx(LOG_DEVICE_PSB, "Step 2: Enabling remote mode...");
     result = PSB_SetRemoteMode(handle, 1);
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to enable remote mode: %s", 
@@ -942,20 +962,20 @@ int Test_SequenceOperations(PSB_Handle *handle, char *errorMsg, int errorMsgSize
         snprintf(errorMsg, errorMsgSize, "Remote mode not active after enabling");
         return -1;
     }
-    printf("? Remote mode active\n");
+    LogDebugEx(LOG_DEVICE_PSB, "Remote mode active");
     
     // Step 3: Now we can control output
-    printf("Step 3: Turning output OFF...\n");
+    LogDebugEx(LOG_DEVICE_PSB, "Step 3: Turning output OFF...");
     result = PSB_SetOutputEnable(handle, 0);
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to turn off output: %s", 
                 PSB_GetErrorString(result));
         return -1;
     }
-    printf("? Output turned OFF\n");
+    LogDebugEx(LOG_DEVICE_PSB, "Output turned OFF");
     
     // Step 4: Set operating parameters
-    printf("Step 4: Setting operating parameters...\n");
+    LogDebugEx(LOG_DEVICE_PSB, "Step 4: Setting operating parameters...");
     
     result = PSB_SetVoltage(handle, 25.0);
     if (result != PSB_SUCCESS) {
@@ -971,35 +991,33 @@ int Test_SequenceOperations(PSB_Handle *handle, char *errorMsg, int errorMsgSize
         return -1;
     }
     
-    printf("? Parameters set successfully\n");
+    LogDebugEx(LOG_DEVICE_PSB, "Parameters set successfully");
     
-    // Step 5: Return to safe state
-    printf("Step 5: Returning to safe state...\n");
+    // Step 5: Clean up - ensure output is off and remote mode stays ON
+    LogDebugEx(LOG_DEVICE_PSB, "Step 5: Cleaning up sequence test...");
     result = PSB_SetOutputEnable(handle, 0);
     if (result != PSB_SUCCESS) {
-        printf("Warning: Failed to turn off output\n");
+        LogWarningEx(LOG_DEVICE_PSB, "Failed to turn off output");
     }
     
-    result = PSB_SetRemoteMode(handle, 0);
-    if (result != PSB_SUCCESS) {
-        printf("Warning: Failed to turn off remote mode\n");
-    }
+    // Ensure remote mode is left ON (expected by status.c)
+    EnsureRemoteMode(handle);
     
-    printf("? Sequence completed successfully\n");
+    LogDebugEx(LOG_DEVICE_PSB, "Sequence completed successfully");
     
     return 1;
 }
 
 int Test_OutputVoltageVerification(PSB_Handle *handle, char *errorMsg, int errorMsgSize) {
-    printf("Testing output voltage verification (CAUTION: Output will be enabled)...\n");
-    printf("WARNING: Ensure nothing is connected to the PSB output terminals!\n");
+    LogWarningEx(LOG_DEVICE_PSB, "Testing output voltage verification (CAUTION: Output will be enabled)");
+    LogWarningEx(LOG_DEVICE_PSB, "WARNING: Ensure nothing is connected to the PSB output terminals!");
     
     int result;
     PSB_Status status;
     double actualVoltage, actualCurrent, actualPower;
     
     // First, check current device state
-    printf("\nChecking initial device state...\n");
+    LogDebugEx(LOG_DEVICE_PSB, "Checking initial device state...");
     result = PSB_GetStatus(handle, &status);
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to read initial status: %s", 
@@ -1011,7 +1029,7 @@ int Test_OutputVoltageVerification(PSB_Handle *handle, char *errorMsg, int error
     
     // Check if there are active alarms
     if (status.alarmsActive) {
-        printf("Active alarms detected - acknowledging...\n");
+        LogDebugEx(LOG_DEVICE_PSB, "Active alarms detected - acknowledging...");
         AcknowledgeAlarms(handle);
         Delay(TEST_DELAY_SHORT);
     }
@@ -1024,49 +1042,39 @@ int Test_OutputVoltageVerification(PSB_Handle *handle, char *errorMsg, int error
         return -1;
     }
     
-    // Ensure remote mode is enabled FIRST
-    printf("\nEnsuring remote mode is enabled...\n");
-    if (!status.remoteMode) {
-        result = PSB_SetRemoteMode(handle, 1);
-        if (result != PSB_SUCCESS) {
-            snprintf(errorMsg, errorMsgSize, "Failed to enable remote mode: %s", 
-                    PSB_GetErrorString(result));
-            return -1;
-        }
-        Delay(TEST_DELAY_MEDIUM);
-        
-        // Verify remote mode is now active
-        result = PSB_GetStatus(handle, &status);
-        if (result != PSB_SUCCESS || !status.remoteMode) {
-            snprintf(errorMsg, errorMsgSize, "Failed to activate remote mode");
-            return -1;
-        }
+    // Ensure remote mode is enabled
+    LogDebugEx(LOG_DEVICE_PSB, "Ensuring remote mode is enabled...");
+    result = EnsureRemoteMode(handle);
+    if (result != PSB_SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Failed to ensure remote mode: %s", 
+                PSB_GetErrorString(result));
+        return -1;
     }
     
     // Now try to ensure output is OFF
-    printf("Ensuring output is OFF...\n");
+    LogDebugEx(LOG_DEVICE_PSB, "Ensuring output is OFF...");
     if (status.outputEnabled) {
         result = PSB_SetOutputEnable(handle, 0);
         if (result != PSB_SUCCESS) {
             // If this fails, it might be because the device won't accept output control
             // Let's continue anyway and see if we can at least read values
-            printf("WARNING: Failed to turn off output initially: %s\n", 
+            LogWarningEx(LOG_DEVICE_PSB, "Failed to turn off output initially: %s", 
                    PSB_GetErrorString(result));
-            printf("Device might require manual output control\n");
+            LogWarningEx(LOG_DEVICE_PSB, "Device might require manual output control");
             
-            // Ask user to manually turn off output
-            printf("\n*** MANUAL INTERVENTION REQUIRED ***\n");
-            printf("Please ensure the PSB output is OFF using the front panel\n");
-            printf("Press any key to continue...\n");
-            getchar();
+            // Ask user to manually turn off output using popup
+            LogMessageEx(LOG_DEVICE_PSB, "*** MANUAL INTERVENTION REQUIRED ***");
+            MessagePopup("Manual Intervention Required", 
+                        "Please ensure the PSB output is OFF using the front panel,\n"
+                        "then click OK to continue.");
         }
     }
     
     // Set safe operating parameters before enabling output
-    printf("\nSetting safe operating parameters...\n");
+    LogDebugEx(LOG_DEVICE_PSB, "Setting safe operating parameters...");
     
     // Set current limit to a safe value (1A) to protect against accidental shorts
-    printf("Setting current limit to 1.0A...\n");
+    LogDebugEx(LOG_DEVICE_PSB, "Setting current limit to 1.0A...");
     result = PSB_SetCurrent(handle, 1.0);
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to set current limit: %s", 
@@ -1075,7 +1083,7 @@ int Test_OutputVoltageVerification(PSB_Handle *handle, char *errorMsg, int error
     }
     
     // Set initial voltage to 0V
-    printf("Setting voltage to 0V...\n");
+    LogDebugEx(LOG_DEVICE_PSB, "Setting voltage to 0V...");
     result = PSB_SetVoltage(handle, 0.0);
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to set initial voltage: %s", 
@@ -1089,17 +1097,28 @@ int Test_OutputVoltageVerification(PSB_Handle *handle, char *errorMsg, int error
     double testVoltages[] = {5.0, 12.0, 24.0, 48.0};
     double tolerance = 0.5; // 0.5V tolerance for voltage accuracy
     
-    printf("\n*** READY TO BEGIN OUTPUT TESTS ***\n");
-    printf("The test will enable the PSB output with low current limit (1A)\n");
-    printf("Ensure nothing is connected to the output terminals!\n");
-    printf("Press any key to continue or Ctrl+C to abort...\n");
-    getchar();
+    LogWarningEx(LOG_DEVICE_PSB, "*** READY TO BEGIN OUTPUT TESTS ***");
+    LogWarningEx(LOG_DEVICE_PSB, "The test will enable the PSB output with low current limit (1A)");
+    LogWarningEx(LOG_DEVICE_PSB, "Ensure nothing is connected to the output terminals!");
+    
+    // Use ConfirmPopup instead of getchar()
+    int userResponse = ConfirmPopup("Output Test Warning",
+                                   "WARNING: This test will enable the PSB output!\n\n"
+                                   "The output will be limited to 1A for safety.\n"
+                                   "Ensure NOTHING is connected to the output terminals!\n\n"
+                                   "Do you want to continue with the test?");
+    
+    if (userResponse == 0) {  // User clicked Cancel
+        LogMessageEx(LOG_DEVICE_PSB, "Output test cancelled by user");
+        snprintf(errorMsg, errorMsgSize, "Test cancelled by user");
+        return -1;
+    }
     
     for (int i = 0; i < 4; i++) {
-        printf("\n--- Testing %.1fV output ---\n", testVoltages[i]);
+        LogDebugEx(LOG_DEVICE_PSB, "--- Testing %.1fV output ---", testVoltages[i]);
         
         // Set the voltage setpoint
-        printf("Setting voltage to %.2fV...\n", testVoltages[i]);
+        LogDebugEx(LOG_DEVICE_PSB, "Setting voltage to %.2fV...", testVoltages[i]);
         result = PSB_SetVoltage(handle, testVoltages[i]);
         if (result != PSB_SUCCESS) {
             snprintf(errorMsg, errorMsgSize, "Failed to set voltage to %.2fV: %s", 
@@ -1110,19 +1129,19 @@ int Test_OutputVoltageVerification(PSB_Handle *handle, char *errorMsg, int error
         Delay(TEST_DELAY_SHORT);
         
         // Enable output
-        printf("Enabling output...\n");
+        LogDebugEx(LOG_DEVICE_PSB, "Enabling output...");
         result = PSB_SetOutputEnable(handle, 1);
         if (result != PSB_SUCCESS) {
             // If remote output control fails, ask user to enable manually
-            printf("Remote output control failed: %s\n", PSB_GetErrorString(result));
-            printf("\n*** MANUAL INTERVENTION REQUIRED ***\n");
-            printf("Please turn ON the output using the front panel\n");
-            printf("Press any key when output is ON...\n");
-            getchar();
+            LogWarningEx(LOG_DEVICE_PSB, "Remote output control failed: %s", PSB_GetErrorString(result));
+            LogMessageEx(LOG_DEVICE_PSB, "*** MANUAL INTERVENTION REQUIRED ***");
+            MessagePopup("Manual Intervention Required",
+                        "Please turn ON the output using the front panel,\n"
+                        "then click OK when the output is ON.");
         }
         
         // Wait for voltage to stabilize
-        printf("Waiting for voltage to stabilize...\n");
+        LogDebugEx(LOG_DEVICE_PSB, "Waiting for voltage to stabilize...");
         Delay(TEST_DELAY_MEDIUM);
         
         // Read actual values
@@ -1133,7 +1152,7 @@ int Test_OutputVoltageVerification(PSB_Handle *handle, char *errorMsg, int error
             goto cleanup;
         }
         
-        printf("Actual values: V=%.3fV, I=%.3fA, P=%.3fW\n", 
+        LogDebugEx(LOG_DEVICE_PSB, "Actual values: V=%.3fV, I=%.3fA, P=%.3fW", 
                actualVoltage, actualCurrent, actualPower);
         
         // Verify voltage is within tolerance
@@ -1146,7 +1165,7 @@ int Test_OutputVoltageVerification(PSB_Handle *handle, char *errorMsg, int error
         
         // Verify current is near zero (no load connected)
         if (actualCurrent > 0.1) {  // 100mA threshold
-            printf("WARNING: Current detected (%.3fA) - possible load connected?\n", 
+            LogWarningEx(LOG_DEVICE_PSB, "Current detected (%.3fA) - possible load connected?", 
                    actualCurrent);
         }
         
@@ -1160,25 +1179,25 @@ int Test_OutputVoltageVerification(PSB_Handle *handle, char *errorMsg, int error
         
         // Verify output is enabled in status
         if (!status.outputEnabled) {
-            printf("WARNING: Output status shows OFF but we're reading voltage\n");
+            LogWarningEx(LOG_DEVICE_PSB, "Output status shows OFF but we're reading voltage");
         }
         
         // Verify regulation mode (should be CV - Constant Voltage)
         if (status.regulationMode != 0) {
-            printf("Note: Regulation mode is %d (expected 0 for CV mode)\n", 
+            LogDebugEx(LOG_DEVICE_PSB, "Note: Regulation mode is %d (expected 0 for CV mode)", 
                    status.regulationMode);
         }
         
-        printf("? Voltage %.2fV verified successfully\n", testVoltages[i]);
+        LogDebugEx(LOG_DEVICE_PSB, "Voltage %.2fV verified successfully", testVoltages[i]);
         
         // Turn output OFF before next test
-        printf("Disabling output...\n");
+        LogDebugEx(LOG_DEVICE_PSB, "Disabling output...");
         result = PSB_SetOutputEnable(handle, 0);
         if (result != PSB_SUCCESS) {
-            printf("Remote output disable failed\n");
-            printf("Please turn OFF the output using the front panel\n");
-            printf("Press any key when output is OFF...\n");
-            getchar();
+            LogWarningEx(LOG_DEVICE_PSB, "Remote output disable failed");
+            MessagePopup("Manual Intervention Required",
+                        "Please turn OFF the output using the front panel,\n"
+                        "then click OK when the output is OFF.");
         }
         
         Delay(TEST_DELAY_SHORT);
@@ -1186,13 +1205,13 @@ int Test_OutputVoltageVerification(PSB_Handle *handle, char *errorMsg, int error
         // Verify voltage drops to zero
         result = PSB_GetActualValues(handle, &actualVoltage, &actualCurrent, &actualPower);
         if (result == PSB_SUCCESS && actualVoltage > 1.0) {
-            printf("WARNING: Voltage still present after output disabled: %.3fV\n", 
+            LogWarningEx(LOG_DEVICE_PSB, "Voltage still present after output disabled: %.3fV", 
                    actualVoltage);
         }
     }
     
     // Success - ensure clean shutdown
-    printf("\nTest completed - ensuring safe shutdown...\n");
+    LogDebugEx(LOG_DEVICE_PSB, "Test completed - ensuring safe shutdown...");
     PSB_SetVoltage(handle, 0.0);
     PSB_SetOutputEnable(handle, 0);
     Delay(TEST_DELAY_SHORT);
@@ -1200,18 +1219,18 @@ int Test_OutputVoltageVerification(PSB_Handle *handle, char *errorMsg, int error
     // Restore wide current limit
     PSB_SetCurrent(handle, PSB_TEST_CURRENT_MAX_WIDE);
     
-    printf("\n? All output voltage tests passed successfully\n");
+    LogDebugEx(LOG_DEVICE_PSB, "All output voltage tests passed successfully");
     return 1;
     
 cleanup:
     // Emergency shutdown - ensure output is OFF
-    printf("\nCLEANUP: Ensuring safe state...\n");
+    LogErrorEx(LOG_DEVICE_PSB, "CLEANUP: Ensuring safe state...");
     PSB_SetVoltage(handle, 0.0);
     PSB_SetOutputEnable(handle, 0);
     
-    printf("If output is still ON, please turn it OFF manually\n");
-    printf("Press any key when safe...\n");
-    getchar();
+    MessagePopup("Safety Check",
+                "If the output is still ON, please turn it OFF manually,\n"
+                "then click OK when safe.");
     
     // Restore wide current limit
     PSB_SetCurrent(handle, PSB_TEST_CURRENT_MAX_WIDE);

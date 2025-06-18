@@ -1,6 +1,9 @@
 /******************************************************************************
  * PSB 10000 Test Suite
  * Header file for comprehensive testing of PSB10000 functions
+ * 
+ * Note: Connection Status test has been removed as it's redundant with the
+ * status.c module which handles device connection management.
  ******************************************************************************/
 
 #ifndef PSB10000_TEST_H
@@ -93,7 +96,6 @@ void PSB_TestSuite_Cancel(TestSuiteContext *context);
 void PSB_TestSuite_Cleanup(TestSuiteContext *context);
 
 // Individual test functions
-int Test_ConnectionStatus(PSB_Handle *handle, char *errorMsg, int errorMsgSize);
 int Test_RemoteMode(PSB_Handle *handle, char *errorMsg, int errorMsgSize);
 int Test_StatusRegisterReading(PSB_Handle *handle, char *errorMsg, int errorMsgSize);
 int Test_VoltageControl(PSB_Handle *handle, char *errorMsg, int errorMsgSize);
@@ -109,8 +111,6 @@ int Test_BoundaryConditions(PSB_Handle *handle, char *errorMsg, int errorMsgSize
 int Test_OutputVoltageVerification(PSB_Handle *handle, char *errorMsg, int errorMsgSize);
 
 // Utility functions
-void PrintTestHeader(const char *testName);
-void PrintTestResult(const char *testName, int passed, const char *errorMsg);
 void UpdateTestProgress(TestSuiteContext *context, const char *message);
 
 #endif // PSB10000_TEST_H

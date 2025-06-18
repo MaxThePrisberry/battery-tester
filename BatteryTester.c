@@ -22,9 +22,7 @@
  * Function Prototypes
  ******************************************************************************/
 static int CVICALLBACK UpdateThread(void *functionData);
-static int CVICALLBACK TestSuiteThread(void *functionData);
-static void UpdateStatus(const char* message);
-static void TestProgressCallback(const char *message);
+static int CVICALLBACK PSBTestSuiteThread(void *functionData);
 
 /******************************************************************************
  * Global Variables (defined here, declared extern in common.h)
@@ -45,38 +43,31 @@ static TestSuiteContext testContext;
 static TestState testSuiteState = TEST_STATE_IDLE;
 
 /******************************************************************************
- * Status Update Function (thread-safe)
- ******************************************************************************/
-static void UpdateStatus(const char* message) {
-    if (g_mainPanelHandle > 0) {
-        SetCtrlVal(g_mainPanelHandle, PANEL_STR_PSB_STATUS, message);
-        ProcessSystemEvents();
-        
-        // Log with PSB device identifier
-        LogMessageEx(LOG_DEVICE_PSB, "%s", message);
-    }
-}
-
-/******************************************************************************
- * Test Suite Progress Callback
- ******************************************************************************/
-static void TestProgressCallback(const char *message) {
-    UpdateStatus(message);
-}
-
-/******************************************************************************
  * Test Suite Thread Function
  ******************************************************************************/
-static int CVICALLBACK TestSuiteThread(void *functionData) {
+static int CVICALLBACK PSBTestSuiteThread(void *functionData) {
     testSuiteState = TEST_STATE_RUNNING;
     
-    UpdateStatus("Initializing test suite...");
+    LogMessageEx(LOG_DEVICE_PSB, "Initializing test suite...");
+    
+    // Pause status monitoring to prevent concurrent access
+    Status_Pause();
+	
+	// Wait for the status to pause completely to avoid data corruption
+	Delay(UI_UPDATE_RATE_SLOW);
     
     // Get PSB handle from status module
     PSB_Handle* psb = Status_GetPSBHandle();
     if (psb == NULL) {
-        UpdateStatus("PSB not connected - cannot run tests");
+        // Update UI and log error
+        if (g_mainPanelHandle > 0) {
+            SetCtrlVal(g_mainPanelHandle, PANEL_STR_PSB_STATUS, "PSB not connected at thread execution");
+        }
+        LogErrorEx(LOG_DEVICE_PSB, "PSB not connected at thread execution");
         testSuiteState = TEST_STATE_ERROR;
+        
+        // Resume status monitoring
+        Status_Resume();
         
         // Re-enable the test button
         if (testButtonControl > 0) {
@@ -85,9 +76,9 @@ static int CVICALLBACK TestSuiteThread(void *functionData) {
         return -1;
     }
     
-    // Initialize test context
+    // Initialize test context (no progress callback needed since we're logging directly)
     PSB_TestSuite_Initialize(&testContext, psb, g_mainPanelHandle, PANEL_STR_PSB_STATUS);
-    testContext.progressCallback = TestProgressCallback;
+    testContext.progressCallback = NULL;
     
     // Run the test suite
     int result = PSB_TestSuite_Run(&testContext);
@@ -102,6 +93,12 @@ static int CVICALLBACK TestSuiteThread(void *functionData) {
                 "Test Suite PASSED! All %d tests completed successfully.", 
                 testContext.summary.totalTests);
         testSuiteState = TEST_STATE_COMPLETED;
+        
+        // Update UI and log success
+        if (g_mainPanelHandle > 0) {
+            SetCtrlVal(g_mainPanelHandle, PANEL_STR_PSB_STATUS, finalMsg);
+        }
+        LogMessageEx(LOG_DEVICE_PSB, "%s", finalMsg);
     } else {
         SAFE_SPRINTF(finalMsg, sizeof(finalMsg), 
                 "Test Suite FAILED: %d passed, %d failed out of %d tests.", 
@@ -109,8 +106,16 @@ static int CVICALLBACK TestSuiteThread(void *functionData) {
                 testContext.summary.failedTests,
                 testContext.summary.totalTests);
         testSuiteState = TEST_STATE_ERROR;
+        
+        // Update UI and log error
+        if (g_mainPanelHandle > 0) {
+            SetCtrlVal(g_mainPanelHandle, PANEL_STR_PSB_STATUS, finalMsg);
+        }
+        LogErrorEx(LOG_DEVICE_PSB, "%s", finalMsg);
     }
-    UpdateStatus(finalMsg);
+    
+    // Resume status monitoring
+    Status_Resume();
     
     // Re-enable the test button
     if (testButtonControl > 0) {
@@ -144,13 +149,12 @@ int main(int argc, char *argv[]) {
     
     // Show UI
     DisplayPanel(g_mainPanelHandle);
-    UpdateStatus("Starting Battery Tester...");
+    LogMessage("Starting Battery Tester...");
     
     // Create thread pool
     error = CmtNewThreadPool(THREAD_POOL_SIZE, &g_threadPool);
     if (error != 0) {
         LogError("Failed to create thread pool: %d", error);
-        UpdateStatus("Failed to create thread pool");
         RunUserInterface();
         DiscardPanel(g_mainPanelHandle);
         return ERR_THREAD_POOL;
@@ -162,11 +166,9 @@ int main(int argc, char *argv[]) {
         error = Status_Start();
         if (error != SUCCESS) {
             LogError("Failed to start status monitoring: %d", error);
-            UpdateStatus("Failed to start device monitoring");
         }
     } else {
         LogError("Failed to initialize status module: %d", error);
-        UpdateStatus("Failed to initialize device monitoring");
     }
     
     // Run the UI
@@ -251,14 +253,15 @@ int CVICALLBACK RemoteModeToggle(int panel, int control, int event, void *callba
     int result = PSB_SetRemoteMode(psb, toggleState);
     if (result != SUCCESS) {
         LogErrorEx(LOG_DEVICE_PSB, "Failed to set remote mode: %s", PSB_GetErrorString(result));
-        UpdateStatus("Failed to set remote mode");
+        SetCtrlVal(panel, PANEL_STR_PSB_STATUS, "Failed to set remote mode");
         SetCtrlVal(panel, PANEL_TOGGLE_REMOTE_MODE, !toggleState);
         return 0;
     }
     
     char statusMsg[SMALL_BUFFER_SIZE];
     SAFE_SPRINTF(statusMsg, sizeof(statusMsg), "Remote mode %s", toggleState ? "ON" : "OFF");
-    UpdateStatus(statusMsg);
+    SetCtrlVal(panel, PANEL_STR_PSB_STATUS, statusMsg);
+    LogMessageEx(LOG_DEVICE_PSB, "%s", statusMsg);
     
     return 0;
 }
@@ -276,13 +279,14 @@ int CVICALLBACK TestPSBCallback(int panel, int control, int event, void *callbac
     ConnectionState psbState = Status_GetDeviceState(1);
     
     if (psbState != CONN_STATE_CONNECTED) {
-        UpdateStatus("PSB not connected - cannot run tests");
-        LogErrorEx(LOG_DEVICE_PSB, "Cannot run tests - PSB state: %d", psbState);
+        SetCtrlVal(panel, PANEL_STR_PSB_STATUS, "PSB not connected");
+        LogErrorEx(LOG_DEVICE_PSB, "PSB not connected through status module", psbState);
         return 0;
     }
     
     if (testSuiteState == TEST_STATE_RUNNING) {
-        UpdateStatus("Test suite already running");
+        SetCtrlVal(panel, PANEL_STR_PSB_STATUS, "Test suite already running");
+        LogWarningEx(LOG_DEVICE_PSB, "Test suite already running");
         return 0;
     }
     
@@ -291,11 +295,11 @@ int CVICALLBACK TestPSBCallback(int panel, int control, int event, void *callbac
     testButtonControl = control;
     
     // Run test suite on background thread
-    int error = CmtScheduleThreadPoolFunction(g_threadPool, TestSuiteThread, NULL, &testSuiteThreadID);
+    int error = CmtScheduleThreadPoolFunction(g_threadPool, PSBTestSuiteThread, NULL, &testSuiteThreadID);
     if (error != 0) {
         LogErrorEx(LOG_DEVICE_PSB, "Failed to schedule test suite thread: %d", error);
         SetCtrlAttribute(panel, control, ATTR_DIMMED, 0);
-        UpdateStatus("Failed to start test suite");
+        SetCtrlVal(panel, PANEL_STR_PSB_STATUS, "Failed to start test suite");
         return 0;
     }
     

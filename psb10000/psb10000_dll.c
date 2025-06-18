@@ -67,7 +67,7 @@ static double ConvertFromDeviceUnits(int deviceValue, double nominalValue) {
 static int SendModbusCommand(PSB_Handle *handle, unsigned char *txBuffer, int txLength, 
                             unsigned char *rxBuffer, int expectedRxLength) {
     if (!handle || !handle->isConnected) {
-        LogErrorEx(LOG_DEVICE_PSB,"PSB: SendModbusCommand called with invalid handle or not connected");
+        LogErrorEx(LOG_DEVICE_PSB,"SendModbusCommand called with invalid handle or not connected");
         return PSB_ERROR_NOT_CONNECTED;
     }
     
@@ -81,12 +81,12 @@ static int SendModbusCommand(PSB_Handle *handle, unsigned char *txBuffer, int tx
     
     // Send command
     if (ComWrt(handle->comPort, (char*)txBuffer, txLength) != txLength) {
-        LogErrorEx(LOG_DEVICE_PSB,"PSB: Failed to write all bytes to COM port");
+        LogErrorEx(LOG_DEVICE_PSB,"Failed to write all bytes to COM port");
         return PSB_ERROR_COMM;
     }
     
-    // Wait for response
-    Delay(0.05);  // 50ms delay for device processing
+    // Wait for response - INCREASED from 50ms to 150ms
+    Delay(0.15);  // 150ms delay for device processing
     
     // Read response with timeout
     int totalBytesRead = 0;
@@ -108,7 +108,7 @@ static int SendModbusCommand(PSB_Handle *handle, unsigned char *txBuffer, int tx
         
         // Check timeout
         if ((Timer() - startTime) > (handle->timeoutMs / 1000.0)) {
-            LogErrorEx(LOG_DEVICE_PSB,"PSB: Timeout - read %d of %d bytes", totalBytesRead, minBytesToRead);
+            LogErrorEx(LOG_DEVICE_PSB,"Timeout - read %d of %d bytes", totalBytesRead, minBytesToRead);
             if (totalBytesRead > 0) {
                 PrintHexDump("Partial RX", rxBuffer, totalBytesRead);
             }
@@ -116,7 +116,7 @@ static int SendModbusCommand(PSB_Handle *handle, unsigned char *txBuffer, int tx
         }
         
         if (totalBytesRead < minBytesToRead) {
-            Delay(0.01);  // Small delay between read attempts
+            Delay(0.05);
         }
     }
     
@@ -124,7 +124,7 @@ static int SendModbusCommand(PSB_Handle *handle, unsigned char *txBuffer, int tx
     if (totalBytesRead >= 2 && (rxBuffer[1] & 0x80)) {
         // This is an exception response, which is only 5 bytes total
         actualExpectedBytes = 5;
-        LogDebugEx(LOG_DEVICE_PSB,"PSB: Detected Modbus exception response");
+        LogDebugEx(LOG_DEVICE_PSB,"Detected Modbus exception response");
     }
     
     // Continue reading remaining bytes if needed
@@ -140,7 +140,7 @@ static int SendModbusCommand(PSB_Handle *handle, unsigned char *txBuffer, int tx
         
         // Check timeout
         if ((Timer() - startTime) > (handle->timeoutMs / 1000.0)) {
-            LogErrorEx(LOG_DEVICE_PSB,"PSB: Timeout - read %d of %d bytes", totalBytesRead, actualExpectedBytes);
+            LogErrorEx(LOG_DEVICE_PSB,"Timeout - read %d of %d bytes", totalBytesRead, actualExpectedBytes);
             if (totalBytesRead > 0) {
                 PrintHexDump("Partial RX", rxBuffer, totalBytesRead);
             }
@@ -148,7 +148,7 @@ static int SendModbusCommand(PSB_Handle *handle, unsigned char *txBuffer, int tx
         }
         
         if (totalBytesRead < actualExpectedBytes) {
-            Delay(0.01);  // Small delay between read attempts
+            Delay(0.05);
         }
     }
     
@@ -156,14 +156,14 @@ static int SendModbusCommand(PSB_Handle *handle, unsigned char *txBuffer, int tx
     
     // Verify response length
     if (totalBytesRead != actualExpectedBytes) {
-        LogErrorEx(LOG_DEVICE_PSB,"PSB: Wrong response length - got %d, expected %d", 
+        LogErrorEx(LOG_DEVICE_PSB,"Wrong response length - got %d, expected %d", 
                  totalBytesRead, actualExpectedBytes);
         return PSB_ERROR_RESPONSE;
     }
     
     // Verify slave address
     if (rxBuffer[0] != handle->slaveAddress) {
-        LogErrorEx(LOG_DEVICE_PSB,"PSB: Wrong slave address in response - got 0x%02X, expected 0x%02X", 
+        LogErrorEx(LOG_DEVICE_PSB,"Wrong slave address in response - got 0x%02X, expected 0x%02X", 
                  rxBuffer[0], handle->slaveAddress);
         return PSB_ERROR_RESPONSE;
     }
@@ -184,20 +184,20 @@ static int SendModbusCommand(PSB_Handle *handle, unsigned char *txBuffer, int tx
             case 0x08: exceptionMsg = "Memory parity error"; break;
         }
         
-        LogErrorEx(LOG_DEVICE_PSB,"PSB: Modbus exception code: 0x%02X - %s", exceptionCode, exceptionMsg);
+        LogErrorEx(LOG_DEVICE_PSB,"Modbus exception code: 0x%02X - %s", exceptionCode, exceptionMsg);
         return PSB_ERROR_RESPONSE;
     }
     
     // CRITICAL: Verify function code matches what we sent
     if (rxBuffer[1] != sentFunctionCode) {
-        LogErrorEx(LOG_DEVICE_PSB,"PSB: Function code mismatch - sent 0x%02X, received 0x%02X", 
+        LogErrorEx(LOG_DEVICE_PSB,"Function code mismatch - sent 0x%02X, received 0x%02X", 
                  sentFunctionCode, rxBuffer[1]);
         
         // Special diagnostic for common error
         if (sentFunctionCode == MODBUS_READ_HOLDING_REGISTERS && rxBuffer[1] == MODBUS_WRITE_SINGLE_REGISTER) {
-            LogErrorEx(LOG_DEVICE_PSB,"PSB: Device responded with WRITE REGISTER (0x06) to READ REGISTERS (0x03) request!");
+            LogErrorEx(LOG_DEVICE_PSB,"Device responded with WRITE REGISTER (0x06) to READ REGISTERS (0x03) request!");
         } else if (sentFunctionCode == MODBUS_WRITE_SINGLE_COIL && rxBuffer[1] == MODBUS_READ_HOLDING_REGISTERS) {
-            LogErrorEx(LOG_DEVICE_PSB,"PSB: Device responded with READ REGISTERS (0x03) to WRITE COIL (0x05) request!");
+            LogErrorEx(LOG_DEVICE_PSB,"Device responded with READ REGISTERS (0x03) to WRITE COIL (0x05) request!");
         }
         
         return PSB_ERROR_RESPONSE;
@@ -208,7 +208,7 @@ static int SendModbusCommand(PSB_Handle *handle, unsigned char *txBuffer, int tx
         // For read responses, byte 2 should be the byte count
         unsigned char expectedByteCount = (unsigned char)(actualExpectedBytes - 5); // Total - Address - Function - ByteCount - CRC(2)
         if (rxBuffer[2] != expectedByteCount) {
-            LogErrorEx(LOG_DEVICE_PSB,"PSB: Read response byte count mismatch - got %d, expected %d", 
+            LogErrorEx(LOG_DEVICE_PSB,"Read response byte count mismatch - got %d, expected %d", 
                      rxBuffer[2], expectedByteCount);
             return PSB_ERROR_RESPONSE;
         }
@@ -219,10 +219,12 @@ static int SendModbusCommand(PSB_Handle *handle, unsigned char *txBuffer, int tx
     unsigned short calculatedCRC = PSB_CalculateCRC(rxBuffer, totalBytesRead - 2);
     
     if (receivedCRC != calculatedCRC) {
-        LogErrorEx(LOG_DEVICE_PSB,"PSB: CRC mismatch - received 0x%04X, calculated 0x%04X", 
+        LogErrorEx(LOG_DEVICE_PSB,"CRC mismatch - received 0x%04X, calculated 0x%04X", 
                  receivedCRC, calculatedCRC);
         return PSB_ERROR_CRC;
     }
+    
+    Delay(0.05);  // 50ms recovery time
     
     return PSB_SUCCESS;
 }
@@ -261,7 +263,7 @@ int PSB_ScanPort(int comPort, PSB_DiscoveryResult *result) {
     int numRates = ARRAY_SIZE(baudRates);
     
     for (int i = 0; i < numRates; i++) {
-        LogDebugEx(LOG_DEVICE_PSB,"PSB: Trying COM%d at %d baud...", comPort, baudRates[i]);
+        LogDebugEx(LOG_DEVICE_PSB,"Trying COM%d at %d baud...", comPort, baudRates[i]);
         
         SetBreakOnLibraryErrors(0);
         int portResult = OpenComConfig(comPort, "", baudRates[i], 0, 8, 1, 512, 512);
@@ -333,7 +335,7 @@ int PSB_ScanPort(int comPort, PSB_DiscoveryResult *result) {
                                 
                                 CloseCom(comPort);
                                 
-                                LogDebugEx(LOG_DEVICE_PSB,"PSB: Found PSB: %s, SN: %s", 
+                                LogDebugEx(LOG_DEVICE_PSB,"Found %s, SN: %s", 
                                         result->deviceType, result->serialNumber);
                                 
                                 return PSB_SUCCESS;
@@ -342,7 +344,7 @@ int PSB_ScanPort(int comPort, PSB_DiscoveryResult *result) {
                     }
                 }
             } else if (len == 7 && response[0] == DEFAULT_SLAVE_ADDRESS && response[1] == 0x06) {
-                LogWarningEx(LOG_DEVICE_PSB,"PSB: Device responded with WRITE response (0x06) to READ request during scan!");
+                LogWarningEx(LOG_DEVICE_PSB,"Device responded with WRITE response (0x06) to READ request during scan!");
             }
         }
         
@@ -418,10 +420,10 @@ int PSB_InitializeSpecific(PSB_Handle *handle, int comPort, int slaveAddress, in
     handle->timeoutMs = DEFAULT_TIMEOUT_MS;
     handle->state = DEVICE_STATE_CONNECTING;
     
-    LogMessageEx(LOG_DEVICE_PSB,"PSB: Initializing on COM%d, slave %d, %d baud", comPort, slaveAddress, baudRate);
+    LogMessageEx(LOG_DEVICE_PSB,"Initializing on COM%d, slave %d, %d baud", comPort, slaveAddress, baudRate);
     
     if (OpenComConfig(comPort, "", baudRate, 0, 8, 1, 512, 512) < 0) {
-        LogErrorEx(LOG_DEVICE_PSB,"PSB: Failed to open COM%d", comPort);
+        LogErrorEx(LOG_DEVICE_PSB,"Failed to open COM%d", comPort);
         handle->state = DEVICE_STATE_ERROR;
         return PSB_ERROR_COMM;
     }
@@ -431,14 +433,14 @@ int PSB_InitializeSpecific(PSB_Handle *handle, int comPort, int slaveAddress, in
     handle->isConnected = 1;
     handle->state = DEVICE_STATE_CONNECTED;
     
-    LogMessageEx(LOG_DEVICE_PSB,"PSB: Successfully initialized");
+    LogMessageEx(LOG_DEVICE_PSB,"Successfully initialized");
     return PSB_SUCCESS;
 }
 
 int PSB_Close(PSB_Handle *handle) {
     if (!handle || !handle->isConnected) return PSB_ERROR_NOT_CONNECTED;
     
-    LogMessageEx(LOG_DEVICE_PSB,"PSB: Closing connection on COM%d", handle->comPort);
+    LogMessageEx(LOG_DEVICE_PSB,"Closing connection on COM%d", handle->comPort);
     
     CloseCom(handle->comPort);
     handle->isConnected = 0;
@@ -468,7 +470,7 @@ int PSB_SetRemoteMode(PSB_Handle *handle, int enable) {
     txBuffer[6] = (unsigned char)(crc & 0xFF);
     txBuffer[7] = (unsigned char)((crc >> 8) & 0xFF);
     
-    LogMessageEx(LOG_DEVICE_PSB,"PSB: Setting remote mode: %s", enable ? "ON" : "OFF");
+    LogMessageEx(LOG_DEVICE_PSB,"Setting remote mode: %s", enable ? "ON" : "OFF");
     
     // Expected response for write coil: Same as request = 8 bytes
     return SendModbusCommand(handle, txBuffer, 8, rxBuffer, 8);
@@ -491,7 +493,7 @@ int PSB_SetOutputEnable(PSB_Handle *handle, int enable) {
     txBuffer[6] = (unsigned char)(crc & 0xFF);
     txBuffer[7] = (unsigned char)((crc >> 8) & 0xFF);
     
-    LogMessageEx(LOG_DEVICE_PSB,"PSB: Setting output: %s", enable ? "ON" : "OFF");
+    LogMessageEx(LOG_DEVICE_PSB,"Setting output: %s", enable ? "ON" : "OFF");
     
     return SendModbusCommand(handle, txBuffer, 8, rxBuffer, 8);
 }
@@ -503,7 +505,7 @@ int PSB_SetOutputEnable(PSB_Handle *handle, int enable) {
 int PSB_SetVoltage(PSB_Handle *handle, double voltage) {
     if (!handle || !handle->isConnected) return PSB_ERROR_NOT_CONNECTED;
     if (voltage < 0 || voltage > PSB_NOMINAL_VOLTAGE * 1.02) {
-        LogErrorEx(LOG_DEVICE_PSB,"PSB: Invalid voltage %.2fV (range: 0-%.2fV)", voltage, PSB_NOMINAL_VOLTAGE * 1.02);
+        LogErrorEx(LOG_DEVICE_PSB,"Invalid voltage %.2fV (range: 0-%.2fV)", voltage, PSB_NOMINAL_VOLTAGE * 1.02);
         return PSB_ERROR_INVALID_PARAM;
     }
     
@@ -523,7 +525,7 @@ int PSB_SetVoltage(PSB_Handle *handle, double voltage) {
     txBuffer[6] = (unsigned char)(crc & 0xFF);
     txBuffer[7] = (unsigned char)((crc >> 8) & 0xFF);
     
-    LogMessageEx(LOG_DEVICE_PSB,"PSB: Setting voltage: %.2fV (0x%04X)", voltage, deviceValue);
+    LogMessageEx(LOG_DEVICE_PSB,"Setting voltage: %.2fV (0x%04X)", voltage, deviceValue);
     
     // Expected response for write register: Same as request = 8 bytes
     return SendModbusCommand(handle, txBuffer, 8, rxBuffer, 8);
@@ -532,11 +534,11 @@ int PSB_SetVoltage(PSB_Handle *handle, double voltage) {
 int PSB_SetVoltageLimits(PSB_Handle *handle, double minVoltage, double maxVoltage) {
     if (!handle || !handle->isConnected) return PSB_ERROR_NOT_CONNECTED;
     if (minVoltage < 0 || maxVoltage > PSB_NOMINAL_VOLTAGE * 1.02) {
-        LogErrorEx(LOG_DEVICE_PSB,"PSB: Invalid voltage limits (%.2fV-%.2fV)", minVoltage, maxVoltage);
+        LogErrorEx(LOG_DEVICE_PSB,"Invalid voltage limits (%.2fV-%.2fV)", minVoltage, maxVoltage);
         return PSB_ERROR_INVALID_PARAM;
     }
     if (minVoltage > maxVoltage) {
-        LogErrorEx(LOG_DEVICE_PSB,"PSB: Min voltage (%.2fV) > Max voltage (%.2fV)", minVoltage, maxVoltage);
+        LogErrorEx(LOG_DEVICE_PSB,"Min voltage (%.2fV) > Max voltage (%.2fV)", minVoltage, maxVoltage);
         return PSB_ERROR_INVALID_PARAM;
     }
     
@@ -557,7 +559,7 @@ int PSB_SetVoltageLimits(PSB_Handle *handle, double minVoltage, double maxVoltag
     txBuffer[6] = (unsigned char)(crc & 0xFF);
     txBuffer[7] = (unsigned char)((crc >> 8) & 0xFF);
     
-    LogMessageEx(LOG_DEVICE_PSB,"PSB: Setting min voltage: %.2fV", minVoltage);
+    LogMessageEx(LOG_DEVICE_PSB,"Setting min voltage: %.2fV", minVoltage);
     
     int result = SendModbusCommand(handle, txBuffer, 8, rxBuffer, 8);
     if (result != PSB_SUCCESS) return result;
@@ -574,7 +576,7 @@ int PSB_SetVoltageLimits(PSB_Handle *handle, double minVoltage, double maxVoltag
     txBuffer[6] = (unsigned char)(crc & 0xFF);
     txBuffer[7] = (unsigned char)((crc >> 8) & 0xFF);
     
-    LogMessageEx(LOG_DEVICE_PSB,"PSB: Setting max voltage: %.2fV", maxVoltage);
+    LogMessageEx(LOG_DEVICE_PSB,"Setting max voltage: %.2fV", maxVoltage);
     
     return SendModbusCommand(handle, txBuffer, 8, rxBuffer, 8);
 }
@@ -586,7 +588,7 @@ int PSB_SetVoltageLimits(PSB_Handle *handle, double minVoltage, double maxVoltag
 int PSB_SetCurrent(PSB_Handle *handle, double current) {
     if (!handle || !handle->isConnected) return PSB_ERROR_NOT_CONNECTED;
     if (current < 0 || current > PSB_NOMINAL_CURRENT * 1.02) {
-        LogErrorEx(LOG_DEVICE_PSB,"PSB: Invalid current %.2fA (range: 0-%.2fA)", current, PSB_NOMINAL_CURRENT * 1.02);
+        LogErrorEx(LOG_DEVICE_PSB,"Invalid current %.2fA (range: 0-%.2fA)", current, PSB_NOMINAL_CURRENT * 1.02);
         return PSB_ERROR_INVALID_PARAM;
     }
     
@@ -606,7 +608,7 @@ int PSB_SetCurrent(PSB_Handle *handle, double current) {
     txBuffer[6] = (unsigned char)(crc & 0xFF);
     txBuffer[7] = (unsigned char)((crc >> 8) & 0xFF);
     
-    LogMessageEx(LOG_DEVICE_PSB,"PSB: Setting current: %.2fA (0x%04X)", current, deviceValue);
+    LogMessageEx(LOG_DEVICE_PSB,"Setting current: %.2fA (0x%04X)", current, deviceValue);
     
     return SendModbusCommand(handle, txBuffer, 8, rxBuffer, 8);
 }
@@ -614,11 +616,11 @@ int PSB_SetCurrent(PSB_Handle *handle, double current) {
 int PSB_SetCurrentLimits(PSB_Handle *handle, double minCurrent, double maxCurrent) {
     if (!handle || !handle->isConnected) return PSB_ERROR_NOT_CONNECTED;
     if (minCurrent < 0 || maxCurrent > PSB_NOMINAL_CURRENT * 1.02) {
-        LogErrorEx(LOG_DEVICE_PSB,"PSB: Invalid current limits (%.2fA-%.2fA)", minCurrent, maxCurrent);
+        LogErrorEx(LOG_DEVICE_PSB,"Invalid current limits (%.2fA-%.2fA)", minCurrent, maxCurrent);
         return PSB_ERROR_INVALID_PARAM;
     }
     if (minCurrent > maxCurrent) {
-        LogErrorEx(LOG_DEVICE_PSB,"PSB: Min current (%.2fA) > Max current (%.2fA)", minCurrent, maxCurrent);
+        LogErrorEx(LOG_DEVICE_PSB,"Min current (%.2fA) > Max current (%.2fA)", minCurrent, maxCurrent);
         return PSB_ERROR_INVALID_PARAM;
     }
     
@@ -639,7 +641,7 @@ int PSB_SetCurrentLimits(PSB_Handle *handle, double minCurrent, double maxCurren
     txBuffer[6] = (unsigned char)(crc & 0xFF);
     txBuffer[7] = (unsigned char)((crc >> 8) & 0xFF);
     
-    LogMessageEx(LOG_DEVICE_PSB,"PSB: Setting min current: %.2fA", minCurrent);
+    LogMessageEx(LOG_DEVICE_PSB,"Setting min current: %.2fA", minCurrent);
     
     int result = SendModbusCommand(handle, txBuffer, 8, rxBuffer, 8);
     if (result != PSB_SUCCESS) return result;
@@ -656,7 +658,7 @@ int PSB_SetCurrentLimits(PSB_Handle *handle, double minCurrent, double maxCurren
     txBuffer[6] = (unsigned char)(crc & 0xFF);
     txBuffer[7] = (unsigned char)((crc >> 8) & 0xFF);
     
-    LogMessageEx(LOG_DEVICE_PSB,"PSB: Setting max current: %.2fA", maxCurrent);
+    LogMessageEx(LOG_DEVICE_PSB,"Setting max current: %.2fA", maxCurrent);
     
     return SendModbusCommand(handle, txBuffer, 8, rxBuffer, 8);
 }
@@ -668,7 +670,7 @@ int PSB_SetCurrentLimits(PSB_Handle *handle, double minCurrent, double maxCurren
 int PSB_SetPower(PSB_Handle *handle, double power) {
     if (!handle || !handle->isConnected) return PSB_ERROR_NOT_CONNECTED;
     if (power < 0 || power > PSB_NOMINAL_POWER * 1.02) {
-        LogErrorEx(LOG_DEVICE_PSB,"PSB: Invalid power %.2fW (range: 0-%.2fW)", power, PSB_NOMINAL_POWER * 1.02);
+        LogErrorEx(LOG_DEVICE_PSB,"Invalid power %.2fW (range: 0-%.2fW)", power, PSB_NOMINAL_POWER * 1.02);
         return PSB_ERROR_INVALID_PARAM;
     }
     
@@ -688,7 +690,7 @@ int PSB_SetPower(PSB_Handle *handle, double power) {
     txBuffer[6] = (unsigned char)(crc & 0xFF);
     txBuffer[7] = (unsigned char)((crc >> 8) & 0xFF);
     
-    LogMessageEx(LOG_DEVICE_PSB,"PSB: Setting power: %.2fW (0x%04X)", power, deviceValue);
+    LogMessageEx(LOG_DEVICE_PSB,"Setting power: %.2fW (0x%04X)", power, deviceValue);
     
     return SendModbusCommand(handle, txBuffer, 8, rxBuffer, 8);
 }
@@ -696,7 +698,7 @@ int PSB_SetPower(PSB_Handle *handle, double power) {
 int PSB_SetPowerLimit(PSB_Handle *handle, double maxPower) {
     if (!handle || !handle->isConnected) return PSB_ERROR_NOT_CONNECTED;
     if (maxPower < 0 || maxPower > PSB_NOMINAL_POWER * 1.02) {
-        LogErrorEx(LOG_DEVICE_PSB,"PSB: Invalid power limit %.2fW (range: 0-%.2fW)", maxPower, PSB_NOMINAL_POWER * 1.02);
+        LogErrorEx(LOG_DEVICE_PSB,"Invalid power limit %.2fW (range: 0-%.2fW)", maxPower, PSB_NOMINAL_POWER * 1.02);
         return PSB_ERROR_INVALID_PARAM;
     }
     
@@ -716,7 +718,7 @@ int PSB_SetPowerLimit(PSB_Handle *handle, double maxPower) {
     txBuffer[6] = (unsigned char)(crc & 0xFF);
     txBuffer[7] = (unsigned char)((crc >> 8) & 0xFF);
     
-    LogMessageEx(LOG_DEVICE_PSB,"PSB: Setting max power: %.2fW", maxPower);
+    LogMessageEx(LOG_DEVICE_PSB,"Setting max power: %.2fW", maxPower);
     
     return SendModbusCommand(handle, txBuffer, 8, rxBuffer, 8);
 }
@@ -745,7 +747,7 @@ int PSB_GetStatus(PSB_Handle *handle, PSB_Status *status) {
     txBuffer[6] = (unsigned char)(crc & 0xFF);
     txBuffer[7] = (unsigned char)((crc >> 8) & 0xFF);
     
-    LogDebugEx(LOG_DEVICE_PSB,"PSB: Reading Device State (Reg 505)");
+    LogDebugEx(LOG_DEVICE_PSB,"Reading Device State (Reg 505)");
     
     // Expected response: Address(1) + Function(1) + ByteCount(1) + Data(4) + CRC(2) = 9 bytes
     int result = SendModbusCommand(handle, txBuffer, 8, rxBuffer, 9);
@@ -753,7 +755,7 @@ int PSB_GetStatus(PSB_Handle *handle, PSB_Status *status) {
     if (result == PSB_SUCCESS) {
         // Verify this is a read response
         if (rxBuffer[1] != MODBUS_READ_HOLDING_REGISTERS) {
-            LogErrorEx(LOG_DEVICE_PSB,"PSB: Expected READ response (0x03), got 0x%02X", rxBuffer[1]);
+            LogErrorEx(LOG_DEVICE_PSB,"Expected READ response (0x03), got 0x%02X", rxBuffer[1]);
             return PSB_ERROR_RESPONSE;
         }
         
@@ -763,8 +765,8 @@ int PSB_GetStatus(PSB_Handle *handle, PSB_Status *status) {
         unsigned short reg506_value = (unsigned short)((rxBuffer[5] << 8) | rxBuffer[6]);  // 0x0803
         status->rawState = ((unsigned long)reg505_value << 16) | reg506_value;  // 0x00000803
         
-        LogDebugEx(LOG_DEVICE_PSB,"PSB: Raw registers: [505]=0x%04X, [506]=0x%04X", reg505_value, reg506_value);
-        LogDebugEx(LOG_DEVICE_PSB,"PSB: Combined 32-bit state: 0x%08lX", status->rawState);
+        LogDebugEx(LOG_DEVICE_PSB,"Raw registers: [505]=0x%04X, [506]=0x%04X", reg505_value, reg506_value);
+        LogDebugEx(LOG_DEVICE_PSB,"Combined 32-bit state: 0x%08lX", status->rawState);
         
         // Parse state bits
         status->controlLocation = (int)(status->rawState & STATE_CONTROL_LOCATION_MASK);
@@ -773,7 +775,7 @@ int PSB_GetStatus(PSB_Handle *handle, PSB_Status *status) {
         status->remoteMode = (status->rawState & STATE_REMOTE_MODE) ? 1 : 0;
         status->alarmsActive = (status->rawState & STATE_ALARMS_ACTIVE) ? 1 : 0;
         
-        LogDebugEx(LOG_DEVICE_PSB,"PSB: Parsed state:");
+        LogDebugEx(LOG_DEVICE_PSB,"Parsed state:");
         LogDebugEx(LOG_DEVICE_PSB,"  Control Location: 0x%02X", status->controlLocation);
         LogDebugEx(LOG_DEVICE_PSB,"  Output Enabled: %s", status->outputEnabled ? "YES" : "NO");
         LogDebugEx(LOG_DEVICE_PSB,"  Remote Mode: %s", status->remoteMode ? "YES" : "NO");
@@ -804,7 +806,7 @@ int PSB_GetActualValues(PSB_Handle *handle, double *voltage, double *current, do
     txBuffer[6] = (unsigned char)(crc & 0xFF);
     txBuffer[7] = (unsigned char)((crc >> 8) & 0xFF);
     
-    LogDebugEx(LOG_DEVICE_PSB,"PSB: Reading Actual Values");
+    LogDebugEx(LOG_DEVICE_PSB,"Reading Actual Values");
     
     // Expected response: Address(1) + Function(1) + ByteCount(1) + Data(6) + CRC(2) = 11 bytes
     int result = SendModbusCommand(handle, txBuffer, 8, rxBuffer, 11);
@@ -812,7 +814,7 @@ int PSB_GetActualValues(PSB_Handle *handle, double *voltage, double *current, do
     if (result == PSB_SUCCESS) {
         // Verify this is a read response
         if (rxBuffer[1] != MODBUS_READ_HOLDING_REGISTERS) {
-            LogErrorEx(LOG_DEVICE_PSB,"PSB: Expected READ response (0x03), got 0x%02X", rxBuffer[1]);
+            LogErrorEx(LOG_DEVICE_PSB,"Expected READ response (0x03), got 0x%02X", rxBuffer[1]);
             return PSB_ERROR_RESPONSE;
         }
         
@@ -824,7 +826,7 @@ int PSB_GetActualValues(PSB_Handle *handle, double *voltage, double *current, do
         if (current) *current = ConvertFromDeviceUnits(currentRaw, PSB_NOMINAL_CURRENT);
         if (power) *power = ConvertFromDeviceUnits(powerRaw, PSB_NOMINAL_POWER);
         
-        LogDebugEx(LOG_DEVICE_PSB,"PSB: Actual values: V=%.2fV, I=%.2fA, P=%.2fW",
+        LogDebugEx(LOG_DEVICE_PSB,"Actual values: V=%.2fV, I=%.2fA, P=%.2fW",
                  voltage ? *voltage : 0.0,
                  current ? *current : 0.0,
                  power ? *power : 0.0);
@@ -866,7 +868,7 @@ const char* PSB_GetErrorString(int errorCode) {
 void PSB_EnableDebugOutput(int enable) {
     debugEnabled = enable;
     if (enable) {
-        LogMessageEx(LOG_DEVICE_PSB,"PSB: Debug output enabled");
+        LogMessageEx(LOG_DEVICE_PSB,"Debug output enabled");
     }
 }
 

@@ -23,6 +23,7 @@
 
 static StatusModuleState g_status = {0};
 static int g_initialized = 0;
+static int g_statusPaused = 0;  // Added for pause/resume functionality
 
 /******************************************************************************
  * Internal Function Prototypes
@@ -72,6 +73,9 @@ int Status_Initialize(int panelHandle) {
     g_status.psbStatus.state = CONN_STATE_IDLE;
     g_status.biologicStatus.state = CONN_STATE_IDLE;
     g_status.biologicStatus.biologicID = -1;
+    
+    // Initialize pause state
+    g_statusPaused = 0;
     
     // Set initial LED states (red for enabled devices)
     if (STATUS_MONITOR_PSB) {
@@ -172,7 +176,54 @@ void Status_Cleanup(void) {
     
     Status_Stop();
     g_initialized = 0;
+    g_statusPaused = 0;
     LogMessage("Status module cleaned up");
+}
+
+int Status_Pause(void) {
+    if (!g_initialized) {
+        return SUCCESS;  // Not an error if not initialized
+    }
+    
+    g_statusPaused = 1;
+    LogMessage("Status monitoring paused");
+    
+    // Update UI to show paused state
+    if (STATUS_MONITOR_PSB) {
+        UpdateDeviceStatus(1, "Monitoring Paused");
+    }
+    if (STATUS_MONITOR_BIOLOGIC) {
+        UpdateDeviceStatus(0, "Monitoring Paused");
+    }
+    
+    return SUCCESS;
+}
+
+int Status_Resume(void) {
+    if (!g_initialized) {
+        return SUCCESS;  // Not an error if not initialized
+    }
+    
+    g_statusPaused = 0;
+    LogMessage("Status monitoring resumed");
+    
+    // Update UI to show current state
+    if (STATUS_MONITOR_PSB) {
+        if (g_status.psbStatus.state == CONN_STATE_CONNECTED) {
+            UpdateDeviceStatus(1, "PSB Connected");
+        } else {
+            UpdateDeviceStatus(1, "PSB Monitoring");
+        }
+    }
+    if (STATUS_MONITOR_BIOLOGIC) {
+        if (g_status.biologicStatus.state == CONN_STATE_CONNECTED) {
+            UpdateDeviceStatus(0, "BioLogic Connected");
+        } else {
+            UpdateDeviceStatus(0, "BioLogic Monitoring");
+        }
+    }
+    
+    return SUCCESS;
 }
 
 ConnectionState Status_GetDeviceState(int isPSB) {
@@ -281,8 +332,10 @@ static int CVICALLBACK Status_TimerThread(void *functionData) {
         if (elapsedTime >= (STATUS_UPDATE_PERIOD_MS / 1000.0)) {
             g_status.lastTimerUpdate = currentTime;
             
-            // Perform the status update
-            Status_TimerUpdate();
+            // Perform the status update only if not paused
+            if (!g_statusPaused) {
+                Status_TimerUpdate();
+            }
         }
         
         // Small sleep to prevent CPU hogging
@@ -298,7 +351,7 @@ static int CVICALLBACK Status_TimerThread(void *functionData) {
  ******************************************************************************/
 
 static void Status_TimerUpdate(void) {
-    if (g_status.shutdownRequested) {
+    if (g_status.shutdownRequested || g_statusPaused) {
         return;
     }
     
