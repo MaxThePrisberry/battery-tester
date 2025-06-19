@@ -32,6 +32,7 @@
 #define PSB_ERROR_BUSY             (ERR_BASE_PSB - 5)
 #define PSB_ERROR_NOT_CONNECTED    (ERR_BASE_PSB - 6)
 #define PSB_ERROR_RESPONSE         (ERR_BASE_PSB - 7)
+#define PSB_ERROR_NOT_SUPPORTED    (ERR_BASE_PSB - 8)
 
 // Modbus function codes
 #define MODBUS_READ_HOLDING_REGISTERS       0x03

@@ -149,6 +149,12 @@ int Status_ForceReconnect(int isPSB);
 PSB_Handle* Status_GetPSBHandle(void);
 
 /**
+ * Set PSB handle from external source (e.g., queue manager)
+ * @param handle - PSB handle from queue manager
+ */
+void Status_SetPSBHandle(PSB_Handle* handle);
+
+/**
  * Get BioLogic device ID for external use
  * @return Device ID or -1 if not connected
  */

@@ -14,7 +14,7 @@
 // Required System Includes
 //==============================================================================
 #ifdef _WIN32
-    #include <windows.h>
+   #include <windows.h>
 #endif
 
 #include <ansi_c.h>
@@ -36,6 +36,7 @@
 #define MAX_PATH_LENGTH         260
 #define MAX_ERROR_MSG_LENGTH    256
 #define MAX_LOG_LINE_LENGTH     512
+#define DEFAULT_THREAD_POOL_SIZE 10     // Increased for queue processing threads
 
 //==============================================================================
 // Error Code Definitions
@@ -63,6 +64,12 @@
 #define ERR_OPERATION_FAILED    (ERR_BASE_SYSTEM - 7)
 #define ERR_NOT_SUPPORTED       (ERR_BASE_SYSTEM - 8)
 #define ERR_INVALID_STATE       (ERR_BASE_SYSTEM - 9)
+
+// Queue-specific errors
+#define ERR_QUEUE_FULL          (ERR_BASE_SYSTEM - 10)
+#define ERR_QUEUE_EMPTY         (ERR_BASE_SYSTEM - 11)
+#define ERR_QUEUE_TIMEOUT       (ERR_BASE_SYSTEM - 12)
+#define ERR_QUEUE_NOT_INIT      (ERR_BASE_SYSTEM - 13)
 
 // UI errors (-5000 to -5999)
 #define ERR_UI                  (ERR_BASE_UI - 1)
@@ -112,6 +119,10 @@ typedef void (*ProgressCallback)(const char *message, double progress);
 typedef void (*ErrorCallback)(int errorCode, const char *errorMessage);
 typedef void (*DataCallback)(double timestamp, double voltage, double current);
 
+// Callback type definitions for worker threads
+typedef int (CVICALLBACK *WorkerThreadFunc)(void *functionData);
+typedef void (CVICALLBACK *DeferredUICallback)(void *callbackData);
+
 // Time measurement structure
 typedef struct {
     double startTime;
@@ -130,6 +141,14 @@ typedef struct {
 } DeviceInfo;
 
 //==============================================================================
+// Forward Declarations for Queue System
+//==============================================================================
+
+// Forward declarations for queue managers
+typedef struct PSBQueueManager PSBQueueManager;
+typedef struct BioQueueManager BioQueueManager;
+
+//==============================================================================
 // Global Variables (declare as extern, define in one .c file)
 //==============================================================================
 
@@ -141,6 +160,10 @@ extern int g_debugMode;
 
 // Thread pool handle for background operations
 extern CmtThreadPoolHandle g_threadPool;
+
+// Global busy system mutex and flag
+extern CmtThreadLockHandle g_busyLock;
+extern int g_systemBusy;
 
 //==============================================================================
 // Utility Macros
@@ -202,6 +225,26 @@ extern CmtThreadPoolHandle g_threadPool;
 
 #define SAFE_SPRINTF(buffer, size, ...) \
     snprintf((buffer), (size), __VA_ARGS__)
+
+// Thread-safe operation macros for queue system
+#define CHECK_AND_SET_BUSY(lock, flag, action_if_busy) \
+    do { \
+        CmtGetLock(lock); \
+        if (flag) { \
+            CmtReleaseLock(lock); \
+            action_if_busy; \
+        } else { \
+            flag = 1; \
+            CmtReleaseLock(lock); \
+        } \
+    } while(0)
+
+#define CLEAR_BUSY(lock, flag) \
+    do { \
+        CmtGetLock(lock); \
+        flag = 0; \
+        CmtReleaseLock(lock); \
+    } while(0)
 
 //==============================================================================
 // Debug and Logging Functions
@@ -297,6 +340,14 @@ void ShowBusyCursor(int show);
 // Thread synchronization helpers
 int WaitForCondition(int (*condition)(void), double timeoutSeconds);
 
+// Queue system integration points
+PSBQueueManager* PSB_GetGlobalQueueManager(void);
+BioQueueManager* BIO_GetGlobalQueueManager(void);
+void InitializeQueueManagers(void);
+void ShutdownQueueManagers(void);
+int CheckSystemBusy(const char *operation);
+void SetSystemBusy(int busy);
+
 //==============================================================================
 // Common Constants
 //==============================================================================
@@ -321,6 +372,14 @@ int WaitForCondition(int (*condition)(void), double timeoutSeconds);
 #define DATA_FILE_EXT           ".csv"
 #define CONFIG_FILE_EXT         ".ini"
 #define LOG_FILE_EXT            ".log"
+
+#ifndef OPT_TL_EVENT_UNICAST
+#define OPT_TL_EVENT_UNICAST    0x00000001
+#endif
+
+#ifndef TSQ_INFINITE_TIMEOUT
+#define TSQ_INFINITE_TIMEOUT    -1
+#endif
 
 //==============================================================================
 // Platform-specific definitions

@@ -8,7 +8,9 @@
 #include "common.h"
 #include "BatteryTester.h"  
 #include "biologic_dll.h"
+#include "biologic_queue.h"
 #include "psb10000_dll.h"
+#include "psb10000_queue.h"
 #include "psb10000_test.h"
 #include "logging.h"
 #include "status.h"
@@ -17,12 +19,15 @@
  * Module Constants
  ******************************************************************************/
 #define THREAD_POOL_SIZE        3
+#define PSB_TARGET_SERIAL       "2872380001"  // Target PSB serial number
 
 /******************************************************************************
  * Function Prototypes
  ******************************************************************************/
 static int CVICALLBACK UpdateThread(void *functionData);
 static int CVICALLBACK PSBTestSuiteThread(void *functionData);
+void PSB_SetGlobalQueueManager(PSBQueueManager *mgr);
+void CVICALLBACK UpdateRemoteLED(void *callbackData);
 
 /******************************************************************************
  * Global Variables (defined here, declared extern in common.h)
@@ -30,17 +35,22 @@ static int CVICALLBACK PSBTestSuiteThread(void *functionData);
 int g_mainPanelHandle = 0;
 int g_debugMode = 0;
 CmtThreadPoolHandle g_threadPool = 0;
+CmtThreadLockHandle g_busyLock = 0;
+int g_systemBusy = 0;
 
 /******************************************************************************
  * Module-Specific Global Variables
  ******************************************************************************/
-// Note: PSB handle and state are now managed by the status module
 static CmtThreadFunctionID testSuiteThreadID = 0;
 static int testButtonControl = 0;
 
 // Test suite context
 static TestSuiteContext testContext;
 static TestState testSuiteState = TEST_STATE_IDLE;
+
+// Queue managers
+static PSBQueueManager *g_psbQueueMgr = NULL;
+static BioQueueManager *g_bioQueueMgr = NULL;
 
 /******************************************************************************
  * Test Suite Thread Function
@@ -56,8 +66,8 @@ static int CVICALLBACK PSBTestSuiteThread(void *functionData) {
 	// Wait for the status to pause completely to avoid data corruption
 	Delay(UI_UPDATE_RATE_SLOW);
     
-    // Get PSB handle from status module
-    PSB_Handle* psb = Status_GetPSBHandle();
+    // Get PSB handle from queue manager
+    PSB_Handle* psb = PSB_QueueGetHandle(g_psbQueueMgr);
     if (psb == NULL) {
         // Update UI and log error
         if (g_mainPanelHandle > 0) {
@@ -128,181 +138,288 @@ static int CVICALLBACK PSBTestSuiteThread(void *functionData) {
 /******************************************************************************
  * Main Function
  ******************************************************************************/
-int main(int argc, char *argv[]) {
-    int error = SUCCESS;
+int main (int argc, char *argv[]) {    
+    if (InitCVIRTE (0, argv, 0) == 0)
+        return -1;    /* out of memory */
     
-    // Initialize CVI runtime
-    if (InitCVIRTE(0, argv, 0) == 0) {
-        return -1;
-    }
+    // Create thread pool first
+    CmtNewThreadPool(DEFAULT_THREAD_POOL_SIZE, &g_threadPool);
+    
+    // Create busy lock
+    CmtNewLock(NULL, 0, &g_busyLock);
     
     // Initialize logging
-    LogMessage("=== Battery Tester Starting ===");
-    LogMessage("Version: %s", PROJECT_VERSION);
+    RegisterLoggingCleanup();
     
-    // Load UI
-    g_mainPanelHandle = LoadPanel(0, "BatteryTester.uir", PANEL);
-    if (g_mainPanelHandle < 0) {
-        LogError("Failed to load UI panel");
-        return ERR_UI - 1;
-    }
+    // Load panel
+    if ((g_mainPanelHandle = LoadPanel (0, "BatteryTester.uir", PANEL)) < 0)
+        return -1;
     
-    // Show UI
-    DisplayPanel(g_mainPanelHandle);
-    LogMessage("Starting Battery Tester...");
+    // Initialize status monitoring BEFORE queue managers
+    Status_Initialize(g_mainPanelHandle);
     
-    // Create thread pool
-    error = CmtNewThreadPool(THREAD_POOL_SIZE, &g_threadPool);
-    if (error != 0) {
-        LogError("Failed to create thread pool: %d", error);
-        RunUserInterface();
-        DiscardPanel(g_mainPanelHandle);
-        return ERR_THREAD_POOL;
-    }
-    
-    // Initialize and start status monitoring
-    error = Status_Initialize(g_mainPanelHandle);
-    if (error == SUCCESS) {
-        error = Status_Start();
-        if (error != SUCCESS) {
-            LogError("Failed to start status monitoring: %d", error);
+    // Initialize PSB queue manager with auto-discovery
+    if (STATUS_MONITOR_PSB) {
+        LogMessage("Initializing PSB queue manager...");
+        g_psbQueueMgr = PSB_QueueInit(PSB_TARGET_SERIAL);
+        
+        if (g_psbQueueMgr) {
+            PSB_SetGlobalQueueManager(g_psbQueueMgr);
+            
+            // Update status module with PSB handle
+            PSB_Handle *psbHandle = PSB_QueueGetHandle(g_psbQueueMgr);
+            if (psbHandle) {
+                Status_SetPSBHandle(psbHandle);
+                LogMessage("PSB queue manager initialized successfully");
+            } else {
+                LogWarning("PSB queue manager initialized but not connected");
+            }
+        } else {
+            LogError("Failed to initialize PSB queue manager");
         }
-    } else {
-        LogError("Failed to initialize status module: %d", error);
     }
+    
+    // Initialize BioLogic queue manager if BioLogic monitoring is enabled
+	if (STATUS_MONITOR_BIOLOGIC) {
+	    LogMessage("Initializing BioLogic queue manager...");
+	    g_bioQueueMgr = BIO_QueueInit(BIOLOGIC_DEFAULT_ADDRESS);  // Pass address, not -1
+	    
+	    if (g_bioQueueMgr) {
+	        BIO_SetGlobalQueueManager(g_bioQueueMgr);
+	        LogMessage("BioLogic queue manager initialized");
+	    }
+	}
+    
+    // Now start status monitoring (which will use the queue managers)
+    Status_Start();
+    
+    // Display panel
+    DisplayPanel (g_mainPanelHandle);
     
     // Run the UI
-    RunUserInterface();
+    RunUserInterface ();
     
     // Cleanup
-    LogMessage("Shutting down Battery Tester...");
+    if (g_psbQueueMgr) {
+        PSB_QueueShutdown(g_psbQueueMgr);
+        PSB_SetGlobalQueueManager(NULL);
+    }
     
-    // Stop and cleanup status monitoring
+    if (g_bioQueueMgr) {
+        BIO_QueueShutdown(g_bioQueueMgr);
+        BIO_SetGlobalQueueManager(NULL);
+    }
+    
     Status_Cleanup();
     
-    // Cancel any running test suite
-    if (testSuiteState == TEST_STATE_RUNNING) {
-        PSB_TestSuite_Cancel(&testContext);
-        
-        // Wait for test suite thread to complete
-        CmtWaitForThreadPoolFunctionCompletion(g_threadPool, testSuiteThreadID, 
-                                             OPT_TP_PROCESS_EVENTS_WHILE_WAITING);
+    // Dispose lock
+    if (g_busyLock) {
+        CmtDiscardLock(g_busyLock);
     }
     
-    // Discard thread pool
-    if (g_threadPool > 0) {
+    // Discard panel and thread pool
+    DiscardPanel (g_mainPanelHandle);
+    if (g_threadPool) {
         CmtDiscardThreadPool(g_threadPool);
-        g_threadPool = 0;
-    }
-    
-    // Cleanup BioLogic DLL if initialized
-    if (IsBioLogicInitialized()) {
-        CleanupBioLogic();
-    }
-    
-    // Discard panel
-    if (g_mainPanelHandle > 0) {
-        DiscardPanel(g_mainPanelHandle);
     }
     
     return 0;
 }
 
 /******************************************************************************
- * Panel Callback
+ * Modified Remote Mode Toggle Callback
  ******************************************************************************/
-int CVICALLBACK PanelCallback(int panel, int event, void *callbackData, 
-                              int eventData1, int eventData2) {
-    if (event == EVENT_CLOSE) {
-        QuitUserInterface(0);
+
+// Worker thread data structure
+typedef struct {
+    int panel;
+    int control;
+    int enable;
+} RemoteModeData;
+
+// Worker thread function
+int CVICALLBACK RemoteModeWorkerThread(void *functionData) {
+    RemoteModeData *data = (RemoteModeData*)functionData;
+    PSB_Handle *psbHandle = PSB_QueueGetHandle(g_psbQueueMgr);
+    
+    if (psbHandle) {
+        // Use queued version
+        int result = PSB_SetRemoteModeQueued(psbHandle, data->enable);
+        
+        if (result != PSB_SUCCESS) {
+            LogError("Failed to set remote mode: %s", PSB_GetErrorString(result));
+        }
+        
+        // Update LED via PostDeferredCall
+        int *ledValue = malloc(sizeof(int));
+        if (ledValue) {
+            *ledValue = data->enable;
+            PostDeferredCall(UpdateRemoteLED, ledValue);
+        }
+    } else {
+        LogWarning("PSB not connected - cannot change remote mode");
+    }
+    
+    // Clear busy flag
+    CmtGetLock(g_busyLock);
+    g_systemBusy = 0;
+    CmtReleaseLock(g_busyLock);
+    
+    free(data);
+    return 0;
+}
+
+// Deferred callback to update LED
+void CVICALLBACK UpdateRemoteLED(void *callbackData) {
+    int *value = (int*)callbackData;
+    if (value && g_mainPanelHandle > 0) {
+        SetCtrlVal(g_mainPanelHandle, PANEL_LED_REMOTE_MODE, *value);
+        free(value);
+    }
+}
+
+// Modified UI callback
+int CVICALLBACK RemoteModeToggle (int panel, int control, int event,
+                                 void *callbackData, int eventData1, int eventData2) {
+    switch (event) {
+        case EVENT_COMMIT:
+            // Check if system is busy
+            CmtGetLock(g_busyLock);
+            if (g_systemBusy) {
+                CmtReleaseLock(g_busyLock);
+                LogWarning("System is busy - please wait for current operation to complete");
+                // Reset toggle to current state
+                PSB_Handle *psbHandle = PSB_QueueGetHandle(g_psbQueueMgr);
+                if (psbHandle) {
+                    PSB_Status status;
+                    if (PSB_GetStatusQueued(psbHandle, &status) == PSB_SUCCESS) {
+                        SetCtrlVal(panel, control, status.remoteMode);
+                    }
+                }
+                return 0;
+            }
+            
+            // Mark system as busy
+            g_systemBusy = 1;
+            CmtReleaseLock(g_busyLock);
+            
+            // Get toggle value
+            int enable;
+            GetCtrlVal(panel, control, &enable);
+            
+            // Create worker thread data
+            RemoteModeData *data = malloc(sizeof(RemoteModeData));
+            if (data) {
+                data->panel = panel;
+                data->control = control;
+                data->enable = enable;
+                
+                CmtThreadFunctionID threadID;
+                CmtScheduleThreadPoolFunction(g_threadPool, 
+                    RemoteModeWorkerThread, data, &threadID);
+            } else {
+                // Failed to allocate - clear busy flag
+                CmtGetLock(g_busyLock);
+                g_systemBusy = 0;
+                CmtReleaseLock(g_busyLock);
+            }
+            break;
     }
     return 0;
 }
 
 /******************************************************************************
- * Remote Mode Toggle Callback
+ * Modified Test PSB Callback
  ******************************************************************************/
-int CVICALLBACK RemoteModeToggle(int panel, int control, int event, void *callbackData,
-                                 int eventData1, int eventData2) {
-    if (event != EVENT_COMMIT) {
-        return 0;
-    }
+
+// Test suite worker thread
+int CVICALLBACK TestPSBWorkerThread(void *functionData) {
+    TestSuiteContext *context = (TestSuiteContext*)functionData;
     
-    // Check if PSB is connected through status module
-    ConnectionState psbState = Status_GetDeviceState(1);
+    // Pause status monitoring during test
+    Status_Pause();
     
-    if (psbState != CONN_STATE_CONNECTED || testSuiteState == TEST_STATE_RUNNING) {
-        LogWarningEx(LOG_DEVICE_PSB, "Cannot change remote mode - PSB %s, test suite %s", 
-                     psbState != CONN_STATE_CONNECTED ? "not connected" : "connected",
-                     testSuiteState == TEST_STATE_RUNNING ? "running" : "not running");
-        return 0;
-    }
+    // Run the test suite
+    int result = PSB_TestSuite_Run(context);
     
-    // Get PSB handle from status module
-    PSB_Handle* psb = Status_GetPSBHandle();
-    if (psb == NULL) {
-        LogError("PSB handle not available");
-        return 0;
-    }
+    // Resume status monitoring
+    Status_Resume();
     
-    int toggleState;
-    GetCtrlVal(panel, PANEL_TOGGLE_REMOTE_MODE, &toggleState);
+    // Clean up
+    PSB_TestSuite_Cleanup(context);
+    free(context);
     
-    DEBUG_PRINT("User requesting Remote Mode: %s", toggleState ? "ON" : "OFF");
+    // Re-enable UI controls
+    SetCtrlAttribute(g_mainPanelHandle, PANEL_BTN_TEST_PSB, ATTR_DIMMED, 0);
+    SetCtrlAttribute(g_mainPanelHandle, PANEL_TOGGLE_REMOTE_MODE, ATTR_DIMMED, 0);
+    SetCtrlAttribute(g_mainPanelHandle, PANEL_BTN_TEST_BIOLOGIC, ATTR_DIMMED, 0);
+    // ... enable other controls
     
-    int result = PSB_SetRemoteMode(psb, toggleState);
-    if (result != SUCCESS) {
-        LogErrorEx(LOG_DEVICE_PSB, "Failed to set remote mode: %s", PSB_GetErrorString(result));
-        SetCtrlVal(panel, PANEL_STR_PSB_STATUS, "Failed to set remote mode");
-        SetCtrlVal(panel, PANEL_TOGGLE_REMOTE_MODE, !toggleState);
-        return 0;
-    }
-    
-    char statusMsg[SMALL_BUFFER_SIZE];
-    SAFE_SPRINTF(statusMsg, sizeof(statusMsg), "Remote mode %s", toggleState ? "ON" : "OFF");
-    SetCtrlVal(panel, PANEL_STR_PSB_STATUS, statusMsg);
-    LogMessageEx(LOG_DEVICE_PSB, "%s", statusMsg);
+    // Clear busy flag
+    CmtGetLock(g_busyLock);
+    g_systemBusy = 0;
+    CmtReleaseLock(g_busyLock);
     
     return 0;
 }
 
-/******************************************************************************
- * Test PSB Button Callback - Runs Test Suite
- ******************************************************************************/
-int CVICALLBACK TestPSBCallback(int panel, int control, int event, void *callbackData,
-                                int eventData1, int eventData2) {
-    if (event != EVENT_COMMIT) {
-        return 0;
+int CVICALLBACK TestPSBCallback (int panel, int control, int event,
+                                void *callbackData, int eventData1, int eventData2) {
+    switch (event) {
+        case EVENT_COMMIT:
+            // Check if system is busy
+            CmtGetLock(g_busyLock);
+            if (g_systemBusy) {
+                CmtReleaseLock(g_busyLock);
+                LogWarning("Cannot start test - system is busy");
+                MessagePopup("System Busy", 
+                           "Another operation is in progress.\n"
+                           "Please wait for it to complete before starting a test.");
+                return 0;
+            }
+            g_systemBusy = 1;
+            CmtReleaseLock(g_busyLock);
+            
+            PSB_Handle *psbHandle = PSB_QueueGetHandle(g_psbQueueMgr);
+            if (!psbHandle || !psbHandle->isConnected) {
+                LogError("PSB not connected - cannot run test suite");
+                MessagePopup("PSB Not Connected", 
+                           "The PSB 10000 is not connected.\n"
+                           "Please ensure it is connected before running tests.");
+                
+                CmtGetLock(g_busyLock);
+                g_systemBusy = 0;
+                CmtReleaseLock(g_busyLock);
+                return 0;
+            }
+            
+            // Disable UI controls during test
+            SetCtrlAttribute(panel, PANEL_BTN_TEST_PSB, ATTR_DIMMED, 1);
+            SetCtrlAttribute(panel, PANEL_TOGGLE_REMOTE_MODE, ATTR_DIMMED, 1);
+            SetCtrlAttribute(panel, PANEL_BTN_TEST_BIOLOGIC, ATTR_DIMMED, 1);
+            // ... disable other controls
+            
+            // Create test context
+            TestSuiteContext *context = calloc(1, sizeof(TestSuiteContext));
+            if (context) {
+                PSB_TestSuite_Initialize(context, psbHandle, panel, PANEL_STR_PSB_STATUS);
+                
+                // Start test in worker thread
+                CmtThreadFunctionID threadID;
+                CmtScheduleThreadPoolFunction(g_threadPool, 
+                    TestPSBWorkerThread, context, &threadID);
+            } else {
+                // Failed to allocate
+                SetCtrlAttribute(panel, PANEL_BTN_TEST_PSB, ATTR_DIMMED, 0);
+                SetCtrlAttribute(panel, PANEL_TOGGLE_REMOTE_MODE, ATTR_DIMMED, 0);
+                SetCtrlAttribute(panel, PANEL_BTN_TEST_BIOLOGIC, ATTR_DIMMED, 0);
+                
+                CmtGetLock(g_busyLock);
+                g_systemBusy = 0;
+                CmtReleaseLock(g_busyLock);
+            }
+            break;
     }
-    
-    // Check if PSB is connected through status module
-    ConnectionState psbState = Status_GetDeviceState(1);
-    
-    if (psbState != CONN_STATE_CONNECTED) {
-        SetCtrlVal(panel, PANEL_STR_PSB_STATUS, "PSB not connected");
-        LogErrorEx(LOG_DEVICE_PSB, "PSB not connected through status module", psbState);
-        return 0;
-    }
-    
-    if (testSuiteState == TEST_STATE_RUNNING) {
-        SetCtrlVal(panel, PANEL_STR_PSB_STATUS, "Test suite already running");
-        LogWarningEx(LOG_DEVICE_PSB, "Test suite already running");
-        return 0;
-    }
-    
-    // Disable test button during execution
-    SetCtrlAttribute(panel, control, ATTR_DIMMED, 1);
-    testButtonControl = control;
-    
-    // Run test suite on background thread
-    int error = CmtScheduleThreadPoolFunction(g_threadPool, PSBTestSuiteThread, NULL, &testSuiteThreadID);
-    if (error != 0) {
-        LogErrorEx(LOG_DEVICE_PSB, "Failed to schedule test suite thread: %d", error);
-        SetCtrlAttribute(panel, control, ATTR_DIMMED, 0);
-        SetCtrlVal(panel, PANEL_STR_PSB_STATUS, "Failed to start test suite");
-        return 0;
-    }
-    
     return 0;
 }
 
@@ -358,5 +475,119 @@ int CVICALLBACK TestBiologicCallback(int panel, int control, int event,
     // Re-enable the button
     SetCtrlAttribute(panel, control, ATTR_DIMMED, 0);
     
+    return 0;
+}
+
+/******************************************************************************
+ * Panel Callback - Cleanly shuts down the entire program
+ ******************************************************************************/
+
+int CVICALLBACK PanelCallback(int panel, int event, void *callbackData, 
+                                   int eventData1, int eventData2) {
+    switch (event) {
+        case EVENT_CLOSE:
+        case EVENT_COMMIT:  // For Exit/Quit buttons
+            
+            // Check if system is busy
+            if (g_busyLock) {
+                CmtGetLock(g_busyLock);
+                if (g_systemBusy) {
+                    CmtReleaseLock(g_busyLock);
+                    
+                    // Ask user if they really want to quit
+                    int response = ConfirmPopup("System Busy", 
+                        "An operation is in progress.\n\n"
+                        "Are you sure you want to exit?");
+                    
+                    if (!response) {
+                        return 0;  // Cancel the close
+                    }
+                    
+                    // User wants to force quit - mark system as not busy
+                    CmtGetLock(g_busyLock);
+                    g_systemBusy = 0;
+                    CmtReleaseLock(g_busyLock);
+                } else {
+                    CmtReleaseLock(g_busyLock);
+                }
+            }
+            
+            // Log shutdown
+            LogMessage("========================================");
+            LogMessage("Shutting down Battery Tester application");
+            LogMessage("========================================");
+            
+            // Stop status monitoring first
+            LogMessage("Stopping status monitoring...");
+            Status_Stop();
+            
+            // The Status_Stop() function already waits for its threads to complete
+            // using CmtWaitForThreadPoolFunctionCompletion, so we just need a small
+            // delay to ensure everything is settled
+            ProcessSystemEvents();
+            Delay(0.2);
+            
+            // Shutdown PSB queue manager
+			if (g_psbQueueMgr) {
+			    LogMessage("Shutting down PSB queue manager...");
+			    PSBQueueManager *tempMgr = g_psbQueueMgr;
+			    g_psbQueueMgr = NULL;  // Clear global pointer FIRST
+			    PSB_SetGlobalQueueManager(NULL);  // Clear global reference
+			    PSB_QueueShutdown(tempMgr);  // Then shutdown
+			}
+            
+            // Shutdown BioLogic queue manager
+			if (g_bioQueueMgr) {
+			    LogMessage("Shutting down BioLogic queue manager...");
+			    BioQueueManager *tempMgr = g_bioQueueMgr;
+			    g_bioQueueMgr = NULL;  // Clear global pointer FIRST
+			    BIO_SetGlobalQueueManager(NULL);  // Clear global reference
+			    BIO_QueueShutdown(tempMgr);  // Then shutdown
+			}
+            
+            // Both queue shutdown functions already wait for their threads
+            ProcessSystemEvents();
+            Delay(0.2);
+            
+            // Clean up status module
+            Status_Cleanup();
+            
+            // Clean up thread pool
+            if (g_threadPool) {
+                LogMessage("Shutting down thread pool...");
+                
+                // All worker threads should have completed by now since:
+                // - Status_Stop() waits for its threads
+                // - PSB_QueueShutdown() waits for its thread
+                // - BIO_QueueShutdown() waits for its thread
+                
+                // Just give a small delay to ensure everything is cleaned up
+                ProcessSystemEvents();
+                Delay(0.1);
+                
+                CmtDiscardThreadPool(g_threadPool);
+                g_threadPool = 0;
+            }
+            
+            // Dispose of locks
+            if (g_busyLock) {
+                CmtDiscardLock(g_busyLock);
+                g_busyLock = 0;
+            }
+            
+            // Save any configuration or state if needed
+            // SaveConfiguration();  // Implement if needed
+            
+            // Final cleanup
+            LogMessage("Cleanup complete. Exiting application.");
+            LogMessage("========================================");
+            
+            // Close logging system
+            // CloseLogging();  // If you have a logging cleanup function
+            
+            // Quit the user interface
+            QuitUserInterface(0);
+            break;
+    }
     return 0;
 }

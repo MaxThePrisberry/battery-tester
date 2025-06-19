@@ -13,6 +13,8 @@
 #include "logging.h"
 #include <utility.h>      // For Timer() function
 #include <math.h>         // For pow() function
+#include "psb10000_queue.h"
+#include "biologic_queue.h"
 
 // Use hardware timer instead of async timer for better compatibility
 #include <toolbox.h>
@@ -32,16 +34,16 @@ static int g_statusPaused = 0;  // Added for pause/resume functionality
 static void UpdateDeviceLED(int isPSB, ConnectionState state);
 static void UpdateDeviceStatus(int isPSB, const char* message);
 static void UpdatePSBValues(PSB_Status* status);
-static int ConnectPSB(void);
-static int ConnectBioLogic(void);
-static void DisconnectPSB(void);
-static void DisconnectBioLogic(void);
-static double CalculateRetryDelay(int retryCount);
 static void CVICALLBACK DeferredLEDUpdate(void* data);
 static void CVICALLBACK DeferredStatusUpdate(void* data);
 static void CVICALLBACK DeferredNumericUpdate(void* data);
 static int CVICALLBACK Status_TimerThread(void *functionData);
 static void Status_TimerUpdate(void);
+
+static void PSBStatusCallback(CommandID cmdId, PSBCommandType type, 
+                            PSBCommandResult *result, void *userData);
+static void BioConnectionCallback(BioCommandID cmdId, BioCommandType type,
+                                BioCommandResult *result, void *userData);
 
 /******************************************************************************
  * Structure for deferred UI updates
@@ -102,7 +104,7 @@ int Status_Start(void) {
     
     LogMessage("Starting device status monitoring...");
     
-    // Start discovery thread
+    // Start discovery thread - Note: PSB discovery is now handled by queue manager
     if (g_threadPool > 0) {
         int error = CmtScheduleThreadPoolFunction(g_threadPool, Status_DiscoveryThread, 
                                                   NULL, &g_status.discoveryThreadID);
@@ -156,14 +158,7 @@ int Status_Stop(void) {
         g_status.discoveryThreadID = 0;
     }
     
-    // Disconnect devices
-    if (STATUS_MONITOR_PSB) {
-        DisconnectPSB();
-    }
-    
-    if (STATUS_MONITOR_BIOLOGIC) {
-        DisconnectBioLogic();
-    }
+    // No need to disconnect - queue managers handle their own cleanup
     
     LogMessage("Status monitoring stopped");
     return SUCCESS;
@@ -258,6 +253,31 @@ PSB_Handle* Status_GetPSBHandle(void) {
     return g_status.psbStatus.psbHandle;
 }
 
+void Status_SetPSBHandle(PSB_Handle* handle) {
+    if (!g_initialized) {
+        return;
+    }
+    
+    g_status.psbStatus.psbHandle = handle;
+    
+    if (handle && handle->isConnected) {
+        g_status.psbStatus.state = CONN_STATE_CONNECTED;
+        g_status.psbStatus.retryCount = 0;
+        UpdateDeviceLED(1, CONN_STATE_CONNECTED);
+        UpdateDeviceStatus(1, "PSB Connected");
+        
+        // Get initial status
+        PSB_Status status;
+        if (PSB_GetStatus(handle, &status) == PSB_SUCCESS) {
+            UpdatePSBValues(&status);
+        }
+    } else {
+        g_status.psbStatus.state = CONN_STATE_ERROR;
+        UpdateDeviceLED(1, CONN_STATE_ERROR);
+        UpdateDeviceStatus(1, "PSB Not Connected");
+    }
+}
+
 int32_t Status_GetBioLogicID(void) {
     if (!g_initialized || g_status.biologicStatus.state != CONN_STATE_CONNECTED) {
         return -1;
@@ -273,43 +293,48 @@ int32_t Status_GetBioLogicID(void) {
 int CVICALLBACK Status_DiscoveryThread(void *functionData) {
     LogMessage("Device discovery thread started");
     
-    // Connect to PSB if enabled
+    // PSB - Just check if connected via queue manager
     if (STATUS_MONITOR_PSB && !g_status.shutdownRequested) {
-        UpdateDeviceStatus(1, "Searching for PSB...");
-        UpdateDeviceLED(1, CONN_STATE_DISCOVERING);
-        g_status.psbStatus.state = CONN_STATE_DISCOVERING;
-        
-        int result = ConnectPSB();
-        if (result == SUCCESS) {
-            g_status.psbStatus.state = CONN_STATE_CONNECTED;
-            g_status.psbStatus.retryCount = 0;
-            UpdateDeviceLED(1, CONN_STATE_CONNECTED);
-            UpdateDeviceStatus(1, "PSB Connected");
-        } else {
-            g_status.psbStatus.state = CONN_STATE_ERROR;
-            g_status.psbStatus.nextRetryTime = Timer() + CalculateRetryDelay(0);
-            UpdateDeviceLED(1, CONN_STATE_ERROR);
-            UpdateDeviceStatus(1, "PSB Connection Failed");
+        PSBQueueManager *psbQueueMgr = PSB_GetGlobalQueueManager();
+        if (psbQueueMgr) {
+            PSBQueueStats stats;
+            PSB_QueueGetStats(psbQueueMgr, &stats);
+            
+            if (stats.isConnected) {
+                PSB_Handle *handle = PSB_QueueGetHandle(psbQueueMgr);
+                if (handle) {
+                    Status_SetPSBHandle(handle);
+                    g_status.psbStatus.state = CONN_STATE_CONNECTED;
+                    UpdateDeviceLED(1, CONN_STATE_CONNECTED);
+                    UpdateDeviceStatus(1, "PSB Connected");
+                    LogMessage("PSB connected via queue manager");
+                }
+            } else {
+                g_status.psbStatus.state = CONN_STATE_ERROR;
+                UpdateDeviceLED(1, CONN_STATE_ERROR);
+                UpdateDeviceStatus(1, "PSB Not Connected");
+            }
         }
     }
     
-    // Connect to BioLogic if enabled
+    // BioLogic - Just check if connected via queue manager
     if (STATUS_MONITOR_BIOLOGIC && !g_status.shutdownRequested) {
-        UpdateDeviceStatus(0, "Connecting to BioLogic...");
-        UpdateDeviceLED(0, CONN_STATE_CONNECTING);
-        g_status.biologicStatus.state = CONN_STATE_CONNECTING;
-        
-        int result = ConnectBioLogic();
-        if (result == SUCCESS) {
-            g_status.biologicStatus.state = CONN_STATE_CONNECTED;
-            g_status.biologicStatus.retryCount = 0;
-            UpdateDeviceLED(0, CONN_STATE_CONNECTED);
-            UpdateDeviceStatus(0, "BioLogic Connected");
-        } else {
-            g_status.biologicStatus.state = CONN_STATE_ERROR;
-            g_status.biologicStatus.nextRetryTime = Timer() + CalculateRetryDelay(0);
-            UpdateDeviceLED(0, CONN_STATE_ERROR);
-            UpdateDeviceStatus(0, "BioLogic Connection Failed");
+        BioQueueManager *bioQueueMgr = BIO_GetGlobalQueueManager();
+        if (bioQueueMgr) {
+            BioQueueStats stats;
+            BIO_QueueGetStats(bioQueueMgr, &stats);
+            
+            if (stats.isConnected) {
+                g_status.biologicStatus.state = CONN_STATE_CONNECTED;
+                // Note: You'll need to add a way to get device ID from queue manager
+                UpdateDeviceLED(0, CONN_STATE_CONNECTED);
+                UpdateDeviceStatus(0, "BioLogic Connected");
+                LogMessage("BioLogic connected via queue manager");
+            } else {
+                g_status.biologicStatus.state = CONN_STATE_ERROR;
+                UpdateDeviceLED(0, CONN_STATE_ERROR);
+                UpdateDeviceStatus(0, "BioLogic Not Connected");
+            }
         }
     }
     
@@ -357,230 +382,64 @@ static void Status_TimerUpdate(void) {
     
     double currentTime = Timer();
     
-    // Update PSB if enabled
+    // Update PSB status
     if (STATUS_MONITOR_PSB) {
-        DeviceStatus* psbStatus = &g_status.psbStatus;
-        
-        switch (psbStatus->state) {
-            case CONN_STATE_CONNECTED:
-                // Get and update PSB values
-                if (psbStatus->psbHandle != NULL) {
-                    PSB_Status status;
-                    int result = PSB_GetStatus(psbStatus->psbHandle, &status);
-                    
-                    if (result == PSB_SUCCESS) {
-                        // Update UI values
-                        UpdatePSBValues(&status);
-                        psbStatus->lastUpdateTime = currentTime;
-                        
-                        // Update remote mode LED if needed
-                        UIUpdateData* ledData = malloc(sizeof(UIUpdateData));
-                        if (ledData) {
-                            ledData->control = PANEL_LED_REMOTE_MODE;
-                            ledData->intValue = status.remoteMode;
-                            PostDeferredCall(DeferredLEDUpdate, ledData);
-                        }
-                    } else {
-                        // Connection lost
-                        LogError("Lost connection to PSB: %s", PSB_GetErrorString(result));
-                        psbStatus->state = CONN_STATE_ERROR;
-                        psbStatus->nextRetryTime = currentTime + CalculateRetryDelay(0);
-                        UpdateDeviceLED(1, CONN_STATE_ERROR);
-                        UpdateDeviceStatus(1, "PSB Connection Lost");
-                        DisconnectPSB();
-                    }
-                }
-                break;
+        PSBQueueManager *psbQueueMgr = PSB_GetGlobalQueueManager();
+        if (psbQueueMgr) {
+            PSBQueueStats stats;
+            PSB_QueueGetStats(psbQueueMgr, &stats);
+            
+            // Update connection state
+            ConnectionState oldState = g_status.psbStatus.state;
+            ConnectionState newState = stats.isConnected ? CONN_STATE_CONNECTED : CONN_STATE_ERROR;
+            
+            if (oldState != newState) {
+                g_status.psbStatus.state = newState;
+                UpdateDeviceLED(1, newState);
+                UpdateDeviceStatus(1, stats.isConnected ? "PSB Connected" : "PSB Disconnected");
                 
-            case CONN_STATE_ERROR:
-            case CONN_STATE_RECONNECTING:
-                // Check if it's time to retry
-                if (currentTime >= psbStatus->nextRetryTime) {
-                    psbStatus->state = CONN_STATE_RECONNECTING;
-                    UpdateDeviceStatus(1, "Reconnecting to PSB...");
-                    UpdateDeviceLED(1, CONN_STATE_RECONNECTING);
-                    
-                    int result = ConnectPSB();
-                    if (result == SUCCESS) {
-                        psbStatus->state = CONN_STATE_CONNECTED;
-                        psbStatus->retryCount = 0;
-                        UpdateDeviceLED(1, CONN_STATE_CONNECTED);
-                        UpdateDeviceStatus(1, "PSB Reconnected");
-                    } else {
-                        psbStatus->retryCount++;
-                        psbStatus->nextRetryTime = currentTime + 
-                            CalculateRetryDelay(psbStatus->retryCount);
-                        UpdateDeviceLED(1, CONN_STATE_ERROR);
-                        char msg[MEDIUM_BUFFER_SIZE];
-                        SAFE_SPRINTF(msg, sizeof(msg), "PSB Reconnect Failed (Retry %d)", 
-                                     psbStatus->retryCount);
-                        UpdateDeviceStatus(1, msg);
+                if (stats.isConnected) {
+                    PSB_Handle *handle = PSB_QueueGetHandle(psbQueueMgr);
+                    if (handle) {
+                        Status_SetPSBHandle(handle);
                     }
                 }
-                break;
+            }
+            
+            // Get status if connected
+            if (stats.isConnected && !PSB_QueueHasCommandType(psbQueueMgr, PSB_CMD_GET_STATUS)) {
+                PSB_QueueCommandAsync(psbQueueMgr, PSB_CMD_GET_STATUS, NULL, 
+                                    PSB_PRIORITY_NORMAL, PSBStatusCallback, &g_status.psbStatus);
+            }
         }
     }
     
-    // Check BioLogic connection status (no continuous monitoring per requirements)
+    // Update BioLogic status
     if (STATUS_MONITOR_BIOLOGIC) {
-        DeviceStatus* bioStatus = &g_status.biologicStatus;
-        
-        switch (bioStatus->state) {
-            case CONN_STATE_CONNECTED:
-                // Just verify connection is still alive periodically
-                if (currentTime - bioStatus->lastUpdateTime > 10.0) { // Check every 10 seconds
-                    if (bioStatus->biologicID >= 0) {
-                        int result = BL_TestConnection(bioStatus->biologicID);
-                        if (result == SUCCESS) {
-                            bioStatus->lastUpdateTime = currentTime;
-                        } else {
-                            LogError("Lost connection to BioLogic: %s", GetErrorString(result));
-                            bioStatus->state = CONN_STATE_ERROR;
-                            bioStatus->nextRetryTime = currentTime + CalculateRetryDelay(0);
-                            UpdateDeviceLED(0, CONN_STATE_ERROR);
-                            UpdateDeviceStatus(0, "BioLogic Connection Lost");
-                            DisconnectBioLogic();
-                        }
-                    }
-                }
-                break;
-                
-            case CONN_STATE_ERROR:
-            case CONN_STATE_RECONNECTING:
-                // Check if it's time to retry
-                if (currentTime >= bioStatus->nextRetryTime) {
-                    bioStatus->state = CONN_STATE_RECONNECTING;
-                    UpdateDeviceStatus(0, "Reconnecting to BioLogic...");
-                    UpdateDeviceLED(0, CONN_STATE_RECONNECTING);
+        BioQueueManager *bioQueueMgr = BIO_GetGlobalQueueManager();
+        if (bioQueueMgr) {
+            BioQueueStats stats;
+            BIO_QueueGetStats(bioQueueMgr, &stats);
+            
+            // Update connection state
+            ConnectionState oldState = g_status.biologicStatus.state;
+            ConnectionState newState = stats.isConnected ? CONN_STATE_CONNECTED : CONN_STATE_ERROR;
+            
+            if (oldState != newState) {
+                g_status.biologicStatus.state = newState;
+                UpdateDeviceLED(0, newState);
+                UpdateDeviceStatus(0, stats.isConnected ? "BioLogic Connected" : "BioLogic Disconnected");
+            }
+            
+            // Periodic connection test if connected
+            if (stats.isConnected && 
+                (currentTime - g_status.biologicStatus.lastUpdateTime > 10.0) &&
+                !BIO_QueueHasCommandType(bioQueueMgr, BIO_CMD_TEST_CONNECTION)) {
                     
-                    int result = ConnectBioLogic();
-                    if (result == SUCCESS) {
-                        bioStatus->state = CONN_STATE_CONNECTED;
-                        bioStatus->retryCount = 0;
-                        UpdateDeviceLED(0, CONN_STATE_CONNECTED);
-                        UpdateDeviceStatus(0, "BioLogic Reconnected");
-                    } else {
-                        bioStatus->retryCount++;
-                        bioStatus->nextRetryTime = currentTime + 
-                            CalculateRetryDelay(bioStatus->retryCount);
-                        UpdateDeviceLED(0, CONN_STATE_ERROR);
-                        char msg[MEDIUM_BUFFER_SIZE];
-                        SAFE_SPRINTF(msg, sizeof(msg), "BioLogic Reconnect Failed (Retry %d)", 
-                                     bioStatus->retryCount);
-                        UpdateDeviceStatus(0, msg);
-                    }
-                }
-                break;
+                BIO_QueueCommandAsync(bioQueueMgr, BIO_CMD_TEST_CONNECTION, NULL,
+                                    BIO_PRIORITY_NORMAL, BioConnectionCallback, &g_status.biologicStatus);
+            }
         }
-    }
-}
-
-/******************************************************************************
- * Device Connection Functions
- ******************************************************************************/
-
-static int ConnectPSB(void) {
-    // Allocate PSB handle if needed
-    if (g_status.psbStatus.psbHandle == NULL) {
-        g_status.psbStatus.psbHandle = &g_status.psbDevice;
-    }
-    
-    // Use auto-discovery to find and connect
-    int result = PSB_AutoDiscover(PSB_TARGET_SERIAL, g_status.psbStatus.psbHandle);
-    
-    if (result == PSB_SUCCESS) {
-        LogMessage("Successfully connected to PSB %s", PSB_TARGET_SERIAL);
-        
-        // Enable remote mode for control
-        result = PSB_SetRemoteMode(g_status.psbStatus.psbHandle, 1);
-        if (result != PSB_SUCCESS) {
-            LogWarning("Failed to set PSB remote mode: %s", PSB_GetErrorString(result));
-        }
-        
-        // Get initial status
-        PSB_Status status;
-        result = PSB_GetStatus(g_status.psbStatus.psbHandle, &status);
-        if (result == PSB_SUCCESS) {
-            UpdatePSBValues(&status);
-            g_status.psbStatus.lastUpdateTime = Timer();
-        }
-        
-        return SUCCESS;
-    } else {
-        LogError("Failed to connect to PSB: %s", PSB_GetErrorString(result));
-        SAFE_STRCPY(g_status.psbStatus.lastError, PSB_GetErrorString(result), 
-                    sizeof(g_status.psbStatus.lastError));
-        return result;
-    }
-}
-
-static int ConnectBioLogic(void) {
-    // Initialize BioLogic DLL if needed
-    if (!IsBioLogicInitialized()) {
-        int result = InitializeBioLogic();
-        if (result != SUCCESS) {
-            LogError("Failed to initialize BioLogic DLL: %d", result);
-            return result;
-        }
-    }
-    
-    // Connect to BioLogic
-    TDeviceInfos_t deviceInfo;
-    int32_t deviceID = -1;
-    
-    int result = BL_Connect(BIOLOGIC_DEFAULT_ADDRESS, TIMEOUT, &deviceID, &deviceInfo);
-    
-    if (result == SUCCESS) {
-        g_status.biologicStatus.biologicID = deviceID;
-        
-        const char* deviceTypeName = "Unknown";
-        switch(deviceInfo.DeviceCode) {
-            case KBIO_DEV_SP150E: deviceTypeName = "SP-150e"; break;
-            case KBIO_DEV_SP150: deviceTypeName = "SP-150"; break;
-            default: break;
-        }
-        
-        LogMessage("Connected to BioLogic %s (ID: %d)", deviceTypeName, deviceID);
-        LogMessage("  Firmware Version: %d", deviceInfo.FirmwareVersion);
-        LogMessage("  Channels: %d", deviceInfo.NumberOfChannels);
-        
-        // Test the connection
-        result = BL_TestConnection(deviceID);
-        if (result == SUCCESS) {
-            g_status.biologicStatus.lastUpdateTime = Timer();
-            return SUCCESS;
-        } else {
-            LogError("BioLogic connection test failed: %s", GetErrorString(result));
-            BL_Disconnect(deviceID);
-            g_status.biologicStatus.biologicID = -1;
-            return result;
-        }
-    } else {
-        LogError("Failed to connect to BioLogic: %s", GetErrorString(result));
-        SAFE_STRCPY(g_status.biologicStatus.lastError, GetErrorString(result), 
-                    sizeof(g_status.biologicStatus.lastError));
-        return result;
-    }
-}
-
-static void DisconnectPSB(void) {
-    if (g_status.psbStatus.psbHandle != NULL && 
-        g_status.psbStatus.psbHandle->isConnected) {
-        
-        // Disable output and remote mode before disconnecting
-        PSB_SetOutputEnable(g_status.psbStatus.psbHandle, 0);
-        PSB_SetRemoteMode(g_status.psbStatus.psbHandle, 0);
-        PSB_Close(g_status.psbStatus.psbHandle);
-        
-        LogMessage("Disconnected from PSB");
-    }
-}
-
-static void DisconnectBioLogic(void) {
-    if (g_status.biologicStatus.biologicID >= 0) {
-        BL_Disconnect(g_status.biologicStatus.biologicID);
-        g_status.biologicStatus.biologicID = -1;
-        LogMessage("Disconnected from BioLogic");
     }
 }
 
@@ -688,17 +547,37 @@ static void CVICALLBACK DeferredNumericUpdate(void* data) {
 }
 
 /******************************************************************************
- * Utility Functions
+ * New Async Callbacks for Status Updates
  ******************************************************************************/
 
-static double CalculateRetryDelay(int retryCount) {
-    // Exponential backoff: base * multiplier^retryCount
-    double delay = RECONNECT_BASE_DELAY_MS * pow(RECONNECT_MULTIPLIER, retryCount);
+// PSB status callback - just updates UI values
+static void PSBStatusCallback(CommandID cmdId, PSBCommandType type, 
+                            PSBCommandResult *result, void *userData) {
+    DeviceStatus *psbStatus = (DeviceStatus*)userData;
     
-    // Cap at maximum delay
-    if (delay > RECONNECT_MAX_DELAY_MS) {
-        delay = RECONNECT_MAX_DELAY_MS;
+    if (result->errorCode == PSB_SUCCESS) {
+        PSB_Status *status = &result->data.status;
+        UpdatePSBValues(status);
+        psbStatus->lastUpdateTime = Timer();
+        
+        // Update remote mode LED
+        UIUpdateData* ledData = malloc(sizeof(UIUpdateData));
+        if (ledData) {
+            ledData->control = PANEL_LED_REMOTE_MODE;
+            ledData->intValue = status->remoteMode;
+            PostDeferredCall(DeferredLEDUpdate, ledData);
+        }
     }
+    // No error handling - let queue manager handle reconnection
+}
+
+// BioLogic connection test callback - just updates timestamp
+static void BioConnectionCallback(BioCommandID cmdId, BioCommandType type,
+                                BioCommandResult *result, void *userData) {
+    DeviceStatus *bioStatus = (DeviceStatus*)userData;
     
-    return delay / 1000.0; // Convert to seconds for Timer()
+    if (result->errorCode == SUCCESS) {
+        bioStatus->lastUpdateTime = Timer();
+    }
+    // No error handling - let queue manager handle reconnection
 }
