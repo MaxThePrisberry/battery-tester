@@ -29,6 +29,7 @@ struct QueuedCommand {
     CmtThreadLockHandle completionEvent;
     PSBCommandResult *resultPtr;
     int *errorCodePtr;
+	volatile int *completedPtr;  // Add this field
     
     // For raw Modbus - we need to copy buffers
     unsigned char *txBufferCopy;
@@ -414,16 +415,37 @@ int PSB_QueueCommandBlocking(PSBQueueManager *mgr, PSBCommandType type,
                            PSBCommandResult *result, int timeoutMs) {
     if (!mgr || !result) return PSB_ERROR_INVALID_PARAM;
     
+    // Create a synchronization structure that we control
+    typedef struct {
+        CmtThreadLockHandle lock;
+        PSBCommandResult result;
+        int errorCode;
+        volatile int completed;
+    } SyncBlock;
+    
+    SyncBlock *sync = calloc(1, sizeof(SyncBlock));
+    if (!sync) return PSB_ERROR_COMM;
+    
+    // Create a regular lock for synchronization (NOT an event lock)
+    int error = CmtNewLock(NULL, 0, &sync->lock);
+    if (error < 0) {
+        free(sync);
+        return PSB_ERROR_COMM;
+    }
+    
+    // Create the command
     QueuedCommand *cmd = CreateCommand(type, params);
-    if (!cmd) return PSB_ERROR_COMM;
+    if (!cmd) {
+        CmtDiscardLock(sync->lock);
+        free(sync);
+        return PSB_ERROR_COMM;
+    }
     
     cmd->priority = priority;
-    
-    // Create completion event
-    CmtNewLock(NULL, OPT_TL_EVENT_UNICAST, &cmd->completionEvent);
-    cmd->resultPtr = result;
-    int errorCode = PSB_ERROR_TIMEOUT;
-    cmd->errorCodePtr = &errorCode;
+    cmd->completionEvent = sync->lock;  // Store the lock handle
+    cmd->resultPtr = &sync->result;
+    cmd->errorCodePtr = &sync->errorCode;
+    cmd->completedPtr = &sync->completed;  // Add this field to QueuedCommand
     
     // Select queue based on priority
     CmtTSQHandle queue;
@@ -438,24 +460,42 @@ int PSB_QueueCommandBlocking(PSBQueueManager *mgr, PSBCommandType type,
     if (CmtWriteTSQData(queue, &cmd, 1, TSQ_INFINITE_TIMEOUT, NULL) < 0) {
         LogErrorEx(LOG_DEVICE_PSB, "Failed to enqueue command type %s", 
                  PSB_QueueGetCommandTypeName(type));
-        CmtDiscardLock(cmd->completionEvent);
+        CmtDiscardLock(sync->lock);
+        free(sync);
         FreeCommand(cmd);
         return PSB_ERROR_COMM;
     }
     
-    // Wait for completion
-    int lockObtained = CmtTryToGetLock(cmd->completionEvent, timeoutMs);
+    // Wait for completion using polling
+    double startTime = Timer();
+    double timeout = (timeoutMs > 0 ? timeoutMs : 30000) / 1000.0; // Convert to seconds
+    int errorCode = PSB_ERROR_TIMEOUT;
     
-    if (lockObtained == 0) {
-        CmtReleaseLock(cmd->completionEvent);
-        errorCode = *cmd->errorCodePtr;
-    } else {
-        LogWarningEx(LOG_DEVICE_PSB, "Command %s timed out after %dms", 
-                   PSB_QueueGetCommandTypeName(type), timeoutMs);
-        errorCode = PSB_ERROR_TIMEOUT;
+    while ((Timer() - startTime) < timeout) {
+        // Check if command completed
+        CmtGetLock(sync->lock);
+        if (sync->completed) {
+            *result = sync->result;
+            errorCode = sync->errorCode;
+            CmtReleaseLock(sync->lock);
+            break;
+        }
+        CmtReleaseLock(sync->lock);
+        
+        // Process events and yield CPU
+        ProcessSystemEvents();
+        Delay(0.001); // 1ms delay
     }
     
-    CmtDiscardLock(cmd->completionEvent);
+    if (errorCode == PSB_ERROR_TIMEOUT) {
+        LogWarningEx(LOG_DEVICE_PSB, "Command %s timed out after %dms", 
+                   PSB_QueueGetCommandTypeName(type), timeoutMs);
+    }
+    
+    // Clean up
+    CmtDiscardLock(sync->lock);
+    free(sync);
+    
     return errorCode;
 }
 
@@ -972,14 +1012,24 @@ static int ExecutePSBCommand(PSB_Handle *handle, QueuedCommand *cmd, PSBCommandR
 
 static void NotifyCommandComplete(QueuedCommand *cmd, PSBCommandResult *result) {
     // For blocking commands
-    if (cmd->completionEvent) {
+    if (cmd->completionEvent && cmd->completedPtr) {
+        // Lock to safely update shared data
+        CmtGetLock(cmd->completionEvent);
+        
+        // Copy results
         if (cmd->resultPtr) {
             *cmd->resultPtr = *result;
         }
         if (cmd->errorCodePtr) {
             *cmd->errorCodePtr = result->errorCode;
         }
+        
+        // Set completed flag - this signals the waiting thread
+        *cmd->completedPtr = 1;
+        
         CmtReleaseLock(cmd->completionEvent);
+        
+        // DON'T discard the lock here - the blocking thread owns it
     }
     
     // For async commands
