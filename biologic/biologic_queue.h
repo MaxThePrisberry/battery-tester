@@ -17,7 +17,7 @@
  ******************************************************************************/
 
 // Device address
-#define BIOLOGIC_DEFAULT_ADDRESS USB0
+#define BIOLOGIC_DEFAULT_ADDRESS "USB0"
 
 // Queue depths
 #define BIO_QUEUE_HIGH_PRIORITY_SIZE    50

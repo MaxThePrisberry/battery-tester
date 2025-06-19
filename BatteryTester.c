@@ -164,17 +164,17 @@ int main (int argc, char *argv[]) {
         g_psbQueueMgr = PSB_QueueInit(PSB_TARGET_SERIAL);
         
         if (g_psbQueueMgr) {
-            PSB_SetGlobalQueueManager(g_psbQueueMgr);
-            
-            // Update status module with PSB handle
-            PSB_Handle *psbHandle = PSB_QueueGetHandle(g_psbQueueMgr);
-            if (psbHandle) {
-                Status_SetPSBHandle(psbHandle);
-                LogMessage("PSB queue manager initialized successfully");
-            } else {
-                LogWarning("PSB queue manager initialized but not connected");
-            }
-        } else {
+		    PSB_SetGlobalQueueManager(g_psbQueueMgr);
+		    
+		    // Just check if connected, don't set handle
+		    PSBQueueStats stats;
+		    PSB_QueueGetStats(g_psbQueueMgr, &stats);
+		    if (stats.isConnected) {
+		        LogMessage("PSB queue manager initialized and connected");
+		    } else {
+		        LogWarning("PSB queue manager initialized but not connected");
+		    }
+		} else {
             LogError("Failed to initialize PSB queue manager");
         }
     }
@@ -435,13 +435,20 @@ int CVICALLBACK TestBiologicCallback(int panel, int control, int event,
     int result;
     char message[LARGE_BUFFER_SIZE];
     
-    // Check if BioLogic is connected through status module
-    ConnectionState bioState = Status_GetDeviceState(0);
-    int32_t deviceID = Status_GetBioLogicID();
+    // Check if BioLogic is connected through queue manager
+    BioQueueManager *bioQueueMgr = BIO_GetGlobalQueueManager();
+    if (!bioQueueMgr) {
+        SetCtrlVal(panel, PANEL_STR_BIOLOGIC_STATUS, "BioLogic queue manager not initialized");
+        LogErrorEx(LOG_DEVICE_BIO, "BioLogic queue manager not initialized");
+        return 0;
+    }
     
-    if (bioState != CONN_STATE_CONNECTED || deviceID < 0) {
+    BioQueueStats stats;
+    BIO_QueueGetStats(bioQueueMgr, &stats);
+    
+    if (!stats.isConnected) {
         SetCtrlVal(panel, PANEL_STR_BIOLOGIC_STATUS, "BioLogic not connected");
-        LogErrorEx(LOG_DEVICE_BIO, "BioLogic not connected through status module");
+        LogErrorEx(LOG_DEVICE_BIO, "BioLogic not connected");
         return 0;
     }
     
@@ -452,8 +459,14 @@ int CVICALLBACK TestBiologicCallback(int panel, int control, int event,
     SetCtrlVal(panel, PANEL_STR_BIOLOGIC_STATUS, "Testing BioLogic connection...");
     ProcessDrawEvents();
     
-    // Test the connection
-    result = BL_TestConnection(deviceID);
+    // Test the connection using queued command
+    BioCommandParams params = {0};
+    BioCommandResult cmdResult;
+    
+    result = BIO_QueueCommandBlocking(bioQueueMgr, BIO_CMD_TEST_CONNECTION,
+                                    &params, BIO_PRIORITY_HIGH, &cmdResult,
+                                    BIO_QUEUE_COMMAND_TIMEOUT_MS);
+    
     if (result == SUCCESS) {
         SetCtrlVal(panel, PANEL_STR_BIOLOGIC_STATUS, "Connection test passed!");
         LogMessageEx(LOG_DEVICE_BIO, "BioLogic connection test PASSED!");
