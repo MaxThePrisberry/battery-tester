@@ -374,8 +374,6 @@ int DeviceQueue_CommandBlocking(DeviceQueueManager *mgr, int commandType,
     while ((Timer() - startTime) < timeout) {
         CmtGetLock(sync->lock);
         if (sync->completed) {
-            // Copy result to caller's buffer
-            mgr->adapter->copyCommandResult(commandType, result, sync->result);
             errorCode = sync->errorCode;
             CmtReleaseLock(sync->lock);
             break;
@@ -386,7 +384,10 @@ int DeviceQueue_CommandBlocking(DeviceQueueManager *mgr, int commandType,
         Delay(0.001);
     }
     
-    if (errorCode == ERR_TIMEOUT) {
+    // Copy result to caller's buffer if command completed successfully
+    if (errorCode != ERR_TIMEOUT) {
+        mgr->adapter->copyCommandResult(commandType, result, sync->result);
+    } else {
         LogWarningEx(mgr->logDevice, "Command %s timed out after %dms", 
                    mgr->adapter->getCommandTypeName(commandType), timeoutMs);
     }
@@ -708,7 +709,7 @@ static int CVICALLBACK ProcessingThreadFunction(void *functionData) {
     
     while (!mgr->shutdownRequested) {
         DeviceQueuedCommand *cmd = NULL;
-        unsigned int itemsRead = 0;
+        int itemsRead = 0;
         
         // Check connection state
         if (!mgr->isConnected) {
@@ -720,16 +721,27 @@ static int CVICALLBACK ProcessingThreadFunction(void *functionData) {
         }
         
         // Check queues in priority order
-        if (CmtReadTSQData(mgr->highPriorityQueue, &cmd, 1, 0, itemsRead) >= 0 && itemsRead > 0) {
+        // CmtReadTSQData returns the number of items read
+        itemsRead = CmtReadTSQData(mgr->highPriorityQueue, &cmd, 1, 0, 0);
+        if (itemsRead > 0) {
             // Got high priority command
-        } else if (CmtReadTSQData(mgr->normalPriorityQueue, &cmd, 1, 0, itemsRead) >= 0 && itemsRead > 0) {
-            // Got normal priority command
-        } else if (CmtReadTSQData(mgr->lowPriorityQueue, &cmd, 1, 0, itemsRead) >= 0 && itemsRead > 0) {
-            // Got low priority command
+            LogDebugEx(mgr->logDevice, "Processing high priority command");
         } else {
-            // No commands available
-            Delay(0.01);
-            continue;
+            itemsRead = CmtReadTSQData(mgr->normalPriorityQueue, &cmd, 1, 0, 0);
+            if (itemsRead > 0) {
+                // Got normal priority command
+                LogDebugEx(mgr->logDevice, "Processing normal priority command");
+            } else {
+                itemsRead = CmtReadTSQData(mgr->lowPriorityQueue, &cmd, 1, 0, 0);
+                if (itemsRead > 0) {
+                    // Got low priority command
+                    LogDebugEx(mgr->logDevice, "Processing low priority command");
+                } else {
+                    // No commands available
+                    Delay(0.01);
+                    continue;
+                }
+            }
         }
         
         // Process the command
@@ -761,6 +773,11 @@ static int ProcessCommand(DeviceQueueManager *mgr, DeviceQueuedCommand *cmd) {
     } else {
         // Execute the command
         errorCode = ExecuteDeviceCommand(mgr, cmd, result);
+		
+		// Copy result to blocking command's result pointer
+		if (cmd->resultPtr && result) {
+		    mgr->adapter->copyCommandResult(cmd->commandType, cmd->resultPtr, result);
+		}
     }
     
     // Update statistics
@@ -940,11 +957,16 @@ static int FilterQueue(CmtTSQHandle queue,
     if (!commands) return 0;
     
     // Read all commands from queue
-    unsigned int itemsRead = 0;
-    CmtReadTSQData(queue, commands, queueSize, 0, itemsRead);
+    // CmtReadTSQData returns the number of items actually read
+    int itemsRead = CmtReadTSQData(queue, commands, queueSize, 0, 0);
+    
+    if (itemsRead <= 0) {
+        free(commands);
+        return 0;
+    }
     
     // Process each command
-    for (unsigned int i = 0; i < itemsRead; i++) {
+    for (int i = 0; i < itemsRead; i++) {
         DeviceQueuedCommand *cmd = commands[i];
         if (!cmd) continue;
         
@@ -961,7 +983,7 @@ static int FilterQueue(CmtTSQHandle queue,
     
     // Write back non-cancelled commands
     if (cancelledCount > 0) {
-        for (unsigned int i = 0; i < itemsRead; i++) {
+        for (int i = 0; i < itemsRead; i++) {
             if (commands[i] != NULL) {
                 CmtWriteTSQData(queue, &commands[i], 1, TSQ_INFINITE_TIMEOUT, NULL);
             }

@@ -598,7 +598,7 @@ int PSB_GetActualValuesQueued(PSB_Handle *handle, double *voltage, double *curre
     int error = PSB_QueueCommandBlocking(g_psbQueueManager, PSB_CMD_GET_ACTUAL_VALUES,
                                        &params, PSB_PRIORITY_NORMAL, &result,
                                        PSB_QUEUE_COMMAND_TIMEOUT_MS);
-    
+	
     if (error == PSB_SUCCESS) {
         if (voltage) *voltage = result.data.actualValues.voltage;
         if (current) *current = result.data.actualValues.current;

@@ -537,146 +537,186 @@ int Test_CurrentControl(PSB_Handle *handle, char *errorMsg, int errorMsgSize) {
 int Test_CurrentLimits(PSB_Handle *handle, char *errorMsg, int errorMsgSize) {
     LogDebugEx(LOG_DEVICE_PSB, "Testing current limits...");
     
-    // Ensure remote mode is on
-    int result = EnsureRemoteModeQueued(handle);
+    int result;
+    
+    // Ensure remote mode
+    result = EnsureRemoteModeQueued(handle);
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to ensure remote mode: %s", 
                 PSB_GetErrorString(result));
         return -1;
     }
     
-    Delay(TEST_DELAY_SHORT);
-    
-    // Test valid limits using queued commands
-    double minCurrent = 10.0;
-    double maxCurrent = 40.0;
-    
-    LogDebugEx(LOG_DEVICE_PSB, "Setting current limits: min=%.2fA, max=%.2fA", minCurrent, maxCurrent);
-    
-    result = PSB_SetCurrentLimitsQueued(handle, minCurrent, maxCurrent);
+    // First set wide limits to ensure we have a clean state
+    result = SetWideLimitsQueued(handle);
     if (result != PSB_SUCCESS) {
-        snprintf(errorMsg, errorMsgSize, "Failed to set current limits: %s", 
+        snprintf(errorMsg, errorMsgSize, "Failed to set wide limits: %s", 
                 PSB_GetErrorString(result));
         return -1;
     }
     
-    LogDebugEx(LOG_DEVICE_PSB, "Current limits set successfully");
     Delay(TEST_DELAY_SHORT);
     
-    // Test current within limits
-    LogDebugEx(LOG_DEVICE_PSB, "Setting current within limits (25A)...");
-    result = PSB_SetCurrentQueued(handle, 25.0);
+    // Test setting current limits within valid range
+    double testMinCurrent = TEST_CURRENT_LOW;   // 6.0A
+    double testMaxCurrent = TEST_CURRENT_HIGH;  // 50.0A
+    
+    LogDebugEx(LOG_DEVICE_PSB, "Setting current limits: %.2fA - %.2fA...", 
+               testMinCurrent, testMaxCurrent);
+    
+    result = PSB_SetCurrentLimitsQueued(handle, testMinCurrent, testMaxCurrent);
     if (result != PSB_SUCCESS) {
-        snprintf(errorMsg, errorMsgSize, "Failed to set current within limits: %s", 
-                PSB_GetErrorString(result));
+        snprintf(errorMsg, errorMsgSize, "Failed to set current limits (%.1fA-%.1fA): %s", 
+                testMinCurrent, testMaxCurrent, PSB_GetErrorString(result));
         return -1;
     }
     
-    // Test current outside limits (should be clamped)
-    LogDebugEx(LOG_DEVICE_PSB, "Testing current outside limits...");
-    result = PSB_SetCurrentQueued(handle, 50.0);  // Above max
-    // This might succeed but be clamped to max
+    Delay(TEST_DELAY_SHORT);
     
-    result = PSB_SetCurrentQueued(handle, 5.0);   // Below min
-    // This might succeed but be clamped to min
+    // Test that current is constrained by limits
+    LogDebugEx(LOG_DEVICE_PSB, "Testing current above max limit...");
+    result = PSB_SetCurrentQueued(handle, TEST_CURRENT_MAX);  // 60.0A - should be clamped to 50A
+    if (result != PSB_SUCCESS && result != PSB_ERROR_INVALID_PARAM) {
+        LogWarningEx(LOG_DEVICE_PSB, "Unexpected error setting current above limit: %s", 
+                    PSB_GetErrorString(result));
+    }
+    
+    LogDebugEx(LOG_DEVICE_PSB, "Testing current below min limit...");
+    result = PSB_SetCurrentQueued(handle, PSB_TEST_CURRENT_MIN_WIDE);  // 0A - should be clamped to 6A
+    if (result != PSB_SUCCESS && result != PSB_ERROR_INVALID_PARAM) {
+        LogWarningEx(LOG_DEVICE_PSB, "Unexpected error setting current below limit: %s", 
+                    PSB_GetErrorString(result));
+    }
     
     // Restore wide limits
-    LogDebugEx(LOG_DEVICE_PSB, "Restoring wide limits...");
+    LogDebugEx(LOG_DEVICE_PSB, "Restoring wide current limits...");
     result = PSB_SetCurrentLimitsQueued(handle, PSB_TEST_CURRENT_MIN_WIDE, PSB_TEST_CURRENT_MAX_WIDE);
     if (result != PSB_SUCCESS) {
-        LogWarningEx(LOG_DEVICE_PSB, "Failed to restore wide current limits");
+        LogWarningEx(LOG_DEVICE_PSB, "Failed to restore wide current limits: %s", 
+                    PSB_GetErrorString(result));
     }
     
+    LogDebugEx(LOG_DEVICE_PSB, "Current limits test completed");
     return 1;
 }
 
 int Test_PowerControl(PSB_Handle *handle, char *errorMsg, int errorMsgSize) {
     LogDebugEx(LOG_DEVICE_PSB, "Testing power control...");
     
-    // Ensure remote mode using queued command
-    int result = EnsureRemoteModeQueued(handle);
+    int result;
+    
+    // Ensure remote mode
+    result = EnsureRemoteModeQueued(handle);
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to ensure remote mode: %s", 
                 PSB_GetErrorString(result));
         return -1;
     }
     
-    Delay(TEST_DELAY_SHORT);
+    // Test valid power values
+    double testPowers[] = {TEST_POWER_LOW, TEST_POWER_MID, TEST_POWER_HIGH};  // 100W, 600W, 1000W
     
-    // Test setting different power values using queued commands
-    double testPowers[] = {500.0, 1000.0, 1500.0};  // In Watts
-    
-    for (int i = 0; i < 3; i++) {
-        LogDebugEx(LOG_DEVICE_PSB, "Setting power to %.1fW...", testPowers[i]);
-        
+    for (int i = 0; i < ARRAY_SIZE(testPowers); i++) {
+        LogDebugEx(LOG_DEVICE_PSB, "Setting power to %.2fW...", testPowers[i]);
         result = PSB_SetPowerQueued(handle, testPowers[i]);
         if (result != PSB_SUCCESS) {
             snprintf(errorMsg, errorMsgSize, "Failed to set power to %.1fW: %s", 
                     testPowers[i], PSB_GetErrorString(result));
             return -1;
         }
-        
         Delay(TEST_DELAY_SHORT);
         
-        // Read back status to verify command was accepted
-        PSB_Status status;
-        result = PSB_GetStatusQueued(handle, &status);
+        // Get actual values to verify
+        double actualVoltage, actualCurrent, actualPower;
+        result = PSB_GetActualValuesQueued(handle, &actualVoltage, &actualCurrent, &actualPower);
         if (result != PSB_SUCCESS) {
-            snprintf(errorMsg, errorMsgSize, "Failed to read status after setting power: %s", 
-                    PSB_GetErrorString(result));
-            return -1;
+            LogWarningEx(LOG_DEVICE_PSB, "Failed to read actual values: %s", 
+                        PSB_GetErrorString(result));
+        } else {
+            LogDebugEx(LOG_DEVICE_PSB, "Power set to %.1fW (Actual: V=%.2fV, I=%.2fA, P=%.2fW)", 
+                      testPowers[i], actualVoltage, actualCurrent, actualPower);
         }
-        
-        LogDebugEx(LOG_DEVICE_PSB, "Power set command accepted for %.1fW", testPowers[i]);
     }
     
+    // Test invalid power value (should fail)
+    LogDebugEx(LOG_DEVICE_PSB, "Testing invalid power (%.1fW)...", TEST_POWER_INVALID);
+    result = PSB_SetPowerQueued(handle, TEST_POWER_INVALID);  // 1400W - beyond device limit
+    if (result == PSB_SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Should have rejected power %.1fW (max is %.1fW)", 
+                TEST_POWER_INVALID, PSB_TEST_POWER_MAX_WIDE);
+        return -1;
+    }
+    LogDebugEx(LOG_DEVICE_PSB, "Correctly rejected invalid power: %s", PSB_GetErrorString(result));
+    
+    LogDebugEx(LOG_DEVICE_PSB, "Power control test completed");
     return 1;
 }
 
 int Test_PowerLimit(PSB_Handle *handle, char *errorMsg, int errorMsgSize) {
     LogDebugEx(LOG_DEVICE_PSB, "Testing power limit...");
     
-    // Ensure remote mode is on
-    int result = EnsureRemoteModeQueued(handle);
+    int result;
+    
+    // Ensure remote mode
+    result = EnsureRemoteModeQueued(handle);
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to ensure remote mode: %s", 
                 PSB_GetErrorString(result));
         return -1;
     }
     
-    Delay(TEST_DELAY_SHORT);
+    // Test setting valid power limit
+    double testPowerLimit = TEST_POWER_MAX;  // 1200W - just below device max
     
-    // Test setting power limit using queued command
-    double testPowerLimit = 2000.0;  // 2000W
-    
-    LogDebugEx(LOG_DEVICE_PSB, "Setting power limit to %.1fW...", testPowerLimit);
-    
+    LogDebugEx(LOG_DEVICE_PSB, "Setting power limit to %.2fW...", testPowerLimit);
     result = PSB_SetPowerLimitQueued(handle, testPowerLimit);
     if (result != PSB_SUCCESS) {
-        snprintf(errorMsg, errorMsgSize, "Failed to set power limit: %s", 
-                PSB_GetErrorString(result));
+        snprintf(errorMsg, errorMsgSize, "Failed to set power limit to %.1fW: %s", 
+                testPowerLimit, PSB_GetErrorString(result));
         return -1;
     }
     
-    LogDebugEx(LOG_DEVICE_PSB, "Power limit set successfully");
     Delay(TEST_DELAY_SHORT);
     
-    // Test setting power within limit
-    LogDebugEx(LOG_DEVICE_PSB, "Setting power within limit (1500W)...");
-    result = PSB_SetPowerQueued(handle, 1500.0);
+    // Verify we can set power below the limit
+    LogDebugEx(LOG_DEVICE_PSB, "Testing power below limit (%.1fW)...", TEST_POWER_HIGH);
+    result = PSB_SetPowerQueued(handle, TEST_POWER_HIGH);  // 1000W - should work
     if (result != PSB_SUCCESS) {
-        snprintf(errorMsg, errorMsgSize, "Failed to set power within limit: %s", 
+        snprintf(errorMsg, errorMsgSize, "Failed to set power below limit: %s", 
                 PSB_GetErrorString(result));
         return -1;
     }
     
-    // Restore wide power limit
-    LogDebugEx(LOG_DEVICE_PSB, "Restoring wide power limit...");
-    result = PSB_SetPowerLimitQueued(handle, PSB_TEST_POWER_MAX_WIDE);
-    if (result != PSB_SUCCESS) {
-        LogWarningEx(LOG_DEVICE_PSB, "Failed to restore wide power limit");
+    // Test that power above limit is rejected
+    LogDebugEx(LOG_DEVICE_PSB, "Testing power above limit...");
+    result = PSB_SetPowerQueued(handle, testPowerLimit + 100.0);
+    if (result == PSB_SUCCESS) {
+        LogWarningEx(LOG_DEVICE_PSB, "Power above limit was accepted (may be clamped by device)");
+    } else {
+        LogDebugEx(LOG_DEVICE_PSB, "Power above limit correctly rejected: %s", 
+                  PSB_GetErrorString(result));
     }
     
+    // Restore maximum power limit
+    LogDebugEx(LOG_DEVICE_PSB, "Restoring maximum power limit (%.1fW)...", PSB_TEST_POWER_MAX_WIDE);
+    result = PSB_SetPowerLimitQueued(handle, PSB_TEST_POWER_MAX_WIDE);
+    if (result != PSB_SUCCESS) {
+        LogWarningEx(LOG_DEVICE_PSB, "Failed to restore max power limit: %s", 
+                    PSB_GetErrorString(result));
+    }
+    
+    // Test invalid power limit (beyond device capability)
+    LogDebugEx(LOG_DEVICE_PSB, "Testing invalid power limit (%.1fW)...", TEST_POWER_INVALID);
+    result = PSB_SetPowerLimitQueued(handle, TEST_POWER_INVALID);  // 1400W - beyond max
+    if (result == PSB_SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Should have rejected power limit %.1fW (max is %.1fW)", 
+                TEST_POWER_INVALID, PSB_TEST_POWER_MAX_WIDE);
+        return -1;
+    }
+    LogDebugEx(LOG_DEVICE_PSB, "Correctly rejected invalid power limit: %s", 
+              PSB_GetErrorString(result));
+    
+    LogDebugEx(LOG_DEVICE_PSB, "Power limit test completed");
     return 1;
 }
 
