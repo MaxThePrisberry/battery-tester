@@ -73,4 +73,23 @@ int Status_Pause(void);
  */
 int Status_Resume(void);
 
+/**
+ * Set/clear the remote mode change pending flag
+ * @param pending - 1 if change is pending, 0 if complete
+ * @param value - The pending value (only used if pending=1)
+ */
+void Status_SetRemoteModeChangePending(int pending, int value);
+
+/**
+ * Check if a remote mode change is pending
+ * @return 1 if pending, 0 otherwise
+ */
+int Status_IsRemoteModeChangePending(void);
+
+/**
+ * Update the remote mode LED state
+ * @param isOn - 1 to turn LED on, 0 to turn off
+ */
+void Status_UpdateRemoteLED(int isOn);
+
 #endif // STATUS_H

@@ -27,7 +27,6 @@
 static int CVICALLBACK UpdateThread(void *functionData);
 static int CVICALLBACK PSBTestSuiteThread(void *functionData);
 void PSB_SetGlobalQueueManager(PSBQueueManager *mgr);
-void CVICALLBACK UpdateRemoteLED(void *callbackData);
 
 /******************************************************************************
  * Global Variables (defined here, declared extern in common.h)
@@ -248,17 +247,24 @@ int CVICALLBACK RemoteModeWorkerThread(void *functionData) {
         
         if (result != PSB_SUCCESS) {
             LogError("Failed to set remote mode: %s", PSB_GetErrorString(result));
-        }
-        
-        // Update LED via PostDeferredCall
-        int *ledValue = malloc(sizeof(int));
-        if (ledValue) {
-            *ledValue = data->enable;
-            PostDeferredCall(UpdateRemoteLED, ledValue);
+            
+            // On failure, get current state and update LED
+            PSB_Status status;
+            int currentState = 0;  // Default to off
+            if (PSB_GetStatusQueued(psbHandle, &status) == PSB_SUCCESS) {
+                currentState = status.remoteMode;
+            }
+            Status_UpdateRemoteLED(currentState);
+        } else {
+            // Update LED to new state
+            Status_UpdateRemoteLED(data->enable);
         }
     } else {
         LogWarning("PSB not connected - cannot change remote mode");
     }
+    
+    // Clear pending state
+    Status_SetRemoteModeChangePending(0, 0);
     
     // Clear busy flag
     CmtGetLock(g_busyLock);
@@ -269,16 +275,6 @@ int CVICALLBACK RemoteModeWorkerThread(void *functionData) {
     return 0;
 }
 
-// Deferred callback to update LED
-void CVICALLBACK UpdateRemoteLED(void *callbackData) {
-    int *value = (int*)callbackData;
-    if (value && g_mainPanelHandle > 0) {
-        SetCtrlVal(g_mainPanelHandle, PANEL_LED_REMOTE_MODE, *value);
-        free(value);
-    }
-}
-
-// Modified UI callback
 int CVICALLBACK RemoteModeToggle (int panel, int control, int event,
                                  void *callbackData, int eventData1, int eventData2) {
     switch (event) {
@@ -307,6 +303,9 @@ int CVICALLBACK RemoteModeToggle (int panel, int control, int event,
             int enable;
             GetCtrlVal(panel, control, &enable);
             
+            // Set pending flag in status module
+            Status_SetRemoteModeChangePending(1, enable);
+            
             // Create worker thread data
             RemoteModeData *data = malloc(sizeof(RemoteModeData));
             if (data) {
@@ -318,7 +317,8 @@ int CVICALLBACK RemoteModeToggle (int panel, int control, int event,
                 CmtScheduleThreadPoolFunction(g_threadPool, 
                     RemoteModeWorkerThread, data, &threadID);
             } else {
-                // Failed to allocate - clear busy flag
+                // Failed to allocate - clear busy flag and pending state
+                Status_SetRemoteModeChangePending(0, 0);
                 CmtGetLock(g_busyLock);
                 g_systemBusy = 0;
                 CmtReleaseLock(g_busyLock);

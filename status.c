@@ -29,6 +29,10 @@ static struct {
     // Last known states for change detection
     ConnectionState lastPSBState;
     ConnectionState lastBioState;
+	
+	// Track pending remote mode change
+    volatile int remoteModeChangePending;
+    volatile int pendingRemoteModeValue;
 } g_status = {0};
 
 static int g_initialized = 0;
@@ -44,6 +48,7 @@ static void UpdatePSBValues(PSB_Status* status);
 static void CVICALLBACK DeferredLEDUpdate(void* data);
 static void CVICALLBACK DeferredStatusUpdate(void* data);
 static void CVICALLBACK DeferredNumericUpdate(void* data);
+static void CVICALLBACK DeferredToggleUpdate(void* data);
 static void PSBStatusCallback(CommandID cmdId, PSBCommandType type, 
                             PSBCommandResult *result, void *userData);
 
@@ -236,13 +241,49 @@ static void Status_TimerUpdate(void) {
                 UpdateDeviceStatus(1, stats.isConnected ? "PSB Connected" : "PSB Not Connected");
                 
                 // Get initial values if just connected
-                if (stats.isConnected) {
+                if (stats.isConnected && currentState == CONN_STATE_CONNECTED) {
                     PSB_Handle *handle = PSB_QueueGetHandle(psbQueueMgr);
                     if (handle) {
                         PSB_Status status;
                         if (PSB_GetStatus(handle, &status) == PSB_SUCCESS) {
                             UpdatePSBValues(&status);
+                            
+                            // Set initial remote mode LED state
+                            UIUpdateData* ledData = malloc(sizeof(UIUpdateData));
+                            if (ledData) {
+                                ledData->control = PANEL_LED_REMOTE_MODE;
+                                ledData->intValue = status.remoteMode;
+                                PostDeferredCall(DeferredLEDUpdate, ledData);
+                            }
+                            
+                            // Set initial remote mode toggle state
+                            UIUpdateData* toggleData = malloc(sizeof(UIUpdateData));
+                            if (toggleData) {
+                                toggleData->control = PANEL_TOGGLE_REMOTE_MODE;
+                                toggleData->intValue = status.remoteMode;
+                                PostDeferredCall(DeferredToggleUpdate, toggleData);
+                            }
+                            
+                            // Log the initial remote mode state
+                            LogMessageEx(LOG_DEVICE_PSB, "Initial remote mode state: %s", 
+                                       status.remoteMode ? "ON" : "OFF");
                         }
+                    }
+                } else if (!stats.isConnected) {
+                    // PSB disconnected - update remote mode controls to show disconnected state
+                    UIUpdateData* ledData = malloc(sizeof(UIUpdateData));
+                    if (ledData) {
+                        ledData->control = PANEL_LED_REMOTE_MODE;
+                        ledData->intValue = 0;  // Turn off LED
+                        PostDeferredCall(DeferredLEDUpdate, ledData);
+                    }
+                    
+                    // Disable toggle when disconnected
+                    UIUpdateData* toggleData = malloc(sizeof(UIUpdateData));
+                    if (toggleData) {
+                        toggleData->control = PANEL_TOGGLE_REMOTE_MODE;
+                        toggleData->intValue = 0;  // Set to OFF
+                        PostDeferredCall(DeferredToggleUpdate, toggleData);
                     }
                 }
             }
@@ -291,6 +332,14 @@ static void PSBStatusCallback(CommandID cmdId, PSBCommandType type,
             ledData->control = PANEL_LED_REMOTE_MODE;
             ledData->intValue = status->remoteMode;
             PostDeferredCall(DeferredLEDUpdate, ledData);
+        }
+        
+        // ALSO update the toggle to match actual state
+        UIUpdateData* toggleData = malloc(sizeof(UIUpdateData));
+        if (toggleData) {
+            toggleData->control = PANEL_TOGGLE_REMOTE_MODE;
+            toggleData->intValue = status->remoteMode;
+            PostDeferredCall(DeferredToggleUpdate, toggleData);
         }
     }
 }
@@ -367,9 +416,17 @@ static void UpdatePSBValues(PSB_Status* status) {
 static void CVICALLBACK DeferredLEDUpdate(void* data) {
     UIUpdateData* updateData = (UIUpdateData*)data;
     if (updateData && g_status.panelHandle > 0) {
-        SetCtrlAttribute(g_status.panelHandle, updateData->control, 
-                        ATTR_ON_COLOR, updateData->intValue);
-        SetCtrlVal(g_status.panelHandle, updateData->control, 1);
+        if (updateData->control == PANEL_LED_REMOTE_MODE) {
+            // Set Remote LED to green when ON
+            SetCtrlAttribute(g_status.panelHandle, updateData->control, 
+                            ATTR_ON_COLOR, VAL_GREEN);  
+            SetCtrlVal(g_status.panelHandle, updateData->control, updateData->intValue);
+        } else {
+            // Device status LEDs keep their color scheme
+            SetCtrlAttribute(g_status.panelHandle, updateData->control, 
+                            ATTR_ON_COLOR, updateData->intValue);
+            SetCtrlVal(g_status.panelHandle, updateData->control, 1);
+        }
         free(updateData);
     }
 }
@@ -388,5 +445,42 @@ static void CVICALLBACK DeferredNumericUpdate(void* data) {
     if (updateData && g_status.panelHandle > 0) {
         SetCtrlVal(g_status.panelHandle, updateData->control, updateData->dblValue);
         free(updateData);
+    }
+}
+
+static void CVICALLBACK DeferredToggleUpdate(void* data) {
+    UIUpdateData* updateData = (UIUpdateData*)data;
+    if (updateData && g_status.panelHandle > 0) {
+        // Don't update toggle if a change is pending
+        if (!g_status.remoteModeChangePending) {
+            // Get current toggle value to avoid unnecessary updates
+            int currentValue;
+            GetCtrlVal(g_status.panelHandle, updateData->control, &currentValue);
+            
+            // Only update if value has changed
+            if (currentValue != updateData->intValue) {
+                SetCtrlVal(g_status.panelHandle, updateData->control, updateData->intValue);
+            }
+        }
+        
+        free(updateData);
+    }
+}
+
+void Status_SetRemoteModeChangePending(int pending, int value) {
+    g_status.remoteModeChangePending = pending;
+    g_status.pendingRemoteModeValue = value;
+}
+
+int Status_IsRemoteModeChangePending(void) {
+    return g_status.remoteModeChangePending;
+}
+
+void Status_UpdateRemoteLED(int isOn) {
+    UIUpdateData* data = malloc(sizeof(UIUpdateData));
+    if (data) {
+        data->control = PANEL_LED_REMOTE_MODE;
+        data->intValue = isOn;
+        PostDeferredCall(DeferredLEDUpdate, data);
     }
 }
