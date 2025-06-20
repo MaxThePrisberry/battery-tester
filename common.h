@@ -64,12 +64,14 @@
 #define ERR_OPERATION_FAILED    (ERR_BASE_SYSTEM - 7)
 #define ERR_NOT_SUPPORTED       (ERR_BASE_SYSTEM - 8)
 #define ERR_INVALID_STATE       (ERR_BASE_SYSTEM - 9)
+#define ERR_COMM_FAILED         (ERR_BASE_SYSTEM - 10)
 
 // Queue-specific errors
-#define ERR_QUEUE_FULL          (ERR_BASE_SYSTEM - 10)
-#define ERR_QUEUE_EMPTY         (ERR_BASE_SYSTEM - 11)
-#define ERR_QUEUE_TIMEOUT       (ERR_BASE_SYSTEM - 12)
-#define ERR_QUEUE_NOT_INIT      (ERR_BASE_SYSTEM - 13)
+#define ERR_QUEUE_FULL          (ERR_BASE_SYSTEM - 11)
+#define ERR_QUEUE_EMPTY         (ERR_BASE_SYSTEM - 12)
+#define ERR_QUEUE_TIMEOUT       (ERR_BASE_SYSTEM - 13)
+#define ERR_QUEUE_NOT_INIT      (ERR_BASE_SYSTEM - 14)
+#define ERR_CANCELLED           (ERR_BASE_SYSTEM - 15)
 
 // UI errors (-5000 to -5999)
 #define ERR_UI                  (ERR_BASE_UI - 1)
@@ -139,14 +141,6 @@ typedef struct {
     int lastError;
     char lastErrorMsg[MAX_ERROR_MSG_LENGTH];
 } DeviceInfo;
-
-//==============================================================================
-// Forward Declarations for Queue System
-//==============================================================================
-
-// Forward declarations for queue managers
-typedef struct PSBQueueManager PSBQueueManager;
-typedef struct BioQueueManager BioQueueManager;
 
 //==============================================================================
 // Global Variables (declare as extern, define in one .c file)
@@ -310,9 +304,7 @@ void LogWarning(const char *format, ...);
 //==============================================================================
 
 // Error handling
-const char* GetErrorString(int errorCode);          // Implemented in biologic_dll module
-const char* GetBioLogicErrorString(int errorCode);  // BioLogic-specific errors  
-const char* GetPSBErrorString(int errorCode);       // PSB-specific errors
+const char* GetErrorString(int errorCode);          // Central error string function in utils.c
 void ClearLastError(void);
 void SetLastErrorMessage(int errorCode, const char *format, ...);  // Renamed to avoid Windows conflict
 
@@ -341,8 +333,6 @@ void ShowBusyCursor(int show);
 int WaitForCondition(int (*condition)(void), double timeoutSeconds);
 
 // Queue system integration points
-PSBQueueManager* PSB_GetGlobalQueueManager(void);
-BioQueueManager* BIO_GetGlobalQueueManager(void);
 void InitializeQueueManagers(void);
 void ShutdownQueueManagers(void);
 int CheckSystemBusy(const char *operation);

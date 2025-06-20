@@ -2,83 +2,12 @@
  * biologic_queue.c
  * 
  * Thread-safe command queue implementation for BioLogic SP-150e
+ * Built on top of the generic device queue system
  ******************************************************************************/
 
 #include "biologic_queue.h"
 #include "logging.h"
-#include "toolbox.h"
 #include <ansi_c.h>
-#include <utility.h>
-
-/******************************************************************************
- * Internal Structures
- ******************************************************************************/
-
-// Queued command structure
-struct BioQueuedCommand {
-    BioCommandID id;
-    BioCommandType type;
-    BioPriority priority;
-    double timestamp;
-    BioCommandParams params;
-    BioCommandCallback callback;
-    void *userData;
-    BioTransactionHandle transactionId;
-    
-    // For blocking calls
-    CmtThreadLockHandle completionEvent;
-    BioCommandResult *resultPtr;
-    int *errorCodePtr;
-    volatile int *completedPtr;  // Pointer to completed flag
-    
-    // For techniques - we need to copy the params
-    TEccParam_t *paramsCopy;
-};
-
-// Transaction structure
-typedef struct {
-    BioTransactionHandle id;
-    BioQueuedCommand *commands[BIO_MAX_TRANSACTION_COMMANDS];
-    int commandCount;
-    BioTransactionCallback callback;
-    void *userData;
-    bool committed;
-} BioTransaction;
-
-// Queue manager structure
-struct BioQueueManager {
-    // BioLogic device ID
-    int32_t deviceID;
-    
-    // Thread-safe queues
-    CmtTSQHandle highPriorityQueue;
-    CmtTSQHandle normalPriorityQueue;
-    CmtTSQHandle lowPriorityQueue;
-    
-    // Processing thread
-    CmtThreadFunctionID processingThreadId;
-    volatile int shutdownRequested;
-    
-    // Connection state
-    volatile int isConnected;
-    int reconnectAttempts;
-    double lastReconnectTime;
-    char lastAddress[64];
-    
-    // Command tracking
-    volatile BioCommandID nextCommandId;
-    volatile BioTransactionHandle nextTransactionId;
-    CmtThreadLockHandle commandLock;
-    
-    // Active transactions
-    ListType activeTransactions;
-    CmtThreadLockHandle transactionLock;
-    
-    // Statistics
-    volatile int totalProcessed;
-    volatile int totalErrors;
-    CmtThreadLockHandle statsLock;
-};
 
 /******************************************************************************
  * Static Variables
@@ -100,26 +29,317 @@ static const char* g_commandTypeNames[] = {
     "GET_HARDWARE_CONFIG"
 };
 
-// Global queue manager for wrapper functions
+// Global queue manager pointer
 static BioQueueManager *g_bioQueueManager = NULL;
 
 /******************************************************************************
- * Internal Function Prototypes
+ * BioLogic Device Context Structure
  ******************************************************************************/
 
-static int CVICALLBACK ProcessingThreadFunction(void *functionData);
-static BioQueuedCommand* CreateCommand(BioCommandType type, BioCommandParams *params);
-static void FreeCommand(BioQueuedCommand *cmd);
-static int ProcessCommand(BioQueueManager *mgr, BioQueuedCommand *cmd);
-static int ExecuteBioCommand(BioQueueManager *mgr, BioQueuedCommand *cmd, BioCommandResult *result);
-static void NotifyCommandComplete(BioQueuedCommand *cmd, BioCommandResult *result);
-static int AttemptReconnection(BioQueueManager *mgr);
-static BioTransaction* FindTransaction(BioQueueManager *mgr, BioTransactionHandle id);
-static void ProcessTransaction(BioQueueManager *mgr, BioTransaction *txn);
+typedef struct {
+    int32_t deviceID;
+    char lastAddress[64];
+    bool isConnected;
+} BioLogicDeviceContext;
+
+/******************************************************************************
+ * BioLogic Connection Parameters
+ ******************************************************************************/
+
+typedef struct {
+    char address[64];
+    uint8_t timeout;
+} BioLogicConnectionParams;
+
+/******************************************************************************
+ * Device Adapter Implementation
+ ******************************************************************************/
+
+// Forward declarations for adapter functions
+static int BIO_AdapterConnect(void *deviceContext, void *connectionParams);
+static int BIO_AdapterDisconnect(void *deviceContext);
+static int BIO_AdapterTestConnection(void *deviceContext);
+static bool BIO_AdapterIsConnected(void *deviceContext);
+static int BIO_AdapterExecuteCommand(void *deviceContext, int commandType, void *params, void *result);
+static void* BIO_AdapterCreateCommandParams(int commandType, void *sourceParams);
+static void BIO_AdapterFreeCommandParams(int commandType, void *params);
+static void* BIO_AdapterCreateCommandResult(int commandType);
+static void BIO_AdapterFreeCommandResult(int commandType, void *result);
+static void BIO_AdapterCopyCommandResult(int commandType, void *dest, void *src);
 static TEccParam_t* CopyEccParams(TEccParams_t *params);
 
-void BIO_SetGlobalQueueManager(BioQueueManager *mgr);
-BioQueueManager* BIO_GetGlobalQueueManager(void);
+// BioLogic device adapter
+static const DeviceAdapter g_bioAdapter = {
+    .deviceName = "BioLogic SP-150e",
+    
+    // Connection management
+    .connect = BIO_AdapterConnect,
+    .disconnect = BIO_AdapterDisconnect,
+    .testConnection = BIO_AdapterTestConnection,
+    .isConnected = BIO_AdapterIsConnected,
+    
+    // Command execution
+    .executeCommand = BIO_AdapterExecuteCommand,
+    
+    // Command management
+    .createCommandParams = BIO_AdapterCreateCommandParams,
+    .freeCommandParams = BIO_AdapterFreeCommandParams,
+    .createCommandResult = BIO_AdapterCreateCommandResult,
+    .freeCommandResult = BIO_AdapterFreeCommandResult,
+    .copyCommandResult = BIO_AdapterCopyCommandResult,
+    
+    // Utility functions
+    .getCommandTypeName = (const char* (*)(int))BIO_QueueGetCommandTypeName,
+    .getCommandDelay = BIO_QueueGetCommandDelay,
+    .getErrorString = GetErrorString,
+    
+    // Raw command support
+    .supportsRawCommands = NULL,
+    .executeRawCommand = NULL
+};
+
+/******************************************************************************
+ * Adapter Function Implementations
+ ******************************************************************************/
+
+static int BIO_AdapterConnect(void *deviceContext, void *connectionParams) {
+    BioLogicDeviceContext *ctx = (BioLogicDeviceContext*)deviceContext;
+    BioLogicConnectionParams *params = (BioLogicConnectionParams*)connectionParams;
+    
+    // Initialize BioLogic DLL if needed
+    if (!IsBioLogicInitialized()) {
+        int initResult = InitializeBioLogic();
+        if (initResult != SUCCESS) {
+            LogErrorEx(LOG_DEVICE_BIO, "Failed to initialize BioLogic DLL: %d", initResult);
+            return initResult;
+        }
+    }
+    
+    // Connect to device
+    TDeviceInfos_t deviceInfo;
+    int result = BL_Connect(params->address, params->timeout, &ctx->deviceID, &deviceInfo);
+    
+    if (result == SUCCESS) {
+        ctx->isConnected = true;
+        SAFE_STRCPY(ctx->lastAddress, params->address, sizeof(ctx->lastAddress));
+        
+        const char* deviceTypeName = "Unknown";
+        switch(deviceInfo.DeviceCode) {
+            case KBIO_DEV_SP150E: deviceTypeName = "SP-150e"; break;
+            case KBIO_DEV_SP150: deviceTypeName = "SP-150"; break;
+            case KBIO_DEV_SP50E: deviceTypeName = "SP-50e"; break;
+            case KBIO_DEV_VSP300: deviceTypeName = "VSP-300"; break;
+            case KBIO_DEV_VMP300: deviceTypeName = "VMP-300"; break;
+            case KBIO_DEV_SP300: deviceTypeName = "SP-300"; break;
+            default: break;
+        }
+        
+        LogMessageEx(LOG_DEVICE_BIO, "Successfully connected to BioLogic %s (ID: %d)", 
+                   deviceTypeName, ctx->deviceID);
+        LogMessageEx(LOG_DEVICE_BIO, "  Firmware Version: %d", deviceInfo.FirmwareVersion);
+        LogMessageEx(LOG_DEVICE_BIO, "  Channels: %d", deviceInfo.NumberOfChannels);
+        
+        // Test the connection
+        result = BL_TestConnection(ctx->deviceID);
+        if (result != SUCCESS) {
+            LogWarningEx(LOG_DEVICE_BIO, "BioLogic connection test failed");
+            BL_Disconnect(ctx->deviceID);
+            ctx->deviceID = -1;
+            ctx->isConnected = false;
+        }
+    } else {
+        LogWarningEx(LOG_DEVICE_BIO, "Failed to connect to BioLogic at %s: %s", 
+                   params->address, GetErrorString(result));
+        ctx->isConnected = false;
+    }
+    
+    return result;
+}
+
+static int BIO_AdapterDisconnect(void *deviceContext) {
+    BioLogicDeviceContext *ctx = (BioLogicDeviceContext*)deviceContext;
+    
+    if (ctx->isConnected && ctx->deviceID >= 0) {
+        int result = BL_Disconnect(ctx->deviceID);
+        ctx->isConnected = false;
+        ctx->deviceID = -1;
+        return result;
+    }
+    
+    return SUCCESS;
+}
+
+static int BIO_AdapterTestConnection(void *deviceContext) {
+    BioLogicDeviceContext *ctx = (BioLogicDeviceContext*)deviceContext;
+    
+    if (!ctx->isConnected || ctx->deviceID < 0) {
+        return BL_ERR_NOINSTRUMENTCONNECTED;
+    }
+    
+    return BL_TestConnection(ctx->deviceID);
+}
+
+static bool BIO_AdapterIsConnected(void *deviceContext) {
+    BioLogicDeviceContext *ctx = (BioLogicDeviceContext*)deviceContext;
+    return ctx->isConnected;
+}
+
+static int BIO_AdapterExecuteCommand(void *deviceContext, int commandType, void *params, void *result) {
+    BioLogicDeviceContext *ctx = (BioLogicDeviceContext*)deviceContext;
+    BioCommandParams *cmdParams = (BioCommandParams*)params;
+    BioCommandResult *cmdResult = (BioCommandResult*)result;
+    
+    // Check connection for most commands
+    if (commandType != BIO_CMD_CONNECT && (!ctx->isConnected || ctx->deviceID < 0)) {
+        cmdResult->errorCode = BL_ERR_NOINSTRUMENTCONNECTED;
+        return cmdResult->errorCode;
+    }
+    
+    switch ((BioCommandType)commandType) {
+        case BIO_CMD_CONNECT:
+            // Connection is handled by the adapter connect function
+            cmdResult->errorCode = SUCCESS;
+            break;
+            
+        case BIO_CMD_DISCONNECT:
+            cmdResult->errorCode = BL_Disconnect(ctx->deviceID);
+            if (cmdResult->errorCode == SUCCESS) {
+                ctx->isConnected = false;
+                ctx->deviceID = -1;
+            }
+            break;
+            
+        case BIO_CMD_TEST_CONNECTION:
+            cmdResult->errorCode = BL_TestConnection(ctx->deviceID);
+            break;
+            
+        case BIO_CMD_START_CHANNEL:
+            cmdResult->errorCode = BL_StartChannel(ctx->deviceID, cmdParams->channel.channel);
+            break;
+            
+        case BIO_CMD_STOP_CHANNEL:
+            cmdResult->errorCode = BL_StopChannel(ctx->deviceID, cmdParams->channel.channel);
+            break;
+            
+        case BIO_CMD_GET_CHANNEL_INFO:
+            cmdResult->errorCode = BL_GetChannelInfos(ctx->deviceID, 
+                                                    cmdParams->channel.channel,
+                                                    &cmdResult->data.channelInfo);
+            break;
+            
+        case BIO_CMD_LOAD_TECHNIQUE:
+            cmdResult->errorCode = BL_LoadTechnique(ctx->deviceID,
+                cmdParams->loadTechnique.channel,
+                cmdParams->loadTechnique.techniquePath,
+                cmdParams->loadTechnique.params,
+                cmdParams->loadTechnique.firstTechnique,
+                cmdParams->loadTechnique.lastTechnique,
+                cmdParams->loadTechnique.displayParams);
+            break;
+            
+        case BIO_CMD_UPDATE_PARAMETERS:
+            cmdResult->errorCode = BL_UpdateParameters(ctx->deviceID,
+                cmdParams->updateParams.channel,
+                cmdParams->updateParams.techniqueIndex,
+                cmdParams->updateParams.params,
+                cmdParams->updateParams.eccFileName);
+            break;
+            
+        case BIO_CMD_GET_CURRENT_VALUES:
+            cmdResult->errorCode = BL_GetCurrentValues(ctx->deviceID,
+                                                     cmdParams->channel.channel,
+                                                     &cmdResult->data.currentValues);
+            break;
+            
+        case BIO_CMD_GET_DATA:
+            cmdResult->errorCode = BL_GetData(ctx->deviceID,
+                                            cmdParams->channel.channel,
+                                            &cmdResult->data.data.buffer,
+                                            &cmdResult->data.data.info,
+                                            NULL);
+            break;
+            
+        case BIO_CMD_GET_HARDWARE_CONFIG:
+            cmdResult->errorCode = BL_GetHardConf(ctx->deviceID,
+                                                cmdParams->channel.channel,
+                                                &cmdResult->data.hardwareConfig);
+            break;
+            
+        case BIO_CMD_SET_HARDWARE_CONFIG:
+            cmdResult->errorCode = BL_SetHardConf(ctx->deviceID,
+                                                cmdParams->hardwareConfig.channel,
+                                                cmdParams->hardwareConfig.config);
+            break;
+            
+        default:
+            cmdResult->errorCode = ERR_INVALID_PARAMETER;
+            break;
+    }
+    
+    return cmdResult->errorCode;
+}
+
+static void* BIO_AdapterCreateCommandParams(int commandType, void *sourceParams) {
+    if (!sourceParams) return NULL;
+    
+    BioCommandParams *params = malloc(sizeof(BioCommandParams));
+    if (!params) return NULL;
+    
+    *params = *(BioCommandParams*)sourceParams;
+    
+    // Handle special cases that need deep copies
+    if (commandType == BIO_CMD_LOAD_TECHNIQUE && params->loadTechnique.params.pParams) {
+        params->loadTechnique.params.pParams = CopyEccParams(&((BioCommandParams*)sourceParams)->loadTechnique.params);
+    } else if (commandType == BIO_CMD_UPDATE_PARAMETERS && params->updateParams.params.pParams) {
+        params->updateParams.params.pParams = CopyEccParams(&((BioCommandParams*)sourceParams)->updateParams.params);
+    }
+    
+    return params;
+}
+
+static void BIO_AdapterFreeCommandParams(int commandType, void *params) {
+    if (!params) return;
+    
+    BioCommandParams *cmdParams = (BioCommandParams*)params;
+    
+    // Free ECC parameters if allocated
+    if (commandType == BIO_CMD_LOAD_TECHNIQUE && cmdParams->loadTechnique.params.pParams) {
+        free(cmdParams->loadTechnique.params.pParams);
+    } else if (commandType == BIO_CMD_UPDATE_PARAMETERS && cmdParams->updateParams.params.pParams) {
+        free(cmdParams->updateParams.params.pParams);
+    }
+    
+    free(params);
+}
+
+static void* BIO_AdapterCreateCommandResult(int commandType) {
+    BioCommandResult *result = calloc(1, sizeof(BioCommandResult));
+    return result;
+}
+
+static void BIO_AdapterFreeCommandResult(int commandType, void *result) {
+    if (!result) return;
+    free(result);
+}
+
+static void BIO_AdapterCopyCommandResult(int commandType, void *dest, void *src) {
+    if (!dest || !src) return;
+    
+    BioCommandResult *destResult = (BioCommandResult*)dest;
+    BioCommandResult *srcResult = (BioCommandResult*)src;
+    
+    *destResult = *srcResult;
+}
+
+static TEccParam_t* CopyEccParams(TEccParams_t *params) {
+    if (!params || !params->pParams || params->len <= 0) return NULL;
+    
+    TEccParam_t *copy = malloc(params->len * sizeof(TEccParam_t));
+    if (!copy) return NULL;
+    
+    memcpy(copy, params->pParams, params->len * sizeof(TEccParam_t));
+    return copy;
+}
 
 /******************************************************************************
  * Queue Manager Functions
@@ -131,230 +351,62 @@ BioQueueManager* BIO_QueueInit(const char *address) {
         return NULL;
     }
     
-    BioQueueManager *mgr = calloc(1, sizeof(BioQueueManager));
-    if (!mgr) {
-        LogErrorEx(LOG_DEVICE_BIO, "BIO_QueueInit: Failed to allocate manager");
+    // Create device context
+    BioLogicDeviceContext *context = calloc(1, sizeof(BioLogicDeviceContext));
+    if (!context) {
+        LogErrorEx(LOG_DEVICE_BIO, "BIO_QueueInit: Failed to allocate device context");
         return NULL;
     }
     
-    // Initialize all fields
-    mgr->deviceID = -1;  // Start with invalid ID
-    mgr->nextCommandId = 1;
-    mgr->nextTransactionId = 1;
-    mgr->isConnected = 0;
-    mgr->shutdownRequested = 0;
-    mgr->lastReconnectTime = 0;
-    mgr->reconnectAttempts = 0;
-    mgr->processingThreadId = 0;
-    strncpy(mgr->lastAddress, address, sizeof(mgr->lastAddress) - 1);
+    context->deviceID = -1;
+    context->isConnected = false;
     
-    // Create queues
-    int error = 0;
-    
-    error = CmtNewTSQ(BIO_QUEUE_HIGH_PRIORITY_SIZE, sizeof(BioQueuedCommand*), 0, &mgr->highPriorityQueue);
-    if (error < 0 || mgr->highPriorityQueue == 0) {
-        LogErrorEx(LOG_DEVICE_BIO, "BIO_QueueInit: Failed to create high priority queue, error %d", error);
-        goto cleanup;
+    // Create connection parameters
+    BioLogicConnectionParams *connParams = calloc(1, sizeof(BioLogicConnectionParams));
+    if (!connParams) {
+        free(context);
+        LogErrorEx(LOG_DEVICE_BIO, "BIO_QueueInit: Failed to allocate connection params");
+        return NULL;
     }
     
-    error = CmtNewTSQ(BIO_QUEUE_NORMAL_PRIORITY_SIZE, sizeof(BioQueuedCommand*), 0, &mgr->normalPriorityQueue);
-    if (error < 0 || mgr->normalPriorityQueue == 0) {
-        LogErrorEx(LOG_DEVICE_BIO, "BIO_QueueInit: Failed to create normal priority queue, error %d", error);
-        goto cleanup;
+    SAFE_STRCPY(connParams->address, address, sizeof(connParams->address));
+    connParams->timeout = TIMEOUT;
+    
+    // Create the generic device queue
+    BioQueueManager *mgr = DeviceQueue_Create(&g_bioAdapter, context, connParams);
+    
+    if (!mgr) {
+        free(context);
+        free(connParams);
+        return NULL;
     }
     
-    error = CmtNewTSQ(BIO_QUEUE_LOW_PRIORITY_SIZE, sizeof(BioQueuedCommand*), 0, &mgr->lowPriorityQueue);
-    if (error < 0 || mgr->lowPriorityQueue == 0) {
-        LogErrorEx(LOG_DEVICE_BIO, "BIO_QueueInit: Failed to create low priority queue, error %d", error);
-        goto cleanup;
-    }
+    // Set logging device
+    DeviceQueue_SetLogDevice(mgr, LOG_DEVICE_BIO);
     
-    // Create locks
-    error = CmtNewLock(NULL, 0, &mgr->commandLock);
-    if (error < 0) {
-        LogErrorEx(LOG_DEVICE_BIO, "BIO_QueueInit: Failed to create command lock, error %d", error);
-        goto cleanup;
-    }
-    
-    error = CmtNewLock(NULL, 0, &mgr->transactionLock);
-    if (error < 0) {
-        LogErrorEx(LOG_DEVICE_BIO, "BIO_QueueInit: Failed to create transaction lock, error %d", error);
-        goto cleanup;
-    }
-    
-    error = CmtNewLock(NULL, 0, &mgr->statsLock);
-    if (error < 0) {
-        LogErrorEx(LOG_DEVICE_BIO, "BIO_QueueInit: Failed to create stats lock, error %d", error);
-        goto cleanup;
-    }
-    
-    // Initialize transaction list
-    mgr->activeTransactions = ListCreate(sizeof(BioTransaction*));
-    if (!mgr->activeTransactions) {
-        LogErrorEx(LOG_DEVICE_BIO, "BIO_QueueInit: Failed to create transaction list");
-        goto cleanup;
-    }
-    
-    // Initialize statistics
-    CmtGetLock(mgr->statsLock);
-    mgr->totalProcessed = 0;
-    mgr->totalErrors = 0;
-    mgr->reconnectAttempts = 0;
-    CmtReleaseLock(mgr->statsLock);
-    
-    // Ensure queues are valid before continuing
-    Delay(0.1);
-    
-    // Attempt initial connection
-    LogMessageEx(LOG_DEVICE_BIO, "Attempting to connect to BioLogic at %s...", address);
-    
-    // Initialize BioLogic DLL if needed
-    if (!IsBioLogicInitialized()) {
-        int initResult = InitializeBioLogic();
-        if (initResult != SUCCESS) {
-            LogErrorEx(LOG_DEVICE_BIO, "Failed to initialize BioLogic DLL: %d", initResult);
-            // Continue anyway - will retry in background
-        }
-    }
-    
-    // Try to connect
-    if (IsBioLogicInitialized()) {
-        TDeviceInfos_t deviceInfo;
-        int32_t deviceID;
-        
-        int connectResult = BL_Connect(address, TIMEOUT, &deviceID, &deviceInfo);
-        
-        if (connectResult == SUCCESS) {
-            mgr->deviceID = deviceID;
-            mgr->isConnected = 1;
-            
-            const char* deviceTypeName = "Unknown";
-            switch(deviceInfo.DeviceCode) {
-                case KBIO_DEV_SP150E: deviceTypeName = "SP-150e"; break;
-                case KBIO_DEV_SP150: deviceTypeName = "SP-150"; break;
-                case KBIO_DEV_SP50E: deviceTypeName = "SP-50e"; break;
-                case KBIO_DEV_VSP300: deviceTypeName = "VSP-300"; break;
-                case KBIO_DEV_VMP300: deviceTypeName = "VMP-300"; break;
-                case KBIO_DEV_SP300: deviceTypeName = "SP-300"; break;
-                default: break;
-            }
-            
-            LogMessageEx(LOG_DEVICE_BIO, "Successfully connected to BioLogic %s (ID: %d)", 
-                       deviceTypeName, deviceID);
-            LogMessageEx(LOG_DEVICE_BIO, "  Firmware Version: %d", deviceInfo.FirmwareVersion);
-            LogMessageEx(LOG_DEVICE_BIO, "  Channels: %d", deviceInfo.NumberOfChannels);
-            
-            // Test the connection
-            int testResult = BL_TestConnection(deviceID);
-            if (testResult != SUCCESS) {
-                LogWarningEx(LOG_DEVICE_BIO, "BioLogic connection test failed, will retry");
-                BL_Disconnect(deviceID);
-                mgr->deviceID = -1;
-                mgr->isConnected = 0;
-                mgr->lastReconnectTime = Timer();
-            }
-        } else {
-            LogWarningEx(LOG_DEVICE_BIO, "Failed initial connection to BioLogic at %s: %s", 
-                       address, GetErrorString(connectResult));
-            mgr->isConnected = 0;
-            mgr->lastReconnectTime = Timer();
-        }
-    } else {
-        LogWarningEx(LOG_DEVICE_BIO, "BioLogic DLL not initialized, will retry in background");
-        mgr->isConnected = 0;
-        mgr->lastReconnectTime = Timer();
-    }
-    
-    // Start processing thread (even if not connected - it will handle reconnection)
-    if (g_threadPool > 0) {
-        error = CmtScheduleThreadPoolFunction(g_threadPool, ProcessingThreadFunction, 
-                                            mgr, &mgr->processingThreadId);
-        if (error != 0) {
-            LogErrorEx(LOG_DEVICE_BIO, "BIO_QueueInit: Failed to start processing thread, error %d", error);
-            goto cleanup;
-        }
-        
-        // Give thread time to start
-        Delay(0.05);
-    } else {
-        LogErrorEx(LOG_DEVICE_BIO, "BIO_QueueInit: No thread pool available");
-        goto cleanup;
-    }
-    
-    LogMessageEx(LOG_DEVICE_BIO, "BioLogic queue manager initialized for %s", address);
     return mgr;
-    
-cleanup:
-    LogErrorEx(LOG_DEVICE_BIO, "BIO_QueueInit: Initialization failed, cleaning up");
-    BIO_QueueShutdown(mgr);
-    return NULL;
 }
 
 void BIO_QueueShutdown(BioQueueManager *mgr) {
     if (!mgr) return;
     
-    LogMessageEx(LOG_DEVICE_BIO, "Shutting down BioLogic queue manager...");
+    // Get and free the device context
+    BioLogicDeviceContext *context = (BioLogicDeviceContext*)DeviceQueue_GetDeviceContext(mgr);
     
-    // Signal shutdown
-    InterlockedExchange(&mgr->shutdownRequested, 1);
+    // Destroy the generic queue (this will call disconnect)
+    DeviceQueue_Destroy(mgr);
     
-    // Wait for processing thread
-    if (mgr->processingThreadId != 0) {
-        CmtWaitForThreadPoolFunctionCompletion(g_threadPool, mgr->processingThreadId,
-                                             OPT_TP_PROCESS_EVENTS_WHILE_WAITING);
-    }
-    
-    // Cancel all pending commands
-    BIO_QueueCancelAll(mgr);
-    
-    // Dispose queues
-    if (mgr->highPriorityQueue) CmtDiscardTSQ(mgr->highPriorityQueue);
-    if (mgr->normalPriorityQueue) CmtDiscardTSQ(mgr->normalPriorityQueue);
-    if (mgr->lowPriorityQueue) CmtDiscardTSQ(mgr->lowPriorityQueue);
-    
-    // Dispose locks
-    if (mgr->commandLock) CmtDiscardLock(mgr->commandLock);
-    if (mgr->transactionLock) CmtDiscardLock(mgr->transactionLock);
-    if (mgr->statsLock) CmtDiscardLock(mgr->statsLock);
-    
-    // Clean up transactions
-    if (mgr->activeTransactions) {
-        int count = ListNumItems(mgr->activeTransactions);
-        for (int i = 1; i <= count; i++) {
-            BioTransaction **txnPtr = ListGetPtrToItem(mgr->activeTransactions, i);
-            if (txnPtr && *txnPtr) {
-                free(*txnPtr);
-            }
-        }
-        ListDispose(mgr->activeTransactions);
-    }
-    
-    free(mgr);
-    LogMessageEx(LOG_DEVICE_BIO, "BioLogic queue manager shut down");
+    // Free our contexts
+    if (context) free(context);
+    // Note: Connection params are freed by the generic queue
 }
 
 bool BIO_QueueIsRunning(BioQueueManager *mgr) {
-    return mgr && !mgr->shutdownRequested;
+    return DeviceQueue_IsRunning(mgr);
 }
 
 void BIO_QueueGetStats(BioQueueManager *mgr, BioQueueStats *stats) {
-    if (!mgr || !stats) return;
-    
-    memset(stats, 0, sizeof(BioQueueStats));
-    
-    // Get queue lengths
-    CmtGetTSQAttribute(mgr->highPriorityQueue, ATTR_TSQ_ITEMS_IN_QUEUE, &stats->highPriorityQueued);
-    CmtGetTSQAttribute(mgr->normalPriorityQueue, ATTR_TSQ_ITEMS_IN_QUEUE, &stats->normalPriorityQueued);
-    CmtGetTSQAttribute(mgr->lowPriorityQueue, ATTR_TSQ_ITEMS_IN_QUEUE, &stats->lowPriorityQueued);
-    
-    CmtGetLock(mgr->statsLock);
-    stats->totalProcessed = mgr->totalProcessed;
-    stats->totalErrors = mgr->totalErrors;
-    stats->reconnectAttempts = mgr->reconnectAttempts;
-    CmtReleaseLock(mgr->statsLock);
-    
-    stats->isConnected = mgr->isConnected;
-    stats->isProcessing = (mgr->processingThreadId != 0);
+    DeviceQueue_GetStats(mgr, stats);
 }
 
 /******************************************************************************
@@ -364,144 +416,21 @@ void BIO_QueueGetStats(BioQueueManager *mgr, BioQueueStats *stats) {
 int BIO_QueueCommandBlocking(BioQueueManager *mgr, BioCommandType type,
                            BioCommandParams *params, BioPriority priority,
                            BioCommandResult *result, int timeoutMs) {
-    if (!mgr || !result) return ERR_INVALID_PARAMETER;
-    
-    // Create a synchronization structure that we control
-    typedef struct {
-        CmtThreadLockHandle lock;
-        BioCommandResult result;
-        int errorCode;
-        volatile int completed;
-    } SyncBlock;
-    
-    SyncBlock *sync = calloc(1, sizeof(SyncBlock));
-    if (!sync) return ERR_BASE_SYSTEM;
-    
-    // Create a regular lock for synchronization
-    int error = CmtNewLock(NULL, 0, &sync->lock);
-    if (error < 0) {
-        free(sync);
-        return ERR_BASE_SYSTEM;
-    }
-    
-    // Create the command
-    BioQueuedCommand *cmd = CreateCommand(type, params);
-    if (!cmd) {
-        CmtDiscardLock(sync->lock);
-        free(sync);
-        return ERR_BASE_SYSTEM;
-    }
-    
-    cmd->priority = priority;
-    cmd->completionEvent = sync->lock;  // Store the lock handle
-    cmd->resultPtr = &sync->result;
-    cmd->errorCodePtr = &sync->errorCode;
-    cmd->completedPtr = &sync->completed;  // Store pointer to completed flag
-    
-    // Select queue based on priority
-    CmtTSQHandle queue;
-    switch (priority) {
-        case BIO_PRIORITY_HIGH:   queue = mgr->highPriorityQueue; break;
-        case BIO_PRIORITY_NORMAL: queue = mgr->normalPriorityQueue; break;
-        case BIO_PRIORITY_LOW:    queue = mgr->lowPriorityQueue; break;
-        default: queue = mgr->normalPriorityQueue; break;
-    }
-    
-    // Enqueue command
-    if (CmtWriteTSQData(queue, &cmd, 1, TSQ_INFINITE_TIMEOUT, NULL) < 0) {
-        LogErrorEx(LOG_DEVICE_BIO, "Failed to enqueue command type %s", 
-                 BIO_QueueGetCommandTypeName(type));
-        CmtDiscardLock(sync->lock);
-        free(sync);
-        FreeCommand(cmd);
-        return ERR_BASE_SYSTEM;
-    }
-    
-    // Wait for completion using polling
-    double startTime = Timer();
-    double timeout = (timeoutMs > 0 ? timeoutMs : 30000) / 1000.0; // Convert to seconds
-    int errorCode = ERR_TIMEOUT;
-    
-    while ((Timer() - startTime) < timeout) {
-        // Check if command completed
-        CmtGetLock(sync->lock);
-        if (sync->completed) {
-            *result = sync->result;
-            errorCode = sync->errorCode;
-            CmtReleaseLock(sync->lock);
-            break;
-        }
-        CmtReleaseLock(sync->lock);
-        
-        // Process events and yield CPU
-        ProcessSystemEvents();
-        Delay(0.001); // 1ms delay
-    }
-    
-    if (errorCode == ERR_TIMEOUT) {
-        LogWarningEx(LOG_DEVICE_BIO, "Command %s timed out", 
-                   BIO_QueueGetCommandTypeName(type));
-    }
-    
-    // Clean up
-    CmtDiscardLock(sync->lock);
-    free(sync);
-    
-    return errorCode;
+    return DeviceQueue_CommandBlocking(mgr, type, params, priority, result, timeoutMs);
 }
 
 BioCommandID BIO_QueueCommandAsync(BioQueueManager *mgr, BioCommandType type,
                                  BioCommandParams *params, BioPriority priority,
                                  BioCommandCallback callback, void *userData) {
-    if (!mgr) return 0;
-    
-    BioQueuedCommand *cmd = CreateCommand(type, params);
-    if (!cmd) return 0;
-    
-    cmd->priority = priority;
-    cmd->callback = callback;
-    cmd->userData = userData;
-    
-    // Select queue based on priority
-    CmtTSQHandle queue;
-    switch (priority) {
-        case BIO_PRIORITY_HIGH:   queue = mgr->highPriorityQueue; break;
-        case BIO_PRIORITY_NORMAL: queue = mgr->normalPriorityQueue; break;
-        case BIO_PRIORITY_LOW:    queue = mgr->lowPriorityQueue; break;
-        default: queue = mgr->normalPriorityQueue; break;
-    }
-    
-    // Enqueue command
-    if (CmtWriteTSQData(queue, &cmd, 1, TSQ_INFINITE_TIMEOUT, NULL) < 0) {
-        LogErrorEx(LOG_DEVICE_BIO, "Failed to enqueue async command type %s", 
-                 BIO_QueueGetCommandTypeName(type));
-        FreeCommand(cmd);
-        return 0;
-    }
-    
-    return cmd->id;
+    return DeviceQueue_CommandAsync(mgr, type, params, priority, callback, userData);
 }
 
 bool BIO_QueueHasCommandType(BioQueueManager *mgr, BioCommandType type) {
-    if (!mgr) return false;
-    
-    // For now, simple check for normal priority queue
-    int count = 0;
-    CmtGetTSQAttribute(mgr->normalPriorityQueue, ATTR_TSQ_ITEMS_IN_QUEUE, &count);
-    
-    // TODO: Implement proper scanning of queue for command type
-    return (type == BIO_CMD_GET_CURRENT_VALUES && count > 0);
+    return DeviceQueue_HasCommandType(mgr, type);
 }
 
 int BIO_QueueCancelAll(BioQueueManager *mgr) {
-    if (!mgr) return ERR_INVALID_PARAMETER;
-    
-    // Flush all queues
-    CmtFlushTSQ(mgr->highPriorityQueue, TSQ_FLUSH_ALL, NULL);
-    CmtFlushTSQ(mgr->normalPriorityQueue, TSQ_FLUSH_ALL, NULL);
-    CmtFlushTSQ(mgr->lowPriorityQueue, TSQ_FLUSH_ALL, NULL);
-    
-    return SUCCESS;
+    return DeviceQueue_CancelAll(mgr);
 }
 
 /******************************************************************************
@@ -509,82 +438,17 @@ int BIO_QueueCancelAll(BioQueueManager *mgr) {
  ******************************************************************************/
 
 BioTransactionHandle BIO_QueueBeginTransaction(BioQueueManager *mgr) {
-    if (!mgr) return 0;
-    
-    BioTransaction *txn = calloc(1, sizeof(BioTransaction));
-    if (!txn) return 0;
-    
-    CmtGetLock(mgr->transactionLock);
-    txn->id = mgr->nextTransactionId++;
-    ListInsertItem(mgr->activeTransactions, &txn, END_OF_LIST);
-    CmtReleaseLock(mgr->transactionLock);
-    
-    LogDebugEx(LOG_DEVICE_BIO, "Started transaction %u", txn->id);
-    return txn->id;
+    return DeviceQueue_BeginTransaction(mgr);
 }
 
-int BIO_QueueAddToTransaction(BioQueueManager *mgr, BioTransactionHandle txnId,
+int BIO_QueueAddToTransaction(BioQueueManager *mgr, BioTransactionHandle txn,
                             BioCommandType type, BioCommandParams *params) {
-    if (!mgr || txnId == 0) return ERR_INVALID_PARAMETER;
-    
-    CmtGetLock(mgr->transactionLock);
-    BioTransaction *txn = FindTransaction(mgr, txnId);
-    if (!txn || txn->committed) {
-        CmtReleaseLock(mgr->transactionLock);
-        return ERR_INVALID_PARAMETER;
-    }
-    
-    if (txn->commandCount >= BIO_MAX_TRANSACTION_COMMANDS) {
-        CmtReleaseLock(mgr->transactionLock);
-        return ERR_INVALID_PARAMETER;
-    }
-    
-    BioQueuedCommand *cmd = CreateCommand(type, params);
-    if (!cmd) {
-        CmtReleaseLock(mgr->transactionLock);
-        return ERR_BASE_SYSTEM;
-    }
-    
-    cmd->transactionId = txnId;
-    txn->commands[txn->commandCount++] = cmd;
-    
-    CmtReleaseLock(mgr->transactionLock);
-    
-    LogDebugEx(LOG_DEVICE_BIO, "Added %s to transaction %u", 
-             BIO_QueueGetCommandTypeName(type), txnId);
-    return SUCCESS;
+    return DeviceQueue_AddToTransaction(mgr, txn, type, params);
 }
 
-int BIO_QueueCommitTransaction(BioQueueManager *mgr, BioTransactionHandle txnId,
+int BIO_QueueCommitTransaction(BioQueueManager *mgr, BioTransactionHandle txn,
                              BioTransactionCallback callback, void *userData) {
-    if (!mgr || txnId == 0) return ERR_INVALID_PARAMETER;
-    
-    CmtGetLock(mgr->transactionLock);
-    BioTransaction *txn = FindTransaction(mgr, txnId);
-    if (!txn || txn->committed || txn->commandCount == 0) {
-        CmtReleaseLock(mgr->transactionLock);
-        return ERR_INVALID_PARAMETER;
-    }
-    
-    txn->callback = callback;
-    txn->userData = userData;
-    txn->committed = true;
-    
-    // Queue all commands as high priority
-    for (int i = 0; i < txn->commandCount; i++) {
-        BioQueuedCommand *cmd = txn->commands[i];
-        cmd->priority = BIO_PRIORITY_HIGH;
-        
-        if (CmtWriteTSQData(mgr->highPriorityQueue, &cmd, 1, TSQ_INFINITE_TIMEOUT, NULL) < 0) {
-            LogErrorEx(LOG_DEVICE_BIO, "Failed to queue transaction command %d", i);
-        }
-    }
-    
-    CmtReleaseLock(mgr->transactionLock);
-    
-    LogMessageEx(LOG_DEVICE_BIO, "Committed transaction %u with %d commands", 
-               txnId, txn->commandCount);
-    return SUCCESS;
+    return DeviceQueue_CommitTransaction(mgr, txn, callback, userData);
 }
 
 /******************************************************************************
@@ -593,6 +457,10 @@ int BIO_QueueCommitTransaction(BioQueueManager *mgr, BioTransactionHandle txnId,
 
 void BIO_SetGlobalQueueManager(BioQueueManager *mgr) {
     g_bioQueueManager = mgr;
+}
+
+BioQueueManager* BIO_GetGlobalQueueManager(void) {
+    return g_bioQueueManager;
 }
 
 int BL_ConnectQueued(const char* address, uint8_t timeout, int* pID, TDeviceInfos_t* pInfos) {
@@ -607,7 +475,8 @@ int BL_ConnectQueued(const char* address, uint8_t timeout, int* pID, TDeviceInfo
                                        BIO_QUEUE_COMMAND_TIMEOUT_MS);
     
     if (error == SUCCESS) {
-        if (pID) *pID = g_bioQueueManager->deviceID;
+        BioLogicDeviceContext *ctx = (BioLogicDeviceContext*)DeviceQueue_GetDeviceContext(g_bioQueueManager);
+        if (ctx && pID) *pID = ctx->deviceID;
         if (pInfos) *pInfos = result.data.deviceInfo;
     }
     return error;
@@ -748,410 +617,6 @@ int BL_SetHardConfQueued(int ID, uint8_t ch, THardwareConf_t HardConf) {
 }
 
 /******************************************************************************
- * Internal Functions
- ******************************************************************************/
-
-static BioQueuedCommand* CreateCommand(BioCommandType type, BioCommandParams *params) {
-    static volatile BioCommandID nextId = 1;
-    
-    BioQueuedCommand *cmd = calloc(1, sizeof(BioQueuedCommand));
-    if (!cmd) return NULL;
-    
-    cmd->id = InterlockedIncrement(&nextId);
-    cmd->type = type;
-    cmd->timestamp = Timer();
-    
-    if (params) {
-        cmd->params = *params;
-        
-        // For load technique, we need to copy the ECC params
-        if (type == BIO_CMD_LOAD_TECHNIQUE && params->loadTechnique.params.pParams) {
-            cmd->paramsCopy = CopyEccParams(&params->loadTechnique.params);
-            cmd->params.loadTechnique.params.pParams = cmd->paramsCopy;
-        } else if (type == BIO_CMD_UPDATE_PARAMETERS && params->updateParams.params.pParams) {
-            cmd->paramsCopy = CopyEccParams(&params->updateParams.params);
-            cmd->params.updateParams.params.pParams = cmd->paramsCopy;
-        }
-    }
-    
-    return cmd;
-}
-
-static void FreeCommand(BioQueuedCommand *cmd) {
-    if (!cmd) return;
-    
-    if (cmd->paramsCopy) {
-        free(cmd->paramsCopy);
-    }
-    
-    free(cmd);
-}
-
-static int CVICALLBACK ProcessingThreadFunction(void *functionData) {
-    BioQueueManager *mgr = (BioQueueManager*)functionData;
-    
-    // Validate manager
-    if (!mgr) {
-        LogErrorEx(LOG_DEVICE_BIO, "ProcessingThreadFunction: NULL manager passed");
-        return -1;
-    }
-    
-    LogMessageEx(LOG_DEVICE_BIO, "BioLogic queue processing thread started");
-    
-    // Add startup delay to ensure full initialization
-    Delay(0.2);
-    
-    // Validate queues exist before entering main loop
-    if (!mgr->highPriorityQueue || !mgr->normalPriorityQueue || !mgr->lowPriorityQueue) {
-        LogErrorEx(LOG_DEVICE_BIO, "ProcessingThreadFunction: Invalid queue handles at startup");
-        return -1;
-    }
-    
-    while (!mgr->shutdownRequested) {
-        BioQueuedCommand *cmd = NULL;
-        unsigned int itemsRead = 0;
-        int error = 0;
-        
-        // Re-validate manager state each iteration
-        if (!mgr || mgr->shutdownRequested) {
-            break;
-        }
-        
-        // Validate all queue handles before use
-        if (!mgr->highPriorityQueue || !mgr->normalPriorityQueue || !mgr->lowPriorityQueue) {
-            LogErrorEx(LOG_DEVICE_BIO, "ProcessingThreadFunction: Queue handles became invalid");
-            Delay(0.5);
-            continue;
-        }
-        
-        // Check connection state
-        if (!mgr->isConnected && mgr->deviceID >= 0) {
-            // Lost connection, try to reconnect
-            if (Timer() - mgr->lastReconnectTime > (BIO_QUEUE_RECONNECT_DELAY_MS / 1000.0)) {
-                AttemptReconnection(mgr);
-            }
-            Delay(0.1);
-            continue;
-        }
-        
-        // Try to read from queues in priority order
-        // High priority queue
-        if (mgr->highPriorityQueue) {
-            error = CmtReadTSQData(mgr->highPriorityQueue, &cmd, 1, 0, itemsRead);
-            if (error >= 0 && itemsRead > 0 && cmd != NULL) {
-                // Got high priority command
-                LogDebugEx(LOG_DEVICE_BIO, "Processing high priority command");
-            } else if (error < 0 && error != -1) {  // -1 is timeout, which is OK
-                LogErrorEx(LOG_DEVICE_BIO, "Error reading high priority queue: %d", error);
-                cmd = NULL;  // Ensure cmd is NULL on error
-            }
-        }
-        
-        // Normal priority queue
-        if (!cmd && mgr->normalPriorityQueue) {
-            error = CmtReadTSQData(mgr->normalPriorityQueue, &cmd, 1, 0, itemsRead);
-            if (error >= 0 && itemsRead > 0 && cmd != NULL) {
-                // Got normal priority command
-                LogDebugEx(LOG_DEVICE_BIO, "Processing normal priority command");
-            } else if (error < 0 && error != -1) {
-                LogErrorEx(LOG_DEVICE_BIO, "Error reading normal priority queue: %d", error);
-                cmd = NULL;
-            }
-        }
-        
-        // Low priority queue
-        if (!cmd && mgr->lowPriorityQueue) {
-            error = CmtReadTSQData(mgr->lowPriorityQueue, &cmd, 1, 0, itemsRead);
-            if (error >= 0 && itemsRead > 0 && cmd != NULL) {
-                // Got low priority command
-                LogDebugEx(LOG_DEVICE_BIO, "Processing low priority command");
-            } else if (error < 0 && error != -1) {
-                LogErrorEx(LOG_DEVICE_BIO, "Error reading low priority queue: %d", error);
-                cmd = NULL;
-            }
-        }
-        
-        // Process command if we got one
-        if (cmd) {
-            LogDebugEx(LOG_DEVICE_BIO, "Processing command type %s (ID: %u)", 
-                     BIO_QueueGetCommandTypeName(cmd->type), cmd->id);
-            
-            int result = ProcessCommand(mgr, cmd);
-            
-            if (result != SUCCESS) {
-                LogErrorEx(LOG_DEVICE_BIO, "Failed to process command %u: %s", 
-                         cmd->id, GetBioLogicErrorString(result));
-            }
-            
-            // Free the command after processing
-            FreeCommand(cmd);
-            cmd = NULL;
-        } else {
-            // No commands available, yield CPU
-            Delay(0.01);  // Small delay to prevent busy waiting
-        }
-    }
-    
-    LogMessageEx(LOG_DEVICE_BIO, "BioLogic queue processing thread ending");
-    return 0;
-}
-
-static int ProcessCommand(BioQueueManager *mgr, BioQueuedCommand *cmd) {
-    BioCommandResult result = {0};
-    
-    LogDebugEx(LOG_DEVICE_BIO, "Processing command: %s (ID: %u)", 
-             BIO_QueueGetCommandTypeName(cmd->type), cmd->id);
-    
-    // Execute the command
-    result.errorCode = ExecuteBioCommand(mgr, cmd, &result);
-    
-    // Update statistics
-    CmtGetLock(mgr->statsLock);
-    mgr->totalProcessed++;
-    if (result.errorCode != SUCCESS) {
-        mgr->totalErrors++;
-    }
-    CmtReleaseLock(mgr->statsLock);
-    
-    // Handle connection loss
-    if (result.errorCode == BL_ERR_NOINSTRUMENTCONNECTED || 
-        result.errorCode == BL_ERR_COMM_FAILED) {
-        mgr->isConnected = 0;
-        mgr->lastReconnectTime = Timer();
-        LogWarningEx(LOG_DEVICE_BIO, "Lost connection during command execution");
-    }
-    
-    // Notify completion (this signals the waiting thread for blocking commands)
-    NotifyCommandComplete(cmd, &result);
-    
-    // Check if this was part of a transaction
-    if (cmd->transactionId != 0) {
-        CmtGetLock(mgr->transactionLock);
-        BioTransaction *txn = FindTransaction(mgr, cmd->transactionId);
-        if (txn) {
-            // Check if all commands in transaction are complete
-            bool allComplete = true;
-            for (int i = 0; i < txn->commandCount; i++) {
-                if (txn->commands[i] && txn->commands[i]->completionEvent) {
-                    allComplete = false;
-                    break;
-                }
-            }
-            
-            if (allComplete) {
-                ProcessTransaction(mgr, txn);
-            }
-        }
-        CmtReleaseLock(mgr->transactionLock);
-    }
-    
-    // Apply command-specific delay
-    int delayMs = BIO_QueueGetCommandDelay(cmd->type);
-    if (delayMs > 0) {
-        Delay(delayMs / 1000.0);
-    }
-    
-    // Note: The command is freed by the processing thread after this function returns
-    
-    return result.errorCode;
-}
-
-static int ExecuteBioCommand(BioQueueManager *mgr, BioQueuedCommand *cmd, BioCommandResult *result) {
-    switch (cmd->type) {
-        case BIO_CMD_CONNECT:
-            result->errorCode = BL_Connect(cmd->params.connect.address, 
-                                         cmd->params.connect.timeout,
-                                         &mgr->deviceID, &result->data.deviceInfo);
-            if (result->errorCode == SUCCESS) {
-                mgr->isConnected = 1;
-                strncpy(mgr->lastAddress, cmd->params.connect.address, sizeof(mgr->lastAddress) - 1);
-            }
-            break;
-            
-        case BIO_CMD_DISCONNECT:
-            result->errorCode = BL_Disconnect(mgr->deviceID);
-            if (result->errorCode == SUCCESS) {
-                mgr->isConnected = 0;
-                mgr->deviceID = -1;
-            }
-            break;
-            
-        case BIO_CMD_TEST_CONNECTION:
-            result->errorCode = BL_TestConnection(mgr->deviceID);
-            break;
-            
-        case BIO_CMD_START_CHANNEL:
-            result->errorCode = BL_StartChannel(mgr->deviceID, cmd->params.channel.channel);
-            break;
-            
-        case BIO_CMD_STOP_CHANNEL:
-            result->errorCode = BL_StopChannel(mgr->deviceID, cmd->params.channel.channel);
-            break;
-            
-        case BIO_CMD_GET_CHANNEL_INFO:
-            result->errorCode = BL_GetChannelInfos(mgr->deviceID, 
-                                                 cmd->params.channel.channel,
-                                                 &result->data.channelInfo);
-            break;
-            
-        case BIO_CMD_LOAD_TECHNIQUE:
-            result->errorCode = BL_LoadTechnique(mgr->deviceID,
-                cmd->params.loadTechnique.channel,
-                cmd->params.loadTechnique.techniquePath,
-                cmd->params.loadTechnique.params,
-                cmd->params.loadTechnique.firstTechnique,
-                cmd->params.loadTechnique.lastTechnique,
-                cmd->params.loadTechnique.displayParams);
-            break;
-            
-        case BIO_CMD_GET_CURRENT_VALUES:
-            result->errorCode = BL_GetCurrentValues(mgr->deviceID,
-                                                  cmd->params.channel.channel,
-                                                  &result->data.currentValues);
-            break;
-            
-        case BIO_CMD_GET_HARDWARE_CONFIG:
-            result->errorCode = BL_GetHardConf(mgr->deviceID,
-                                             cmd->params.channel.channel,
-                                             &result->data.hardwareConfig);
-            break;
-            
-        case BIO_CMD_SET_HARDWARE_CONFIG:
-            result->errorCode = BL_SetHardConf(mgr->deviceID,
-                                             cmd->params.hardwareConfig.channel,
-                                             cmd->params.hardwareConfig.config);
-            break;
-            
-        default:
-            result->errorCode = ERR_INVALID_PARAMETER;
-            break;
-    }
-    
-    return result->errorCode;
-}
-
-static void NotifyCommandComplete(BioQueuedCommand *cmd, BioCommandResult *result) {
-    // For blocking commands
-    if (cmd->completionEvent && cmd->completedPtr) {
-        // Lock to safely update shared data
-        CmtGetLock(cmd->completionEvent);
-        
-        // Copy results
-        if (cmd->resultPtr) {
-            *cmd->resultPtr = *result;
-        }
-        if (cmd->errorCodePtr) {
-            *cmd->errorCodePtr = result->errorCode;
-        }
-        
-        // Set completed flag - this signals the waiting thread
-        *cmd->completedPtr = 1;
-        
-        CmtReleaseLock(cmd->completionEvent);
-        
-        // DON'T discard the lock here - the blocking thread owns it
-    }
-    
-    // For async commands
-    if (cmd->callback) {
-        cmd->callback(cmd->id, cmd->type, result, cmd->userData);
-    }
-}
-
-static int AttemptReconnection(BioQueueManager *mgr) {
-    LogMessageEx(LOG_DEVICE_BIO, "Attempting to reconnect to BioLogic...");
-    
-    mgr->reconnectAttempts++;
-    
-    // Try to reconnect using the last known address
-    if (strlen(mgr->lastAddress) > 0) {
-        TDeviceInfos_t deviceInfo;
-        int32_t newDeviceID;
-        
-        int result = BL_Connect(mgr->lastAddress, TIMEOUT, &newDeviceID, &deviceInfo);
-        
-        if (result == SUCCESS) {
-            mgr->deviceID = newDeviceID;
-            mgr->isConnected = 1;
-            mgr->reconnectAttempts = 0;
-            LogMessageEx(LOG_DEVICE_BIO, "Successfully reconnected to BioLogic (ID: %d)", newDeviceID);
-            return SUCCESS;
-        }
-    }
-    
-    // Calculate next retry delay with exponential backoff
-    double delay = BIO_QUEUE_RECONNECT_DELAY_MS * pow(2, MIN(mgr->reconnectAttempts - 1, 5));
-    delay = MIN(delay, BIO_QUEUE_MAX_RECONNECT_DELAY);
-    mgr->lastReconnectTime = Timer() + (delay / 1000.0);
-    
-    LogWarningEx(LOG_DEVICE_BIO, "Reconnection failed, next attempt in %.1f seconds", delay / 1000.0);
-    return BL_ERR_COMM_FAILED;
-}
-
-static BioTransaction* FindTransaction(BioQueueManager *mgr, BioTransactionHandle id) {
-    int count = ListNumItems(mgr->activeTransactions);
-    for (int i = 1; i <= count; i++) {
-        BioTransaction **txnPtr = ListGetPtrToItem(mgr->activeTransactions, i);
-        if (txnPtr && *txnPtr && (*txnPtr)->id == id) {
-            return *txnPtr;
-        }
-    }
-    return NULL;
-}
-
-static void ProcessTransaction(BioQueueManager *mgr, BioTransaction *txn) {
-    if (!txn->callback) return;
-    
-    // Collect results
-    BioCommandResult *results = calloc(txn->commandCount, sizeof(BioCommandResult));
-    int successCount = 0;
-    int failureCount = 0;
-    
-    for (int i = 0; i < txn->commandCount; i++) {
-        if (txn->commands[i]) {
-            if (txn->commands[i]->errorCodePtr && *txn->commands[i]->errorCodePtr == SUCCESS) {
-                successCount++;
-            } else {
-                failureCount++;
-            }
-        }
-    }
-    
-    // Call transaction callback
-    txn->callback(txn->id, successCount, failureCount, results, txn->userData);
-    
-    // Clean up
-    free(results);
-    for (int i = 0; i < txn->commandCount; i++) {
-        if (txn->commands[i]) {
-            FreeCommand(txn->commands[i]);
-        }
-    }
-    
-    // Remove from active list
-    int count = ListNumItems(mgr->activeTransactions);
-    for (int i = 1; i <= count; i++) {
-        BioTransaction **txnPtr = ListGetPtrToItem(mgr->activeTransactions, i);
-        if (txnPtr && *txnPtr == txn) {
-            ListRemoveItem(mgr->activeTransactions, 0, i);
-            break;
-        }
-    }
-    
-    free(txn);
-}
-
-static TEccParam_t* CopyEccParams(TEccParams_t *params) {
-    if (!params || !params->pParams || params->len <= 0) return NULL;
-    
-    TEccParam_t *copy = malloc(params->len * sizeof(TEccParam_t));
-    if (!copy) return NULL;
-    
-    memcpy(copy, params->pParams, params->len * sizeof(TEccParam_t));
-    return copy;
-}
-
-/******************************************************************************
  * Utility Functions
  ******************************************************************************/
 
@@ -1189,6 +654,65 @@ int BIO_QueueGetCommandDelay(BioCommandType type) {
     }
 }
 
-BioQueueManager* BIO_GetGlobalQueueManager(void) {
-    return g_bioQueueManager;
+/******************************************************************************
+ * Not Implemented Functions (delegate to generic queue)
+ ******************************************************************************/
+
+int BIO_QueueCancelCommand(BioQueueManager *mgr, BioCommandID cmdId) {
+    return DeviceQueue_CancelCommand(mgr, cmdId);
+}
+
+int BIO_QueueCancelByType(BioQueueManager *mgr, BioCommandType type) {
+    return DeviceQueue_CancelByType(mgr, type);
+}
+
+int BIO_QueueCancelByAge(BioQueueManager *mgr, double ageSeconds) {
+    return DeviceQueue_CancelByAge(mgr, ageSeconds);
+}
+
+int BIO_QueueCancelTransaction(BioQueueManager *mgr, BioTransactionHandle txn) {
+    return DeviceQueue_CancelTransaction(mgr, txn);
+}
+
+int BL_UpdateParametersQueued(int ID, uint8_t channel, int TechIndx, 
+                            TEccParams_t Params, const char* EccFileName) {
+    if (!g_bioQueueManager) {
+        return BL_UpdateParameters(ID, channel, TechIndx, Params, EccFileName);
+    }
+    
+    BioCommandParams params = {
+        .updateParams = {
+            .channel = channel,
+            .techniqueIndex = TechIndx,
+            .params = Params
+        }
+    };
+    strncpy(params.updateParams.eccFileName, EccFileName, 
+            sizeof(params.updateParams.eccFileName) - 1);
+    
+    BioCommandResult result;
+    return BIO_QueueCommandBlocking(g_bioQueueManager, BIO_CMD_UPDATE_PARAMETERS,
+                                  &params, BIO_PRIORITY_HIGH, &result,
+                                  BIO_QUEUE_COMMAND_TIMEOUT_MS);
+}
+
+int BL_GetDataQueued(int ID, uint8_t channel, TDataBuffer_t* pBuf, 
+                   TDataInfos_t* pInfos, TCurrentValues_t* pValues) {
+    if (!g_bioQueueManager || !pBuf || !pInfos) {
+        return BL_GetData(ID, channel, pBuf, pInfos, pValues);
+    }
+    
+    BioCommandParams params = {.channel = {channel}};
+    BioCommandResult result;
+    
+    int error = BIO_QueueCommandBlocking(g_bioQueueManager, BIO_CMD_GET_DATA,
+                                       &params, BIO_PRIORITY_NORMAL, &result,
+                                       BIO_QUEUE_COMMAND_TIMEOUT_MS);
+    
+    if (error == SUCCESS) {
+        *pBuf = result.data.data.buffer;
+        *pInfos = result.data.data.info;
+        // Note: pValues is not filled by this command
+    }
+    return error;
 }

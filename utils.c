@@ -6,6 +6,8 @@
 
 #include "common.h"
 #include "utils.h"
+#include "biologic_dll.h"  // For BL_GetErrorString
+#include "psb10000_dll.h"  // For PSB_GetErrorString
 #include <errno.h>  // For errno
 #include <limits.h> // For INT_MAX, INT_MIN
 #include <ctype.h>  // For isspace
@@ -25,17 +27,51 @@
 static int g_lastErrorCode = SUCCESS;
 static char g_lastErrorMessage[MAX_ERROR_MSG_LENGTH] = {0};
 
-// Note: GetErrorString is implemented in biologic_dll module
-// We just provide these wrapper functions for module-specific errors
-
-const char* GetBioLogicErrorString(int errorCode) {
-    // Delegate to the main GetErrorString function
-    return GetErrorString(errorCode);
-}
-
-const char* GetPSBErrorString(int errorCode) {
-    // Delegate to the main GetErrorString function  
-    return GetErrorString(errorCode);
+const char* GetErrorString(int errorCode) {
+    // Handle common/system errors first
+    switch(errorCode) {
+        case SUCCESS: return "Success";
+        
+        // System errors (-1000 range)
+        case ERR_INVALID_PARAMETER: return "Invalid parameter";
+        case ERR_NULL_POINTER: return "Null pointer";
+        case ERR_OUT_OF_MEMORY: return "Out of memory";
+        case ERR_NOT_INITIALIZED: return "Not initialized";
+        case ERR_ALREADY_INITIALIZED: return "Already initialized";
+        case ERR_TIMEOUT: return "Operation timed out";
+        case ERR_OPERATION_FAILED: return "Operation failed";
+        case ERR_NOT_SUPPORTED: return "Operation not supported";
+        case ERR_INVALID_STATE: return "Invalid state";
+        case ERR_COMM_FAILED: return "Communication failed";
+        
+        // Queue-specific errors
+        case ERR_QUEUE_FULL: return "Command queue is full";
+        case ERR_QUEUE_EMPTY: return "Command queue is empty";
+        case ERR_QUEUE_TIMEOUT: return "Queue operation timed out";
+        case ERR_QUEUE_NOT_INIT: return "Queue not initialized";
+		case ERR_CANCELLED: return "Operation was cancelled";
+        
+        // UI errors (-5000 range)
+        case ERR_UI: return "UI error";
+        
+        // Thread errors (-7000 range)
+        case ERR_THREAD_CREATE: return "Failed to create thread";
+        case ERR_THREAD_POOL: return "Thread pool error";
+        case ERR_THREAD_SYNC: return "Thread synchronization error";
+    }
+    
+    // Check if it's a BioLogic error (-1 to -405 range)
+    if (errorCode >= -405 && errorCode <= -1) {
+        return BL_GetErrorString(errorCode);
+    }
+    
+    // Check if it's a PSB error (-3000 range)
+    if (errorCode <= ERR_BASE_PSB && errorCode > (ERR_BASE_PSB - 100)) {
+        return PSB_GetErrorString(errorCode);
+    }
+    
+    // Default
+    return "Unknown error";
 }
 
 void ClearLastError(void) {

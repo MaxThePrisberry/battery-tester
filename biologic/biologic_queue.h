@@ -2,7 +2,7 @@
  * biologic_queue.h
  * 
  * Thread-safe command queue implementation for BioLogic SP-150e
- * Provides priority-based command queuing with blocking/async operation support
+ * Built on top of the generic device queue system
  ******************************************************************************/
 
 #ifndef BIOLOGIC_QUEUE_H
@@ -10,7 +10,7 @@
 
 #include "common.h"
 #include "biologic_dll.h"
-#include <utility.h>
+#include "device_queue.h"
 
 /******************************************************************************
  * Configuration Constants
@@ -18,11 +18,6 @@
 
 // Device address
 #define BIOLOGIC_DEFAULT_ADDRESS "USB0"
-
-// Queue depths
-#define BIO_QUEUE_HIGH_PRIORITY_SIZE    50
-#define BIO_QUEUE_NORMAL_PRIORITY_SIZE  20
-#define BIO_QUEUE_LOW_PRIORITY_SIZE     10
 
 // Command delays (milliseconds)
 #define BIO_DELAY_AFTER_CONNECT         500   // After connection
@@ -33,23 +28,27 @@
 #define BIO_DELAY_AFTER_DATA_READ       50    // After reading data
 #define BIO_DELAY_RECOVERY              50    // General recovery between commands
 
-// Reconnection parameters
-#define BIO_QUEUE_RECONNECT_DELAY_MS    1000  // Initial reconnection delay
-#define BIO_QUEUE_MAX_RECONNECT_DELAY   30000 // Max reconnection delay
-#define BIO_QUEUE_COMMAND_TIMEOUT_MS    30000 // Timeout for queued commands
-
-// Transaction limits
-#define BIO_MAX_TRANSACTION_COMMANDS    20    // Max commands per transaction
-
 /******************************************************************************
  * Type Definitions
  ******************************************************************************/
 
-// Forward declarations
-typedef struct BioQueueManager BioQueueManager;
-typedef struct BioQueuedCommand BioQueuedCommand;
-typedef uint32_t BioTransactionHandle;
-typedef uint32_t BioCommandID;
+// Use generic types from device_queue.h
+typedef DeviceQueueManager BioQueueManager;
+typedef DeviceTransactionHandle BioTransactionHandle;
+typedef DeviceCommandID BioCommandID;
+typedef DevicePriority BioPriority;
+typedef DeviceCommandCallback BioCommandCallback;
+typedef DeviceTransactionCallback BioTransactionCallback;
+typedef DeviceQueueStats BioQueueStats;
+
+// Map priority levels
+#define BIO_PRIORITY_HIGH    DEVICE_PRIORITY_HIGH
+#define BIO_PRIORITY_NORMAL  DEVICE_PRIORITY_NORMAL
+#define BIO_PRIORITY_LOW     DEVICE_PRIORITY_LOW
+
+// Map transaction constants
+#define BIO_MAX_TRANSACTION_COMMANDS  DEVICE_MAX_TRANSACTION_COMMANDS
+#define BIO_QUEUE_COMMAND_TIMEOUT_MS  DEVICE_QUEUE_COMMAND_TIMEOUT_MS
 
 // Command types
 typedef enum {
@@ -79,13 +78,6 @@ typedef enum {
     
     BIO_CMD_TYPE_COUNT
 } BioCommandType;
-
-// Priority levels
-typedef enum {
-    BIO_PRIORITY_HIGH = 0,    // User-initiated commands
-    BIO_PRIORITY_NORMAL = 1,  // Status queries
-    BIO_PRIORITY_LOW = 2      // Background tasks
-} BioPriority;
 
 // Command parameters union
 typedef union {
@@ -136,15 +128,6 @@ typedef struct {
     } data;
 } BioCommandResult;
 
-// Command callback
-typedef void (*BioCommandCallback)(BioCommandID cmdId, BioCommandType type, 
-                                  BioCommandResult *result, void *userData);
-
-// Transaction callback
-typedef void (*BioTransactionCallback)(BioTransactionHandle txn, 
-                                      int successCount, int failureCount,
-                                      BioCommandResult *results, void *userData);
-
 /******************************************************************************
  * Queue Manager Functions
  ******************************************************************************/
@@ -159,17 +142,6 @@ void BIO_QueueShutdown(BioQueueManager *mgr);
 bool BIO_QueueIsRunning(BioQueueManager *mgr);
 
 // Get queue statistics
-typedef struct {
-    int highPriorityQueued;
-    int normalPriorityQueued;
-    int lowPriorityQueued;
-    int totalProcessed;
-    int totalErrors;
-    int reconnectAttempts;
-    bool isConnected;
-    bool isProcessing;
-} BioQueueStats;
-
 void BIO_QueueGetStats(BioQueueManager *mgr, BioQueueStats *stats);
 
 /******************************************************************************
@@ -253,7 +225,8 @@ const char* BIO_QueueGetCommandTypeName(BioCommandType type);
 // Get delay for command type
 int BIO_QueueGetCommandDelay(BioCommandType type);
 
-// Set global queue manager (used by wrapper functions)
+// Set/Get global queue manager
 void BIO_SetGlobalQueueManager(BioQueueManager *mgr);
+BioQueueManager* BIO_GetGlobalQueueManager(void);
 
 #endif // BIOLOGIC_QUEUE_H

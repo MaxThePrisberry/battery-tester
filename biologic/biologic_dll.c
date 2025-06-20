@@ -482,7 +482,7 @@ bool IsBLFindInitialized(void) {
 // ============================================================================
 
 // Error code to string conversion
-const char* GetErrorString(int errorCode) {
+const char* BL_GetErrorString(int errorCode) {
     switch(errorCode) {
         case 0: return "Success";
         case -1: return "No instrument connected";
@@ -538,7 +538,7 @@ const char* GetErrorString(int errorCode) {
         case -404: return "Data returned by the instrument are corrupted";
         case -405: return "Cannot load techniques: full memory";
         
-        default: return "Unknown error";
+        default: return "Unknown Biologic error";
     }
 }
 

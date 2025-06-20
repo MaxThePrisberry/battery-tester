@@ -2,7 +2,7 @@
  * psb10000_queue.h
  * 
  * Thread-safe command queue implementation for PSB 10000 Series Power Supply
- * Provides priority-based command queuing with blocking/async operation support
+ * Built on top of the generic device queue system
  ******************************************************************************/
 
 #ifndef PSB10000_QUEUE_H
@@ -10,16 +10,11 @@
 
 #include "common.h"
 #include "psb10000_dll.h"
-#include <utility.h>
+#include "device_queue.h"
 
 /******************************************************************************
  * Configuration Constants
  ******************************************************************************/
-
-// Queue depths
-#define PSB_QUEUE_HIGH_PRIORITY_SIZE    50
-#define PSB_QUEUE_NORMAL_PRIORITY_SIZE  20
-#define PSB_QUEUE_LOW_PRIORITY_SIZE     10
 
 // Command delays (milliseconds)
 #define PSB_DELAY_AFTER_WRITE_COIL      50    // After write single coil
@@ -29,23 +24,27 @@
 #define PSB_DELAY_PARAM_CHANGE          200   // After voltage/current/power set
 #define PSB_DELAY_RECOVERY              50    // General recovery between commands
 
-// Reconnection parameters
-#define PSB_QUEUE_RECONNECT_DELAY_MS    1000  // Initial reconnection delay
-#define PSB_QUEUE_MAX_RECONNECT_DELAY   30000 // Max reconnection delay
-#define PSB_QUEUE_COMMAND_TIMEOUT_MS    30000 // Timeout for queued commands
-
-// Transaction limits
-#define PSB_MAX_TRANSACTION_COMMANDS    20    // Max commands per transaction
-
 /******************************************************************************
  * Type Definitions
  ******************************************************************************/
 
-// Forward declarations
-typedef struct PSBQueueManager PSBQueueManager;
-typedef struct QueuedCommand QueuedCommand;
-typedef uint32_t TransactionHandle;
-typedef uint32_t CommandID;
+// Use generic types from device_queue.h
+typedef DeviceQueueManager PSBQueueManager;
+typedef DeviceTransactionHandle TransactionHandle;
+typedef DeviceCommandID CommandID;
+typedef DevicePriority PSBPriority;
+typedef DeviceCommandCallback PSBCommandCallback;
+typedef DeviceTransactionCallback PSBTransactionCallback;
+typedef DeviceQueueStats PSBQueueStats;
+
+// Map priority levels
+#define PSB_PRIORITY_HIGH    DEVICE_PRIORITY_HIGH
+#define PSB_PRIORITY_NORMAL  DEVICE_PRIORITY_NORMAL
+#define PSB_PRIORITY_LOW     DEVICE_PRIORITY_LOW
+
+// Map transaction constants
+#define PSB_MAX_TRANSACTION_COMMANDS  DEVICE_MAX_TRANSACTION_COMMANDS
+#define PSB_QUEUE_COMMAND_TIMEOUT_MS  DEVICE_QUEUE_COMMAND_TIMEOUT_MS
 
 // Command types
 typedef enum {
@@ -72,13 +71,6 @@ typedef enum {
     
     PSB_CMD_TYPE_COUNT
 } PSBCommandType;
-
-// Priority levels
-typedef enum {
-    PSB_PRIORITY_HIGH = 0,    // User-initiated commands
-    PSB_PRIORITY_NORMAL = 1,  // Status queries
-    PSB_PRIORITY_LOW = 2      // Background tasks
-} PSBPriority;
 
 // Command parameters union
 typedef union {
@@ -108,15 +100,6 @@ typedef struct {
         struct { unsigned char *rxData; int rxLength; } rawResponse;
     } data;
 } PSBCommandResult;
-
-// Command callback
-typedef void (*PSBCommandCallback)(CommandID cmdId, PSBCommandType type, 
-                                  PSBCommandResult *result, void *userData);
-
-// Transaction callback
-typedef void (*PSBTransactionCallback)(TransactionHandle txn, 
-                                      int successCount, int failureCount,
-                                      PSBCommandResult *results, void *userData);
 
 /******************************************************************************
  * Queue Manager Functions
@@ -152,17 +135,6 @@ void PSB_QueueShutdown(PSBQueueManager *mgr);
 bool PSB_QueueIsRunning(PSBQueueManager *mgr);
 
 // Get queue statistics
-typedef struct {
-    int highPriorityQueued;
-    int normalPriorityQueued;
-    int lowPriorityQueued;
-    int totalProcessed;
-    int totalErrors;
-    int reconnectAttempts;
-    int isConnected;
-    int isProcessing;
-} PSBQueueStats;
-
 void PSB_QueueGetStats(PSBQueueManager *mgr, PSBQueueStats *stats);
 
 /******************************************************************************
@@ -231,5 +203,9 @@ const char* PSB_QueueGetCommandTypeName(PSBCommandType type);
 
 // Get delay for command type
 int PSB_QueueGetCommandDelay(PSBCommandType type);
+
+// Set/Get global queue manager
+void PSB_SetGlobalQueueManager(PSBQueueManager *mgr);
+PSBQueueManager* PSB_GetGlobalQueueManager(void);
 
 #endif // PSB10000_QUEUE_H

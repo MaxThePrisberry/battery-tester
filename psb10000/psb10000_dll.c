@@ -727,62 +727,6 @@ int PSB_SetPowerLimit(PSB_Handle *handle, double maxPower) {
     return SendModbusCommand(handle, txBuffer, 8, rxBuffer, 8);
 }
 
-int PSB_SetRemoteMode_Routed(PSB_Handle *handle, int enable) {
-    PSBQueueManager *mgr = PSB_GetGlobalQueueManager();
-    if (mgr) {
-        return PSB_SetRemoteModeQueued(handle, enable);
-    }
-    return PSB_SetRemoteMode(handle, enable);
-}
-
-int PSB_SetOutputEnable_Routed(PSB_Handle *handle, int enable) {
-    PSBQueueManager *mgr = PSB_GetGlobalQueueManager();
-    if (mgr) {
-        return PSB_SetOutputEnableQueued(handle, enable);
-    }
-    return PSB_SetOutputEnable(handle, enable);
-}
-
-int PSB_SetVoltage_Routed(PSB_Handle *handle, double voltage) {
-    PSBQueueManager *mgr = PSB_GetGlobalQueueManager();
-    if (mgr) {
-        return PSB_SetVoltageQueued(handle, voltage);
-    }
-    return PSB_SetVoltage(handle, voltage);
-}
-
-int PSB_SetCurrent_Routed(PSB_Handle *handle, double current) {
-    PSBQueueManager *mgr = PSB_GetGlobalQueueManager();
-    if (mgr) {
-        return PSB_SetCurrentQueued(handle, current);
-    }
-    return PSB_SetCurrent(handle, current);
-}
-
-int PSB_SetPower_Routed(PSB_Handle *handle, double power) {
-    PSBQueueManager *mgr = PSB_GetGlobalQueueManager();
-    if (mgr) {
-        return PSB_SetPowerQueued(handle, power);
-    }
-    return PSB_SetPower(handle, power);
-}
-
-int PSB_GetStatus_Routed(PSB_Handle *handle, PSB_Status *status) {
-    PSBQueueManager *mgr = PSB_GetGlobalQueueManager();
-    if (mgr) {
-        return PSB_GetStatusQueued(handle, status);
-    }
-    return PSB_GetStatus(handle, status);
-}
-
-int PSB_GetActualValues_Routed(PSB_Handle *handle, double *voltage, double *current, double *power) {
-    PSBQueueManager *mgr = PSB_GetGlobalQueueManager();
-    if (mgr) {
-        return PSB_GetActualValuesQueued(handle, voltage, current, power);
-    }
-    return PSB_GetActualValues(handle, voltage, current, power);
-}
-
 /******************************************************************************
  * Raw Command Execution Support
  * This allows the queue to send raw Modbus commands

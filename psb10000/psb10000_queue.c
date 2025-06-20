@@ -2,89 +2,12 @@
  * psb10000_queue.c
  * 
  * Thread-safe command queue implementation for PSB 10000 Series Power Supply
+ * Built on top of the generic device queue system
  ******************************************************************************/
 
 #include "psb10000_queue.h"
 #include "logging.h"
-#include "toolbox.h"
 #include <ansi_c.h>
-#include <utility.h>
-
-/******************************************************************************
- * Internal Structures
- ******************************************************************************/
-
-// Queued command structure
-struct QueuedCommand {
-    CommandID id;
-    PSBCommandType type;
-    PSBPriority priority;
-    double timestamp;
-    PSBCommandParams params;
-    PSBCommandCallback callback;
-    void *userData;
-    TransactionHandle transactionId;
-    
-    // For blocking calls
-    CmtThreadLockHandle completionEvent;
-    PSBCommandResult *resultPtr;
-    int *errorCodePtr;
-	volatile int *completedPtr;  // Add this field
-    
-    // For raw Modbus - we need to copy buffers
-    unsigned char *txBufferCopy;
-    unsigned char *rxBufferCopy;
-};
-
-// Transaction structure
-typedef struct {
-    TransactionHandle id;
-    QueuedCommand *commands[PSB_MAX_TRANSACTION_COMMANDS];
-    int commandCount;
-    PSBTransactionCallback callback;
-    void *userData;
-    bool committed;
-} Transaction;
-
-// Queue manager structure
-struct PSBQueueManager {
-    // PSB device handle and connection info
-    PSB_Handle psbHandle;
-    PSB_Handle *psbHandlePtr;  // Pointer to the handle
-    char targetSerial[64];
-    bool autoDiscovery;
-    int specificPort;
-    int specificBaudRate;
-    int specificSlaveAddress;
-    
-    // Thread-safe queues
-    CmtTSQHandle highPriorityQueue;
-    CmtTSQHandle normalPriorityQueue;
-    CmtTSQHandle lowPriorityQueue;
-    
-    // Processing thread
-    CmtThreadFunctionID processingThreadId;
-    volatile int shutdownRequested;
-    
-    // Connection state
-    volatile int isConnected;
-    int reconnectAttempts;
-    double lastReconnectTime;
-    
-    // Command tracking
-    volatile CommandID nextCommandId;
-    volatile TransactionHandle nextTransactionId;
-    CmtThreadLockHandle commandLock;
-    
-    // Active transactions
-    ListType activeTransactions;
-    CmtThreadLockHandle transactionLock;
-    
-    // Statistics
-    volatile int totalProcessed;
-    volatile int totalErrors;
-    CmtThreadLockHandle statsLock;
-};
 
 /******************************************************************************
  * Static Variables
@@ -105,24 +28,300 @@ static const char* g_commandTypeNames[] = {
     "RAW_MODBUS"
 };
 
+// Global queue manager pointer
+static PSBQueueManager *g_psbQueueManager = NULL;
+
 /******************************************************************************
- * Internal Function Prototypes
+ * PSB Device Context Structure
  ******************************************************************************/
 
-static int CVICALLBACK ProcessingThreadFunction(void *functionData);
-static QueuedCommand* CreateCommand(PSBCommandType type, PSBCommandParams *params);
-static void FreeCommand(QueuedCommand *cmd);
-static int ProcessCommand(PSBQueueManager *mgr, QueuedCommand *cmd);
-static int ExecutePSBCommand(PSB_Handle *handle, QueuedCommand *cmd, PSBCommandResult *result);
-static void NotifyCommandComplete(QueuedCommand *cmd, PSBCommandResult *result);
-static int AttemptReconnection(PSBQueueManager *mgr);
-static Transaction* FindTransaction(PSBQueueManager *mgr, TransactionHandle id);
-static void ProcessTransaction(PSBQueueManager *mgr, Transaction *txn);
-static int ConnectPSB(PSBQueueManager *mgr);
-static void DisconnectPSB(PSBQueueManager *mgr);
+typedef struct {
+    PSB_Handle handle;
+    char targetSerial[64];
+    bool autoDiscovery;
+    int specificPort;
+    int specificBaudRate;
+    int specificSlaveAddress;
+} PSBDeviceContext;
 
-void PSB_SetGlobalQueueManager(PSBQueueManager *mgr);
-PSBQueueManager* PSB_GetGlobalQueueManager(void);
+/******************************************************************************
+ * PSB Connection Parameters
+ ******************************************************************************/
+
+typedef struct {
+    char targetSerial[64];
+    int comPort;
+    int baudRate;
+    int slaveAddress;
+    bool autoDiscovery;
+} PSBConnectionParams;
+
+/******************************************************************************
+ * Device Adapter Implementation
+ ******************************************************************************/
+
+// Forward declarations for adapter functions
+static int PSB_AdapterConnect(void *deviceContext, void *connectionParams);
+static int PSB_AdapterDisconnect(void *deviceContext);
+static int PSB_AdapterTestConnection(void *deviceContext);
+static bool PSB_AdapterIsConnected(void *deviceContext);
+static int PSB_AdapterExecuteCommand(void *deviceContext, int commandType, void *params, void *result);
+static void* PSB_AdapterCreateCommandParams(int commandType, void *sourceParams);
+static void PSB_AdapterFreeCommandParams(int commandType, void *params);
+static void* PSB_AdapterCreateCommandResult(int commandType);
+static void PSB_AdapterFreeCommandResult(int commandType, void *result);
+static void PSB_AdapterCopyCommandResult(int commandType, void *dest, void *src);
+
+// PSB device adapter
+static const DeviceAdapter g_psbAdapter = {
+    .deviceName = "PSB 10000",
+    
+    // Connection management
+    .connect = PSB_AdapterConnect,
+    .disconnect = PSB_AdapterDisconnect,
+    .testConnection = PSB_AdapterTestConnection,
+    .isConnected = PSB_AdapterIsConnected,
+    
+    // Command execution
+    .executeCommand = PSB_AdapterExecuteCommand,
+    
+    // Command management
+    .createCommandParams = PSB_AdapterCreateCommandParams,
+    .freeCommandParams = PSB_AdapterFreeCommandParams,
+    .createCommandResult = PSB_AdapterCreateCommandResult,
+    .freeCommandResult = PSB_AdapterFreeCommandResult,
+    .copyCommandResult = PSB_AdapterCopyCommandResult,
+    
+    // Utility functions
+    .getCommandTypeName = (const char* (*)(int))PSB_QueueGetCommandTypeName,
+    .getCommandDelay = PSB_QueueGetCommandDelay,
+    .getErrorString = GetErrorString,
+    
+    // Raw command support
+    .supportsRawCommands = NULL,
+    .executeRawCommand = NULL
+};
+
+/******************************************************************************
+ * Adapter Function Implementations
+ ******************************************************************************/
+
+static int PSB_AdapterConnect(void *deviceContext, void *connectionParams) {
+    PSBDeviceContext *ctx = (PSBDeviceContext*)deviceContext;
+    PSBConnectionParams *params = (PSBConnectionParams*)connectionParams;
+    int result;
+    
+    if (params->autoDiscovery) {
+        // Use auto-discovery
+        LogMessageEx(LOG_DEVICE_PSB, "Auto-discovering PSB with serial %s...", params->targetSerial);
+        result = PSB_AutoDiscover(params->targetSerial, &ctx->handle);
+        
+        if (result == PSB_SUCCESS) {
+            SAFE_STRCPY(ctx->targetSerial, params->targetSerial, sizeof(ctx->targetSerial));
+            ctx->autoDiscovery = true;
+            
+            // Set initial state
+            PSB_SetRemoteMode(&ctx->handle, 1);
+            PSB_SetOutputEnable(&ctx->handle, 0);  // Start with output disabled
+            
+            // Get initial status
+            PSB_Status status;
+            if (PSB_GetStatus(&ctx->handle, &status) == PSB_SUCCESS) {
+                LogMessageEx(LOG_DEVICE_PSB, "PSB Status: Output=%s, Remote=%s", 
+                           status.outputEnabled ? "ON" : "OFF",
+                           status.remoteMode ? "YES" : "NO");
+            }
+        }
+    } else {
+        // Use specific connection parameters
+        LogMessageEx(LOG_DEVICE_PSB, "Connecting to PSB on COM%d...", params->comPort);
+        result = PSB_InitializeSpecific(&ctx->handle, params->comPort, 
+                                      params->slaveAddress, params->baudRate);
+        
+        if (result == PSB_SUCCESS) {
+            ctx->autoDiscovery = false;
+            ctx->specificPort = params->comPort;
+            ctx->specificBaudRate = params->baudRate;
+            ctx->specificSlaveAddress = params->slaveAddress;
+            
+            // Set initial state
+            PSB_SetRemoteMode(&ctx->handle, 1);
+            PSB_SetOutputEnable(&ctx->handle, 0);
+        }
+    }
+    
+    return result;
+}
+
+static int PSB_AdapterDisconnect(void *deviceContext) {
+    PSBDeviceContext *ctx = (PSBDeviceContext*)deviceContext;
+    
+    if (ctx->handle.isConnected) {
+        // Disable output and remote mode before disconnecting
+        PSB_SetOutputEnable(&ctx->handle, 0);
+        PSB_SetRemoteMode(&ctx->handle, 0);
+        PSB_Close(&ctx->handle);
+    }
+    
+    return PSB_SUCCESS;
+}
+
+static int PSB_AdapterTestConnection(void *deviceContext) {
+    PSBDeviceContext *ctx = (PSBDeviceContext*)deviceContext;
+    PSB_Status status;
+    return PSB_GetStatus(&ctx->handle, &status);
+}
+
+static bool PSB_AdapterIsConnected(void *deviceContext) {
+    PSBDeviceContext *ctx = (PSBDeviceContext*)deviceContext;
+    return ctx->handle.isConnected;
+}
+
+static int PSB_AdapterExecuteCommand(void *deviceContext, int commandType, void *params, void *result) {
+    PSBDeviceContext *ctx = (PSBDeviceContext*)deviceContext;
+    PSBCommandParams *cmdParams = (PSBCommandParams*)params;
+    PSBCommandResult *cmdResult = (PSBCommandResult*)result;
+    
+    switch ((PSBCommandType)commandType) {
+        case PSB_CMD_SET_REMOTE_MODE:
+            cmdResult->errorCode = PSB_SetRemoteMode(&ctx->handle, cmdParams->remoteMode.enable);
+            break;
+            
+        case PSB_CMD_SET_OUTPUT_ENABLE:
+            cmdResult->errorCode = PSB_SetOutputEnable(&ctx->handle, cmdParams->outputEnable.enable);
+            break;
+            
+        case PSB_CMD_SET_VOLTAGE:
+            cmdResult->errorCode = PSB_SetVoltage(&ctx->handle, cmdParams->setVoltage.voltage);
+            break;
+            
+        case PSB_CMD_SET_CURRENT:
+            cmdResult->errorCode = PSB_SetCurrent(&ctx->handle, cmdParams->setCurrent.current);
+            break;
+            
+        case PSB_CMD_SET_POWER:
+            cmdResult->errorCode = PSB_SetPower(&ctx->handle, cmdParams->setPower.power);
+            break;
+            
+        case PSB_CMD_SET_VOLTAGE_LIMITS:
+            cmdResult->errorCode = PSB_SetVoltageLimits(&ctx->handle, 
+                cmdParams->voltageLimits.minVoltage,
+                cmdParams->voltageLimits.maxVoltage);
+            break;
+            
+        case PSB_CMD_SET_CURRENT_LIMITS:
+            cmdResult->errorCode = PSB_SetCurrentLimits(&ctx->handle,
+                cmdParams->currentLimits.minCurrent,
+                cmdParams->currentLimits.maxCurrent);
+            break;
+            
+        case PSB_CMD_SET_POWER_LIMIT:
+            cmdResult->errorCode = PSB_SetPowerLimit(&ctx->handle, cmdParams->powerLimit.maxPower);
+            break;
+            
+        case PSB_CMD_GET_STATUS:
+            cmdResult->errorCode = PSB_GetStatus(&ctx->handle, &cmdResult->data.status);
+            break;
+            
+        case PSB_CMD_GET_ACTUAL_VALUES:
+            cmdResult->errorCode = PSB_GetActualValues(&ctx->handle,
+                &cmdResult->data.actualValues.voltage,
+                &cmdResult->data.actualValues.current,
+                &cmdResult->data.actualValues.power);
+            break;
+            
+        case PSB_CMD_RAW_MODBUS:
+            // TODO: Implement raw Modbus command execution using PSB_SendRawModbus
+            cmdResult->errorCode = PSB_ERROR_NOT_SUPPORTED;
+            break;
+            
+        default:
+            cmdResult->errorCode = PSB_ERROR_INVALID_PARAM;
+            break;
+    }
+    
+    return cmdResult->errorCode;
+}
+
+static void* PSB_AdapterCreateCommandParams(int commandType, void *sourceParams) {
+    if (!sourceParams) return NULL;
+    
+    PSBCommandParams *params = malloc(sizeof(PSBCommandParams));
+    if (!params) return NULL;
+    
+    *params = *(PSBCommandParams*)sourceParams;
+    
+    // Handle special cases (like raw Modbus buffers)
+    if (commandType == PSB_CMD_RAW_MODBUS && sourceParams) {
+        PSBCommandParams *src = (PSBCommandParams*)sourceParams;
+        if (src->rawModbus.txBuffer && src->rawModbus.txLength > 0) {
+            params->rawModbus.txBuffer = malloc(src->rawModbus.txLength);
+            if (params->rawModbus.txBuffer) {
+                memcpy(params->rawModbus.txBuffer, src->rawModbus.txBuffer, src->rawModbus.txLength);
+            }
+            
+            if (src->rawModbus.rxBufferSize > 0) {
+                params->rawModbus.rxBuffer = malloc(src->rawModbus.rxBufferSize);
+            }
+        }
+    }
+    
+    return params;
+}
+
+static void PSB_AdapterFreeCommandParams(int commandType, void *params) {
+    if (!params) return;
+    
+    PSBCommandParams *cmdParams = (PSBCommandParams*)params;
+    
+    // Free raw Modbus buffers
+    if (commandType == PSB_CMD_RAW_MODBUS) {
+        if (cmdParams->rawModbus.txBuffer) free(cmdParams->rawModbus.txBuffer);
+        if (cmdParams->rawModbus.rxBuffer) free(cmdParams->rawModbus.rxBuffer);
+    }
+    
+    free(params);
+}
+
+static void* PSB_AdapterCreateCommandResult(int commandType) {
+    PSBCommandResult *result = calloc(1, sizeof(PSBCommandResult));
+    
+    // Initialize any command-specific result fields if needed
+    
+    return result;
+}
+
+static void PSB_AdapterFreeCommandResult(int commandType, void *result) {
+    if (!result) return;
+    
+    PSBCommandResult *cmdResult = (PSBCommandResult*)result;
+    
+    // Free any allocated result data
+    if (commandType == PSB_CMD_RAW_MODBUS && cmdResult->data.rawResponse.rxData) {
+        free(cmdResult->data.rawResponse.rxData);
+    }
+    
+    free(result);
+}
+
+static void PSB_AdapterCopyCommandResult(int commandType, void *dest, void *src) {
+    if (!dest || !src) return;
+    
+    PSBCommandResult *destResult = (PSBCommandResult*)dest;
+    PSBCommandResult *srcResult = (PSBCommandResult*)src;
+    
+    *destResult = *srcResult;
+    
+    // Handle deep copies for pointer fields
+    if (commandType == PSB_CMD_RAW_MODBUS && srcResult->data.rawResponse.rxData) {
+        destResult->data.rawResponse.rxData = malloc(srcResult->data.rawResponse.rxLength);
+        if (destResult->data.rawResponse.rxData) {
+            memcpy(destResult->data.rawResponse.rxData, 
+                   srcResult->data.rawResponse.rxData, 
+                   srcResult->data.rawResponse.rxLength);
+        }
+    }
+}
 
 /******************************************************************************
  * Queue Manager Functions
@@ -134,276 +333,102 @@ PSBQueueManager* PSB_QueueInit(const char *targetSerial) {
         return NULL;
     }
     
-    PSBQueueManager *mgr = calloc(1, sizeof(PSBQueueManager));
+    // Create device context
+    PSBDeviceContext *context = calloc(1, sizeof(PSBDeviceContext));
+    if (!context) {
+        LogErrorEx(LOG_DEVICE_PSB, "PSB_QueueInit: Failed to allocate device context");
+        return NULL;
+    }
+    
+    // Create connection parameters
+    PSBConnectionParams *connParams = calloc(1, sizeof(PSBConnectionParams));
+    if (!connParams) {
+        free(context);
+        LogErrorEx(LOG_DEVICE_PSB, "PSB_QueueInit: Failed to allocate connection params");
+        return NULL;
+    }
+    
+    SAFE_STRCPY(connParams->targetSerial, targetSerial, sizeof(connParams->targetSerial));
+    connParams->autoDiscovery = true;
+    
+    // Create the generic device queue
+    PSBQueueManager *mgr = DeviceQueue_Create(&g_psbAdapter, context, connParams);
+    
     if (!mgr) {
-        LogErrorEx(LOG_DEVICE_PSB, "PSB_QueueInit: Failed to allocate manager");
+        free(context);
+        free(connParams);
         return NULL;
     }
     
-    // Store connection parameters
-    SAFE_STRCPY(mgr->targetSerial, targetSerial, sizeof(mgr->targetSerial));
-    mgr->autoDiscovery = true;
-    mgr->specificPort = 0;
-    mgr->specificBaudRate = 0;
-    mgr->specificSlaveAddress = DEFAULT_SLAVE_ADDRESS;
-    mgr->psbHandlePtr = &mgr->psbHandle;
-    mgr->nextCommandId = 1;
-    mgr->nextTransactionId = 1;
-    mgr->isConnected = 0;
+    // Set logging device
+    DeviceQueue_SetLogDevice(mgr, LOG_DEVICE_PSB);
     
-    // Create queues
-    int error = 0;
-    error |= CmtNewTSQ(PSB_QUEUE_HIGH_PRIORITY_SIZE, sizeof(QueuedCommand*), 0, &mgr->highPriorityQueue);
-    error |= CmtNewTSQ(PSB_QUEUE_NORMAL_PRIORITY_SIZE, sizeof(QueuedCommand*), 0, &mgr->normalPriorityQueue);
-    error |= CmtNewTSQ(PSB_QUEUE_LOW_PRIORITY_SIZE, sizeof(QueuedCommand*), 0, &mgr->lowPriorityQueue);
-    
-    if (error < 0) {
-        LogErrorEx(LOG_DEVICE_PSB, "PSB_QueueInit: Failed to create queues");
-        PSB_QueueShutdown(mgr);
-        return NULL;
-    }
-    
-    // Create locks
-    CmtNewLock(NULL, 0, &mgr->commandLock);
-    CmtNewLock(NULL, 0, &mgr->transactionLock);
-    CmtNewLock(NULL, 0, &mgr->statsLock);
-    
-    // Initialize transaction list
-    mgr->activeTransactions = ListCreate(sizeof(Transaction*));
-    
-    // Attempt initial connection
-    LogMessageEx(LOG_DEVICE_PSB, "Attempting to connect to PSB %s...", targetSerial);
-    int connectResult = ConnectPSB(mgr);
-    
-    if (connectResult == PSB_SUCCESS) {
-        LogMessageEx(LOG_DEVICE_PSB, "Successfully connected to PSB %s", targetSerial);
-        mgr->isConnected = 1;
-    } else {
-        LogWarningEx(LOG_DEVICE_PSB, "Failed initial connection to PSB %s - will retry in background", targetSerial);
-        mgr->isConnected = 0;
-        mgr->lastReconnectTime = Timer();
-    }
-    
-    // Start processing thread
-    if (g_threadPool > 0) {
-        error = CmtScheduleThreadPoolFunction(g_threadPool, ProcessingThreadFunction, 
-                                            mgr, &mgr->processingThreadId);
-        if (error != 0) {
-            LogErrorEx(LOG_DEVICE_PSB, "PSB_QueueInit: Failed to start processing thread");
-            PSB_QueueShutdown(mgr);
-            return NULL;
-        }
-    } else {
-        LogErrorEx(LOG_DEVICE_PSB, "PSB_QueueInit: No thread pool available");
-        PSB_QueueShutdown(mgr);
-        return NULL;
-    }
-    
-    LogMessageEx(LOG_DEVICE_PSB, "PSB queue manager initialized for serial %s", targetSerial);
     return mgr;
 }
 
 PSBQueueManager* PSB_QueueInitSpecific(int comPort, int slaveAddress, int baudRate) {
-    PSBQueueManager *mgr = calloc(1, sizeof(PSBQueueManager));
+    // Create device context
+    PSBDeviceContext *context = calloc(1, sizeof(PSBDeviceContext));
+    if (!context) {
+        LogErrorEx(LOG_DEVICE_PSB, "PSB_QueueInitSpecific: Failed to allocate device context");
+        return NULL;
+    }
+    
+    // Create connection parameters
+    PSBConnectionParams *connParams = calloc(1, sizeof(PSBConnectionParams));
+    if (!connParams) {
+        free(context);
+        LogErrorEx(LOG_DEVICE_PSB, "PSB_QueueInitSpecific: Failed to allocate connection params");
+        return NULL;
+    }
+    
+    connParams->comPort = comPort;
+    connParams->slaveAddress = slaveAddress;
+    connParams->baudRate = baudRate;
+    connParams->autoDiscovery = false;
+    
+    // Create the generic device queue
+    PSBQueueManager *mgr = DeviceQueue_Create(&g_psbAdapter, context, connParams);
+    
     if (!mgr) {
-        LogErrorEx(LOG_DEVICE_PSB, "PSB_QueueInitSpecific: Failed to allocate manager");
+        free(context);
+        free(connParams);
         return NULL;
     }
     
-    // Store specific connection parameters
-    mgr->autoDiscovery = false;
-    mgr->specificPort = comPort;
-    mgr->specificBaudRate = baudRate;
-    mgr->specificSlaveAddress = slaveAddress;
-    mgr->psbHandlePtr = &mgr->psbHandle;
-    mgr->nextCommandId = 1;
-    mgr->nextTransactionId = 1;
-    mgr->isConnected = 0;
+    // Set logging device
+    DeviceQueue_SetLogDevice(mgr, LOG_DEVICE_PSB);
     
-    // Create queues
-    int error = 0;
-    error |= CmtNewTSQ(PSB_QUEUE_HIGH_PRIORITY_SIZE, sizeof(QueuedCommand*), 0, &mgr->highPriorityQueue);
-    error |= CmtNewTSQ(PSB_QUEUE_NORMAL_PRIORITY_SIZE, sizeof(QueuedCommand*), 0, &mgr->normalPriorityQueue);
-    error |= CmtNewTSQ(PSB_QUEUE_LOW_PRIORITY_SIZE, sizeof(QueuedCommand*), 0, &mgr->lowPriorityQueue);
-    
-    if (error < 0) {
-        LogErrorEx(LOG_DEVICE_PSB, "PSB_QueueInitSpecific: Failed to create queues");
-        PSB_QueueShutdown(mgr);
-        return NULL;
-    }
-    
-    // Create locks
-    CmtNewLock(NULL, 0, &mgr->commandLock);
-    CmtNewLock(NULL, 0, &mgr->transactionLock);
-    CmtNewLock(NULL, 0, &mgr->statsLock);
-    
-    // Initialize transaction list
-    mgr->activeTransactions = ListCreate(sizeof(Transaction*));
-    
-    // Attempt initial connection
-    LogMessageEx(LOG_DEVICE_PSB, "Attempting to connect to PSB on COM%d...", comPort);
-    int connectResult = ConnectPSB(mgr);
-    
-    if (connectResult == PSB_SUCCESS) {
-        LogMessageEx(LOG_DEVICE_PSB, "Successfully connected to PSB on COM%d", comPort);
-        mgr->isConnected = 1;
-    } else {
-        LogWarningEx(LOG_DEVICE_PSB, "Failed initial connection to PSB on COM%d", comPort);
-        mgr->isConnected = 0;
-        mgr->lastReconnectTime = Timer();
-    }
-    
-    // Start processing thread
-    if (g_threadPool > 0) {
-        error = CmtScheduleThreadPoolFunction(g_threadPool, ProcessingThreadFunction, 
-                                            mgr, &mgr->processingThreadId);
-        if (error != 0) {
-            LogErrorEx(LOG_DEVICE_PSB, "PSB_QueueInitSpecific: Failed to start processing thread");
-            PSB_QueueShutdown(mgr);
-            return NULL;
-        }
-    } else {
-        LogErrorEx(LOG_DEVICE_PSB, "PSB_QueueInitSpecific: No thread pool available");
-        PSB_QueueShutdown(mgr);
-        return NULL;
-    }
-    
-    LogMessageEx(LOG_DEVICE_PSB, "PSB queue manager initialized for COM%d", comPort);
     return mgr;
+}
+
+PSB_Handle* PSB_QueueGetHandle(PSBQueueManager *mgr) {
+    PSBDeviceContext *context = (PSBDeviceContext*)DeviceQueue_GetDeviceContext(mgr);
+    if (!context) return NULL;
+    
+    return &context->handle;
 }
 
 void PSB_QueueShutdown(PSBQueueManager *mgr) {
     if (!mgr) return;
     
-    LogMessageEx(LOG_DEVICE_PSB, "Shutting down PSB queue manager...");
+    // Get and free the device context
+    PSBDeviceContext *context = (PSBDeviceContext*)DeviceQueue_GetDeviceContext(mgr);
     
-    // Signal shutdown
-    InterlockedExchange(&mgr->shutdownRequested, 1);
+    // Destroy the generic queue (this will call disconnect)
+    DeviceQueue_Destroy(mgr);
     
-    // Wait for processing thread
-    if (mgr->processingThreadId != 0) {
-        CmtWaitForThreadPoolFunctionCompletion(g_threadPool, mgr->processingThreadId,
-                                             OPT_TP_PROCESS_EVENTS_WHILE_WAITING);
-    }
-    
-    // Disconnect PSB
-    DisconnectPSB(mgr);
-    
-    // Cancel all pending commands
-    PSB_QueueCancelAll(mgr);
-    
-    // Dispose queues
-    if (mgr->highPriorityQueue) CmtDiscardTSQ(mgr->highPriorityQueue);
-    if (mgr->normalPriorityQueue) CmtDiscardTSQ(mgr->normalPriorityQueue);
-    if (mgr->lowPriorityQueue) CmtDiscardTSQ(mgr->lowPriorityQueue);
-    
-    // Dispose locks
-    if (mgr->commandLock) CmtDiscardLock(mgr->commandLock);
-    if (mgr->transactionLock) CmtDiscardLock(mgr->transactionLock);
-    if (mgr->statsLock) CmtDiscardLock(mgr->statsLock);
-    
-    // Clean up transactions
-    if (mgr->activeTransactions) {
-        int count = ListNumItems(mgr->activeTransactions);
-        for (int i = 1; i <= count; i++) {
-            Transaction **txnPtr = ListGetPtrToItem(mgr->activeTransactions, i);
-            if (txnPtr && *txnPtr) {
-                free(*txnPtr);
-            }
-        }
-        ListDispose(mgr->activeTransactions);
-    }
-    
-    free(mgr);
-    LogMessageEx(LOG_DEVICE_PSB, "PSB queue manager shut down");
-}
-
-PSB_Handle* PSB_QueueGetHandle(PSBQueueManager *mgr) {
-    if (!mgr || !mgr->isConnected) {
-        return NULL;
-    }
-    return mgr->psbHandlePtr;
+    // Free our contexts
+    if (context) free(context);
+    // Note: Connection params are freed by the generic queue
 }
 
 bool PSB_QueueIsRunning(PSBQueueManager *mgr) {
-    return mgr && !mgr->shutdownRequested;
+    return DeviceQueue_IsRunning(mgr);
 }
 
 void PSB_QueueGetStats(PSBQueueManager *mgr, PSBQueueStats *stats) {
-    if (!mgr || !stats) return;
-    
-    memset(stats, 0, sizeof(PSBQueueStats));
-    
-    // Get queue lengths
-    CmtGetTSQAttribute(mgr->highPriorityQueue, ATTR_TSQ_ITEMS_IN_QUEUE, &stats->highPriorityQueued);
-    CmtGetTSQAttribute(mgr->normalPriorityQueue, ATTR_TSQ_ITEMS_IN_QUEUE, &stats->normalPriorityQueued);
-    CmtGetTSQAttribute(mgr->lowPriorityQueue, ATTR_TSQ_ITEMS_IN_QUEUE, &stats->lowPriorityQueued);
-    
-    CmtGetLock(mgr->statsLock);
-    stats->totalProcessed = mgr->totalProcessed;
-    stats->totalErrors = mgr->totalErrors;
-    stats->reconnectAttempts = mgr->reconnectAttempts;
-    CmtReleaseLock(mgr->statsLock);
-    
-    stats->isConnected = mgr->isConnected;
-    stats->isProcessing = (mgr->processingThreadId != 0);
-}
-
-/******************************************************************************
- * Internal Connection Functions
- ******************************************************************************/
-
-static int ConnectPSB(PSBQueueManager *mgr) {
-    int result;
-    
-    if (mgr->autoDiscovery) {
-        // Use auto-discovery
-        LogMessageEx(LOG_DEVICE_PSB, "Auto-discovering PSB with serial %s...", mgr->targetSerial);
-        result = PSB_AutoDiscover(mgr->targetSerial, mgr->psbHandlePtr);
-        
-        if (result == PSB_SUCCESS) {
-            // Set initial state
-            PSB_SetRemoteMode(mgr->psbHandlePtr, 1);
-            PSB_SetOutputEnable(mgr->psbHandlePtr, 0);  // Start with output disabled
-            
-            // Get initial status
-            PSB_Status status;
-            if (PSB_GetStatus(mgr->psbHandlePtr, &status) == PSB_SUCCESS) {
-                LogMessageEx(LOG_DEVICE_PSB, "PSB Status: Output=%s, Remote=%s", 
-                           status.outputEnabled ? "ON" : "OFF",
-                           status.remoteMode ? "YES" : "NO");
-            }
-        }
-    } else {
-        // Use specific connection parameters
-        LogMessageEx(LOG_DEVICE_PSB, "Connecting to PSB on COM%d...", mgr->specificPort);
-        result = PSB_InitializeSpecific(mgr->psbHandlePtr, mgr->specificPort, 
-                                      mgr->specificSlaveAddress, mgr->specificBaudRate);
-        
-        if (result == PSB_SUCCESS) {
-            // Get serial number
-            // Note: This would require implementing a serial number read function
-            SAFE_STRCPY(mgr->psbHandlePtr->serialNumber, "UNKNOWN", sizeof(mgr->psbHandlePtr->serialNumber));
-            
-            // Set initial state
-            PSB_SetRemoteMode(mgr->psbHandlePtr, 1);
-            PSB_SetOutputEnable(mgr->psbHandlePtr, 0);
-        }
-    }
-    
-    return result;
-}
-
-static void DisconnectPSB(PSBQueueManager *mgr) {
-    if (mgr->psbHandlePtr && mgr->psbHandlePtr->isConnected) {
-        // Disable output and remote mode before disconnecting
-        PSB_SetOutputEnable(mgr->psbHandlePtr, 0);
-        PSB_SetRemoteMode(mgr->psbHandlePtr, 0);
-        PSB_Close(mgr->psbHandlePtr);
-        
-        mgr->isConnected = 0;
-        LogMessageEx(LOG_DEVICE_PSB, "Disconnected from PSB");
-    }
+    DeviceQueue_GetStats(mgr, stats);
 }
 
 /******************************************************************************
@@ -413,161 +438,21 @@ static void DisconnectPSB(PSBQueueManager *mgr) {
 int PSB_QueueCommandBlocking(PSBQueueManager *mgr, PSBCommandType type,
                            PSBCommandParams *params, PSBPriority priority,
                            PSBCommandResult *result, int timeoutMs) {
-    if (!mgr || !result) return PSB_ERROR_INVALID_PARAM;
-    
-    // Create a synchronization structure that we control
-    typedef struct {
-        CmtThreadLockHandle lock;
-        PSBCommandResult result;
-        int errorCode;
-        volatile int completed;
-    } SyncBlock;
-    
-    SyncBlock *sync = calloc(1, sizeof(SyncBlock));
-    if (!sync) return PSB_ERROR_COMM;
-    
-    // Create a regular lock for synchronization (NOT an event lock)
-    int error = CmtNewLock(NULL, 0, &sync->lock);
-    if (error < 0) {
-        free(sync);
-        return PSB_ERROR_COMM;
-    }
-    
-    // Create the command
-    QueuedCommand *cmd = CreateCommand(type, params);
-    if (!cmd) {
-        CmtDiscardLock(sync->lock);
-        free(sync);
-        return PSB_ERROR_COMM;
-    }
-    
-    cmd->priority = priority;
-    cmd->completionEvent = sync->lock;  // Store the lock handle
-    cmd->resultPtr = &sync->result;
-    cmd->errorCodePtr = &sync->errorCode;
-    cmd->completedPtr = &sync->completed;  // Add this field to QueuedCommand
-    
-    // Select queue based on priority
-    CmtTSQHandle queue;
-    switch (priority) {
-        case PSB_PRIORITY_HIGH:   queue = mgr->highPriorityQueue; break;
-        case PSB_PRIORITY_NORMAL: queue = mgr->normalPriorityQueue; break;
-        case PSB_PRIORITY_LOW:    queue = mgr->lowPriorityQueue; break;
-        default: queue = mgr->normalPriorityQueue; break;
-    }
-    
-    // Enqueue command
-    if (CmtWriteTSQData(queue, &cmd, 1, TSQ_INFINITE_TIMEOUT, NULL) < 0) {
-        LogErrorEx(LOG_DEVICE_PSB, "Failed to enqueue command type %s", 
-                 PSB_QueueGetCommandTypeName(type));
-        CmtDiscardLock(sync->lock);
-        free(sync);
-        FreeCommand(cmd);
-        return PSB_ERROR_COMM;
-    }
-    
-    // Wait for completion using polling
-    double startTime = Timer();
-    double timeout = (timeoutMs > 0 ? timeoutMs : 30000) / 1000.0; // Convert to seconds
-    int errorCode = PSB_ERROR_TIMEOUT;
-    
-    while ((Timer() - startTime) < timeout) {
-        // Check if command completed
-        CmtGetLock(sync->lock);
-        if (sync->completed) {
-            *result = sync->result;
-            errorCode = sync->errorCode;
-            CmtReleaseLock(sync->lock);
-            break;
-        }
-        CmtReleaseLock(sync->lock);
-        
-        // Process events and yield CPU
-        ProcessSystemEvents();
-        Delay(0.001); // 1ms delay
-    }
-    
-    if (errorCode == PSB_ERROR_TIMEOUT) {
-        LogWarningEx(LOG_DEVICE_PSB, "Command %s timed out after %dms", 
-                   PSB_QueueGetCommandTypeName(type), timeoutMs);
-    }
-    
-    // Clean up
-    CmtDiscardLock(sync->lock);
-    free(sync);
-    
-    return errorCode;
+    return DeviceQueue_CommandBlocking(mgr, type, params, priority, result, timeoutMs);
 }
 
 CommandID PSB_QueueCommandAsync(PSBQueueManager *mgr, PSBCommandType type,
                               PSBCommandParams *params, PSBPriority priority,
                               PSBCommandCallback callback, void *userData) {
-    if (!mgr) return 0;
-    
-    QueuedCommand *cmd = CreateCommand(type, params);
-    if (!cmd) return 0;
-    
-    cmd->priority = priority;
-    cmd->callback = callback;
-    cmd->userData = userData;
-    
-    // Select queue based on priority
-    CmtTSQHandle queue;
-    switch (priority) {
-        case PSB_PRIORITY_HIGH:   queue = mgr->highPriorityQueue; break;
-        case PSB_PRIORITY_NORMAL: queue = mgr->normalPriorityQueue; break;
-        case PSB_PRIORITY_LOW:    queue = mgr->lowPriorityQueue; break;
-        default: queue = mgr->normalPriorityQueue; break;
-    }
-    
-    // Enqueue command
-    if (CmtWriteTSQData(queue, &cmd, 1, TSQ_INFINITE_TIMEOUT, NULL) < 0) {
-        LogErrorEx(LOG_DEVICE_PSB, "Failed to enqueue async command type %s", 
-                 PSB_QueueGetCommandTypeName(type));
-        FreeCommand(cmd);
-        return 0;
-    }
-    
-    return cmd->id;
+    return DeviceQueue_CommandAsync(mgr, type, params, priority, callback, userData);
 }
 
 bool PSB_QueueHasCommandType(PSBQueueManager *mgr, PSBCommandType type) {
-    if (!mgr) return false;
-    
-    // For now, we'll just check if status commands are queued
-    // This is specifically for preventing status command buildup
-    int count = 0;
-    CmtGetTSQAttribute(mgr->normalPriorityQueue, ATTR_TSQ_ITEMS_IN_QUEUE, &count);
-    
-    // TODO: Implement proper scanning of queue for command type
-    // For now, assume if there are items in normal queue, there might be a status command
-    return (type == PSB_CMD_GET_STATUS && count > 0);
-}
-
-int PSB_QueueCancelCommand(PSBQueueManager *mgr, CommandID cmdId) {
-    // TODO: Implement command cancellation by ID
-    return PSB_ERROR_NOT_SUPPORTED;
-}
-
-int PSB_QueueCancelByType(PSBQueueManager *mgr, PSBCommandType type) {
-    // TODO: Implement command cancellation by type
-    return PSB_ERROR_NOT_SUPPORTED;
-}
-
-int PSB_QueueCancelByAge(PSBQueueManager *mgr, double ageSeconds) {
-    // TODO: Implement command cancellation by age
-    return PSB_ERROR_NOT_SUPPORTED;
+    return DeviceQueue_HasCommandType(mgr, type);
 }
 
 int PSB_QueueCancelAll(PSBQueueManager *mgr) {
-    if (!mgr) return PSB_ERROR_INVALID_PARAM;
-    
-    // Flush all queues
-    CmtFlushTSQ(mgr->highPriorityQueue, TSQ_FLUSH_ALL, NULL);
-    CmtFlushTSQ(mgr->normalPriorityQueue, TSQ_FLUSH_ALL, NULL);
-    CmtFlushTSQ(mgr->lowPriorityQueue, TSQ_FLUSH_ALL, NULL);
-    
-    return PSB_SUCCESS;
+    return DeviceQueue_CancelAll(mgr);
 }
 
 /******************************************************************************
@@ -575,91 +460,22 @@ int PSB_QueueCancelAll(PSBQueueManager *mgr) {
  ******************************************************************************/
 
 TransactionHandle PSB_QueueBeginTransaction(PSBQueueManager *mgr) {
-    if (!mgr) return 0;
-    
-    Transaction *txn = calloc(1, sizeof(Transaction));
-    if (!txn) return 0;
-    
-    CmtGetLock(mgr->transactionLock);
-    txn->id = mgr->nextTransactionId++;
-    ListInsertItem(mgr->activeTransactions, &txn, END_OF_LIST);
-    CmtReleaseLock(mgr->transactionLock);
-    
-    LogDebugEx(LOG_DEVICE_PSB, "Started transaction %u", txn->id);
-    return txn->id;
+    return DeviceQueue_BeginTransaction(mgr);
 }
 
-int PSB_QueueAddToTransaction(PSBQueueManager *mgr, TransactionHandle txnId,
+int PSB_QueueAddToTransaction(PSBQueueManager *mgr, TransactionHandle txn,
                             PSBCommandType type, PSBCommandParams *params) {
-    if (!mgr || txnId == 0) return PSB_ERROR_INVALID_PARAM;
-    
-    CmtGetLock(mgr->transactionLock);
-    Transaction *txn = FindTransaction(mgr, txnId);
-    if (!txn || txn->committed) {
-        CmtReleaseLock(mgr->transactionLock);
-        return PSB_ERROR_INVALID_PARAM;
-    }
-    
-    if (txn->commandCount >= PSB_MAX_TRANSACTION_COMMANDS) {
-        CmtReleaseLock(mgr->transactionLock);
-        return PSB_ERROR_INVALID_PARAM;
-    }
-    
-    QueuedCommand *cmd = CreateCommand(type, params);
-    if (!cmd) {
-        CmtReleaseLock(mgr->transactionLock);
-        return PSB_ERROR_COMM;
-    }
-    
-    cmd->transactionId = txnId;
-    txn->commands[txn->commandCount++] = cmd;
-    
-    CmtReleaseLock(mgr->transactionLock);
-    
-    LogDebugEx(LOG_DEVICE_PSB, "Added %s to transaction %u", 
-             PSB_QueueGetCommandTypeName(type), txnId);
-    return PSB_SUCCESS;
+    return DeviceQueue_AddToTransaction(mgr, txn, type, params);
 }
 
-int PSB_QueueCommitTransaction(PSBQueueManager *mgr, TransactionHandle txnId,
+int PSB_QueueCommitTransaction(PSBQueueManager *mgr, TransactionHandle txn,
                              PSBTransactionCallback callback, void *userData) {
-    if (!mgr || txnId == 0) return PSB_ERROR_INVALID_PARAM;
-    
-    CmtGetLock(mgr->transactionLock);
-    Transaction *txn = FindTransaction(mgr, txnId);
-    if (!txn || txn->committed || txn->commandCount == 0) {
-        CmtReleaseLock(mgr->transactionLock);
-        return PSB_ERROR_INVALID_PARAM;
-    }
-    
-    txn->callback = callback;
-    txn->userData = userData;
-    txn->committed = true;
-    
-    // Queue all commands as high priority
-    for (int i = 0; i < txn->commandCount; i++) {
-        QueuedCommand *cmd = txn->commands[i];
-        cmd->priority = PSB_PRIORITY_HIGH;
-        
-        if (CmtWriteTSQData(mgr->highPriorityQueue, &cmd, 1, TSQ_INFINITE_TIMEOUT, NULL) < 0) {
-            LogErrorEx(LOG_DEVICE_PSB, "Failed to queue transaction command %d", i);
-            // Continue anyway - partial transaction execution
-        }
-    }
-    
-    CmtReleaseLock(mgr->transactionLock);
-    
-    LogMessageEx(LOG_DEVICE_PSB, "Committed transaction %u with %d commands", 
-               txnId, txn->commandCount);
-    return PSB_SUCCESS;
+    return DeviceQueue_CommitTransaction(mgr, txn, callback, userData);
 }
 
 /******************************************************************************
  * Wrapper Functions
  ******************************************************************************/
-
-// Global queue manager pointer - set by main application
-static PSBQueueManager *g_psbQueueManager = NULL;
 
 void PSB_SetGlobalQueueManager(PSBQueueManager *mgr) {
     g_psbQueueManager = mgr;
@@ -675,10 +491,9 @@ int PSB_SetRemoteModeQueued(PSB_Handle *handle, int enable) {
     PSBCommandParams params = {.remoteMode = {enable}};
     PSBCommandResult result;
     
-    int error = PSB_QueueCommandBlocking(g_psbQueueManager, PSB_CMD_SET_REMOTE_MODE,
-                                       &params, PSB_PRIORITY_HIGH, &result,
-                                       PSB_QUEUE_COMMAND_TIMEOUT_MS);
-    return error;
+    return PSB_QueueCommandBlocking(g_psbQueueManager, PSB_CMD_SET_REMOTE_MODE,
+                                  &params, PSB_PRIORITY_HIGH, &result,
+                                  PSB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
 int PSB_SetOutputEnableQueued(PSB_Handle *handle, int enable) {
@@ -687,10 +502,9 @@ int PSB_SetOutputEnableQueued(PSB_Handle *handle, int enable) {
     PSBCommandParams params = {.outputEnable = {enable}};
     PSBCommandResult result;
     
-    int error = PSB_QueueCommandBlocking(g_psbQueueManager, PSB_CMD_SET_OUTPUT_ENABLE,
-                                       &params, PSB_PRIORITY_HIGH, &result,
-                                       PSB_QUEUE_COMMAND_TIMEOUT_MS);
-    return error;
+    return PSB_QueueCommandBlocking(g_psbQueueManager, PSB_CMD_SET_OUTPUT_ENABLE,
+                                  &params, PSB_PRIORITY_HIGH, &result,
+                                  PSB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
 int PSB_SetVoltageQueued(PSB_Handle *handle, double voltage) {
@@ -699,10 +513,9 @@ int PSB_SetVoltageQueued(PSB_Handle *handle, double voltage) {
     PSBCommandParams params = {.setVoltage = {voltage}};
     PSBCommandResult result;
     
-    int error = PSB_QueueCommandBlocking(g_psbQueueManager, PSB_CMD_SET_VOLTAGE,
-                                       &params, PSB_PRIORITY_HIGH, &result,
-                                       PSB_QUEUE_COMMAND_TIMEOUT_MS);
-    return error;
+    return PSB_QueueCommandBlocking(g_psbQueueManager, PSB_CMD_SET_VOLTAGE,
+                                  &params, PSB_PRIORITY_HIGH, &result,
+                                  PSB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
 int PSB_SetCurrentQueued(PSB_Handle *handle, double current) {
@@ -711,10 +524,9 @@ int PSB_SetCurrentQueued(PSB_Handle *handle, double current) {
     PSBCommandParams params = {.setCurrent = {current}};
     PSBCommandResult result;
     
-    int error = PSB_QueueCommandBlocking(g_psbQueueManager, PSB_CMD_SET_CURRENT,
-                                       &params, PSB_PRIORITY_HIGH, &result,
-                                       PSB_QUEUE_COMMAND_TIMEOUT_MS);
-    return error;
+    return PSB_QueueCommandBlocking(g_psbQueueManager, PSB_CMD_SET_CURRENT,
+                                  &params, PSB_PRIORITY_HIGH, &result,
+                                  PSB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
 int PSB_SetPowerQueued(PSB_Handle *handle, double power) {
@@ -723,10 +535,9 @@ int PSB_SetPowerQueued(PSB_Handle *handle, double power) {
     PSBCommandParams params = {.setPower = {power}};
     PSBCommandResult result;
     
-    int error = PSB_QueueCommandBlocking(g_psbQueueManager, PSB_CMD_SET_POWER,
-                                       &params, PSB_PRIORITY_HIGH, &result,
-                                       PSB_QUEUE_COMMAND_TIMEOUT_MS);
-    return error;
+    return PSB_QueueCommandBlocking(g_psbQueueManager, PSB_CMD_SET_POWER,
+                                  &params, PSB_PRIORITY_HIGH, &result,
+                                  PSB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
 int PSB_SetVoltageLimitsQueued(PSB_Handle *handle, double minVoltage, double maxVoltage) {
@@ -735,10 +546,9 @@ int PSB_SetVoltageLimitsQueued(PSB_Handle *handle, double minVoltage, double max
     PSBCommandParams params = {.voltageLimits = {minVoltage, maxVoltage}};
     PSBCommandResult result;
     
-    int error = PSB_QueueCommandBlocking(g_psbQueueManager, PSB_CMD_SET_VOLTAGE_LIMITS,
-                                       &params, PSB_PRIORITY_HIGH, &result,
-                                       PSB_QUEUE_COMMAND_TIMEOUT_MS);
-    return error;
+    return PSB_QueueCommandBlocking(g_psbQueueManager, PSB_CMD_SET_VOLTAGE_LIMITS,
+                                  &params, PSB_PRIORITY_HIGH, &result,
+                                  PSB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
 int PSB_SetCurrentLimitsQueued(PSB_Handle *handle, double minCurrent, double maxCurrent) {
@@ -747,10 +557,9 @@ int PSB_SetCurrentLimitsQueued(PSB_Handle *handle, double minCurrent, double max
     PSBCommandParams params = {.currentLimits = {minCurrent, maxCurrent}};
     PSBCommandResult result;
     
-    int error = PSB_QueueCommandBlocking(g_psbQueueManager, PSB_CMD_SET_CURRENT_LIMITS,
-                                       &params, PSB_PRIORITY_HIGH, &result,
-                                       PSB_QUEUE_COMMAND_TIMEOUT_MS);
-    return error;
+    return PSB_QueueCommandBlocking(g_psbQueueManager, PSB_CMD_SET_CURRENT_LIMITS,
+                                  &params, PSB_PRIORITY_HIGH, &result,
+                                  PSB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
 int PSB_SetPowerLimitQueued(PSB_Handle *handle, double maxPower) {
@@ -759,10 +568,9 @@ int PSB_SetPowerLimitQueued(PSB_Handle *handle, double maxPower) {
     PSBCommandParams params = {.powerLimit = {maxPower}};
     PSBCommandResult result;
     
-    int error = PSB_QueueCommandBlocking(g_psbQueueManager, PSB_CMD_SET_POWER_LIMIT,
-                                       &params, PSB_PRIORITY_HIGH, &result,
-                                       PSB_QUEUE_COMMAND_TIMEOUT_MS);
-    return error;
+    return PSB_QueueCommandBlocking(g_psbQueueManager, PSB_CMD_SET_POWER_LIMIT,
+                                  &params, PSB_PRIORITY_HIGH, &result,
+                                  PSB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
 int PSB_GetStatusQueued(PSB_Handle *handle, PSB_Status *status) {
@@ -800,324 +608,6 @@ int PSB_GetActualValuesQueued(PSB_Handle *handle, double *voltage, double *curre
 }
 
 /******************************************************************************
- * Internal Functions
- ******************************************************************************/
-
-static QueuedCommand* CreateCommand(PSBCommandType type, PSBCommandParams *params) {
-    static volatile CommandID nextId = 1;
-    
-    QueuedCommand *cmd = calloc(1, sizeof(QueuedCommand));
-    if (!cmd) return NULL;
-    
-    cmd->id = InterlockedIncrement(&nextId);
-    cmd->type = type;
-    cmd->timestamp = Timer();
-    
-    if (params) {
-        cmd->params = *params;
-        
-        // For raw Modbus, we need to copy the buffers
-        if (type == PSB_CMD_RAW_MODBUS && params->rawModbus.txBuffer) {
-            cmd->txBufferCopy = malloc(params->rawModbus.txLength);
-            if (cmd->txBufferCopy) {
-                memcpy(cmd->txBufferCopy, params->rawModbus.txBuffer, params->rawModbus.txLength);
-                cmd->params.rawModbus.txBuffer = cmd->txBufferCopy;
-            }
-            
-            if (params->rawModbus.rxBufferSize > 0) {
-                cmd->rxBufferCopy = malloc(params->rawModbus.rxBufferSize);
-                cmd->params.rawModbus.rxBuffer = cmd->rxBufferCopy;
-            }
-        }
-    }
-    
-    return cmd;
-}
-
-static void FreeCommand(QueuedCommand *cmd) {
-    if (!cmd) return;
-    
-    if (cmd->txBufferCopy) free(cmd->txBufferCopy);
-    if (cmd->rxBufferCopy) free(cmd->rxBufferCopy);
-    
-    free(cmd);
-}
-
-static int CVICALLBACK ProcessingThreadFunction(void *functionData) {
-    PSBQueueManager *mgr = (PSBQueueManager*)functionData;
-    
-    LogMessageEx(LOG_DEVICE_PSB, "PSB queue processing thread started");
-    
-    while (!mgr->shutdownRequested) {
-        QueuedCommand *cmd = NULL;
-        unsigned int itemsRead = 0;
-        
-        // Check connection state
-        if (!mgr->isConnected) {
-            if (Timer() - mgr->lastReconnectTime > (PSB_QUEUE_RECONNECT_DELAY_MS / 1000.0)) {
-                AttemptReconnection(mgr);
-            }
-            Delay(0.1);
-            continue;
-        }
-        
-        // Check queues in priority order
-        if (CmtReadTSQData(mgr->highPriorityQueue, &cmd, 1, 0, itemsRead) >= 0 && itemsRead > 0) {
-            // Got high priority command
-        } else if (CmtReadTSQData(mgr->normalPriorityQueue, &cmd, 1, 0, itemsRead) >= 0 && itemsRead > 0) {
-            // Got normal priority command
-        } else if (CmtReadTSQData(mgr->lowPriorityQueue, &cmd, 1, 0, itemsRead) >= 0 && itemsRead > 0) {
-            // Got low priority command
-        } else {
-            // No commands available
-            Delay(0.01);
-            continue;
-        }
-        
-        // Process the command
-        if (cmd) {
-            ProcessCommand(mgr, cmd);
-            
-            // Don't free transaction commands yet
-            if (cmd->transactionId == 0) {
-                FreeCommand(cmd);
-            }
-        }
-    }
-    
-    LogMessageEx(LOG_DEVICE_PSB, "PSB queue processing thread stopped");
-    return 0;
-}
-
-static int ProcessCommand(PSBQueueManager *mgr, QueuedCommand *cmd) {
-    PSBCommandResult result = {0};
-    
-    LogDebugEx(LOG_DEVICE_PSB, "Processing command: %s (ID: %u)", 
-             PSB_QueueGetCommandTypeName(cmd->type), cmd->id);
-    
-    // Execute the command
-    result.errorCode = ExecutePSBCommand(mgr->psbHandlePtr, cmd, &result);
-    
-    // Update statistics
-    CmtGetLock(mgr->statsLock);
-    mgr->totalProcessed++;
-    if (result.errorCode != PSB_SUCCESS) {
-        mgr->totalErrors++;
-    }
-    CmtReleaseLock(mgr->statsLock);
-    
-    // Handle connection loss
-    if (result.errorCode == PSB_ERROR_NOT_CONNECTED || 
-        result.errorCode == PSB_ERROR_COMM ||
-        result.errorCode == PSB_ERROR_TIMEOUT) {
-        mgr->isConnected = 0;
-        mgr->lastReconnectTime = Timer();
-        LogWarningEx(LOG_DEVICE_PSB, "Lost connection during command execution");
-    }
-    
-    // Notify completion
-    NotifyCommandComplete(cmd, &result);
-    
-    // Check if this was part of a transaction
-    if (cmd->transactionId != 0) {
-        CmtGetLock(mgr->transactionLock);
-        Transaction *txn = FindTransaction(mgr, cmd->transactionId);
-        if (txn) {
-            // Check if all commands in transaction are complete
-            bool allComplete = true;
-            for (int i = 0; i < txn->commandCount; i++) {
-                if (txn->commands[i] && txn->commands[i]->completionEvent) {
-                    allComplete = false;
-                    break;
-                }
-            }
-            
-            if (allComplete) {
-                ProcessTransaction(mgr, txn);
-            }
-        }
-        CmtReleaseLock(mgr->transactionLock);
-    }
-    
-    // Apply command-specific delay
-    int delayMs = PSB_QueueGetCommandDelay(cmd->type);
-    if (delayMs > 0) {
-        Delay(delayMs / 1000.0);
-    }
-    
-    return result.errorCode;
-}
-
-static int ExecutePSBCommand(PSB_Handle *handle, QueuedCommand *cmd, PSBCommandResult *result) {
-    switch (cmd->type) {
-        case PSB_CMD_SET_REMOTE_MODE:
-            result->errorCode = PSB_SetRemoteMode(handle, cmd->params.remoteMode.enable);
-            break;
-            
-        case PSB_CMD_SET_OUTPUT_ENABLE:
-            result->errorCode = PSB_SetOutputEnable(handle, cmd->params.outputEnable.enable);
-            break;
-            
-        case PSB_CMD_SET_VOLTAGE:
-            result->errorCode = PSB_SetVoltage(handle, cmd->params.setVoltage.voltage);
-            break;
-            
-        case PSB_CMD_SET_CURRENT:
-            result->errorCode = PSB_SetCurrent(handle, cmd->params.setCurrent.current);
-            break;
-            
-        case PSB_CMD_SET_POWER:
-            result->errorCode = PSB_SetPower(handle, cmd->params.setPower.power);
-            break;
-            
-        case PSB_CMD_SET_VOLTAGE_LIMITS:
-            result->errorCode = PSB_SetVoltageLimits(handle, 
-                cmd->params.voltageLimits.minVoltage,
-                cmd->params.voltageLimits.maxVoltage);
-            break;
-            
-        case PSB_CMD_SET_CURRENT_LIMITS:
-            result->errorCode = PSB_SetCurrentLimits(handle,
-                cmd->params.currentLimits.minCurrent,
-                cmd->params.currentLimits.maxCurrent);
-            break;
-            
-        case PSB_CMD_SET_POWER_LIMIT:
-            result->errorCode = PSB_SetPowerLimit(handle, cmd->params.powerLimit.maxPower);
-            break;
-            
-        case PSB_CMD_GET_STATUS:
-            result->errorCode = PSB_GetStatus(handle, &result->data.status);
-            break;
-            
-        case PSB_CMD_GET_ACTUAL_VALUES:
-            result->errorCode = PSB_GetActualValues(handle,
-                &result->data.actualValues.voltage,
-                &result->data.actualValues.current,
-                &result->data.actualValues.power);
-            break;
-            
-        case PSB_CMD_RAW_MODBUS:
-            // TODO: Implement raw Modbus command execution
-            result->errorCode = PSB_ERROR_NOT_SUPPORTED;
-            break;
-            
-        default:
-            result->errorCode = PSB_ERROR_INVALID_PARAM;
-            break;
-    }
-    
-    return result->errorCode;
-}
-
-static void NotifyCommandComplete(QueuedCommand *cmd, PSBCommandResult *result) {
-    // For blocking commands
-    if (cmd->completionEvent && cmd->completedPtr) {
-        // Lock to safely update shared data
-        CmtGetLock(cmd->completionEvent);
-        
-        // Copy results
-        if (cmd->resultPtr) {
-            *cmd->resultPtr = *result;
-        }
-        if (cmd->errorCodePtr) {
-            *cmd->errorCodePtr = result->errorCode;
-        }
-        
-        // Set completed flag - this signals the waiting thread
-        *cmd->completedPtr = 1;
-        
-        CmtReleaseLock(cmd->completionEvent);
-        
-        // DON'T discard the lock here - the blocking thread owns it
-    }
-    
-    // For async commands
-    if (cmd->callback) {
-        cmd->callback(cmd->id, cmd->type, result, cmd->userData);
-    }
-}
-
-static int AttemptReconnection(PSBQueueManager *mgr) {
-    LogMessageEx(LOG_DEVICE_PSB, "Attempting to reconnect to PSB...");
-    
-    mgr->reconnectAttempts++;
-    
-    // Try to reconnect
-    int result = ConnectPSB(mgr);
-    
-    if (result == PSB_SUCCESS) {
-        mgr->isConnected = 1;
-        mgr->reconnectAttempts = 0;
-        LogMessageEx(LOG_DEVICE_PSB, "Successfully reconnected to PSB");
-        return PSB_SUCCESS;
-    }
-    
-    // Calculate next retry delay with exponential backoff
-    double delay = PSB_QUEUE_RECONNECT_DELAY_MS * pow(2, MIN(mgr->reconnectAttempts - 1, 5));
-    delay = MIN(delay, PSB_QUEUE_MAX_RECONNECT_DELAY);
-    mgr->lastReconnectTime = Timer() + (delay / 1000.0);
-    
-    LogWarningEx(LOG_DEVICE_PSB, "Reconnection failed, next attempt in %.1f seconds", delay / 1000.0);
-    return PSB_ERROR_COMM;
-}
-
-static Transaction* FindTransaction(PSBQueueManager *mgr, TransactionHandle id) {
-    int count = ListNumItems(mgr->activeTransactions);
-    for (int i = 1; i <= count; i++) {
-        Transaction **txnPtr = ListGetPtrToItem(mgr->activeTransactions, i);
-        if (txnPtr && *txnPtr && (*txnPtr)->id == id) {
-            return *txnPtr;
-        }
-    }
-    return NULL;
-}
-
-static void ProcessTransaction(PSBQueueManager *mgr, Transaction *txn) {
-    if (!txn->callback) return;
-    
-    // Collect results
-    PSBCommandResult *results = calloc(txn->commandCount, sizeof(PSBCommandResult));
-    int successCount = 0;
-    int failureCount = 0;
-    
-    for (int i = 0; i < txn->commandCount; i++) {
-        if (txn->commands[i]) {
-            // Copy result from command
-            // Note: In a real implementation, we'd store results in the commands
-            if (txn->commands[i]->errorCodePtr && *txn->commands[i]->errorCodePtr == PSB_SUCCESS) {
-                successCount++;
-            } else {
-                failureCount++;
-            }
-        }
-    }
-    
-    // Call transaction callback
-    txn->callback(txn->id, successCount, failureCount, results, txn->userData);
-    
-    // Clean up
-    free(results);
-    for (int i = 0; i < txn->commandCount; i++) {
-        if (txn->commands[i]) {
-            FreeCommand(txn->commands[i]);
-        }
-    }
-    
-    // Remove from active list
-    int count = ListNumItems(mgr->activeTransactions);
-    for (int i = 1; i <= count; i++) {
-        Transaction **txnPtr = ListGetPtrToItem(mgr->activeTransactions, i);
-        if (txnPtr && *txnPtr == txn) {
-            ListRemoveItem(mgr->activeTransactions, 0, i);
-            break;
-        }
-    }
-    
-    free(txn);
-}
-
-/******************************************************************************
  * Utility Functions
  ******************************************************************************/
 
@@ -1151,4 +641,25 @@ int PSB_QueueGetCommandDelay(PSBCommandType type) {
         default:
             return PSB_DELAY_RECOVERY;
     }
+}
+
+/******************************************************************************
+ * Not Implemented Functions (delegate to generic queue)
+ ******************************************************************************/
+
+int PSB_QueueCancelCommand(PSBQueueManager *mgr, CommandID cmdId) {
+    return DeviceQueue_CancelCommand(mgr, cmdId);
+}
+
+int PSB_QueueCancelByType(PSBQueueManager *mgr, PSBCommandType type) {
+    return DeviceQueue_CancelByType(mgr, type);
+}
+
+int PSB_QueueCancelByAge(PSBQueueManager *mgr, double ageSeconds) {
+    // Not implemented in generic queue yet
+    return ERR_NOT_SUPPORTED;
+}
+
+int PSB_QueueCancelTransaction(PSBQueueManager *mgr, TransactionHandle txn) {
+    return DeviceQueue_CancelTransaction(mgr, txn);
 }

@@ -32,6 +32,7 @@ bool IsBLFindInitialized(void);
 // Helper Functions
 // ============================================================================
 void ConvertUnicodeToAscii(const char* unicode, char* ascii, int unicodeLen);
+const char* BL_GetErrorString(int errorCode);
 
 // ============================================================================
 // Device Scanning Functions (from blfind.dll)
