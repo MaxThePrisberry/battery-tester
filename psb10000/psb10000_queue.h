@@ -69,6 +69,11 @@ typedef enum {
     // Raw Modbus commands
     PSB_CMD_RAW_MODBUS,
     
+	PSB_CMD_SET_SINK_CURRENT,
+	PSB_CMD_SET_SINK_POWER,
+	PSB_CMD_SET_SINK_CURRENT_LIMITS,
+	PSB_CMD_SET_SINK_POWER_LIMIT,
+	
     PSB_CMD_TYPE_COUNT
 } PSBCommandType;
 
@@ -82,6 +87,10 @@ typedef union {
     struct { double minVoltage; double maxVoltage; } voltageLimits;
     struct { double minCurrent; double maxCurrent; } currentLimits;
     struct { double maxPower; } powerLimit;
+	struct { double current; } setSinkCurrent;
+	struct { double power; } setSinkPower;
+	struct { double minCurrent; double maxCurrent; } sinkCurrentLimits;
+	struct { double maxPower; } sinkPowerLimit;
     struct { 
         unsigned char *txBuffer; 
         int txLength; 
@@ -191,6 +200,10 @@ int PSB_SetPowerQueued(PSB_Handle *handle, double power);
 int PSB_SetVoltageLimitsQueued(PSB_Handle *handle, double minVoltage, double maxVoltage);
 int PSB_SetCurrentLimitsQueued(PSB_Handle *handle, double minCurrent, double maxCurrent);
 int PSB_SetPowerLimitQueued(PSB_Handle *handle, double maxPower);
+int PSB_SetSinkCurrentQueued(PSB_Handle *handle, double current);
+int PSB_SetSinkPowerQueued(PSB_Handle *handle, double power);
+int PSB_SetSinkCurrentLimitsQueued(PSB_Handle *handle, double minCurrent, double maxCurrent);
+int PSB_SetSinkPowerLimitQueued(PSB_Handle *handle, double maxPower);
 int PSB_GetStatusQueued(PSB_Handle *handle, PSB_Status *status);
 int PSB_GetActualValuesQueued(PSB_Handle *handle, double *voltage, double *current, double *power);
 

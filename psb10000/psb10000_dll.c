@@ -667,6 +667,85 @@ int PSB_SetCurrentLimits(PSB_Handle *handle, double minCurrent, double maxCurren
     return SendModbusCommand(handle, txBuffer, 8, rxBuffer, 8);
 }
 
+int PSB_SetSinkCurrent(PSB_Handle *handle, double current) {
+    if (!handle || !handle->isConnected) return PSB_ERROR_NOT_CONNECTED;
+    if (current < 0 || current > PSB_NOMINAL_CURRENT * 1.02) {
+        LogErrorEx(LOG_DEVICE_PSB, "Invalid sink current %.2fA (range: 0-%.2fA)", 
+                 current, PSB_NOMINAL_CURRENT * 1.02);
+        return PSB_ERROR_INVALID_PARAM;
+    }
+    
+    unsigned char txBuffer[8];
+    unsigned char rxBuffer[8];
+    
+    int deviceValue = ConvertToDeviceUnits(current, PSB_NOMINAL_CURRENT);
+    
+    txBuffer[0] = (unsigned char)handle->slaveAddress;
+    txBuffer[1] = MODBUS_WRITE_SINGLE_REGISTER;
+    txBuffer[2] = (unsigned char)((REG_SINK_MODE_CURRENT >> 8) & 0xFF);
+    txBuffer[3] = (unsigned char)(REG_SINK_MODE_CURRENT & 0xFF);
+    txBuffer[4] = (unsigned char)((deviceValue >> 8) & 0xFF);
+    txBuffer[5] = (unsigned char)(deviceValue & 0xFF);
+    
+    unsigned short crc = PSB_CalculateCRC(txBuffer, 6);
+    txBuffer[6] = (unsigned char)(crc & 0xFF);
+    txBuffer[7] = (unsigned char)((crc >> 8) & 0xFF);
+    
+    LogMessageEx(LOG_DEVICE_PSB, "Setting sink current: %.2fA (0x%04X)", current, deviceValue);
+    
+    return SendModbusCommand(handle, txBuffer, 8, rxBuffer, 8);
+}
+
+int PSB_SetSinkCurrentLimits(PSB_Handle *handle, double minCurrent, double maxCurrent) {
+    if (!handle || !handle->isConnected) return PSB_ERROR_NOT_CONNECTED;
+    if (minCurrent < 0 || maxCurrent > PSB_NOMINAL_CURRENT * 1.02) {
+        LogErrorEx(LOG_DEVICE_PSB, "Invalid sink current limits (%.2fA-%.2fA)", minCurrent, maxCurrent);
+        return PSB_ERROR_INVALID_PARAM;
+    }
+    if (minCurrent > maxCurrent) {
+        LogErrorEx(LOG_DEVICE_PSB, "Min sink current (%.2fA) > Max sink current (%.2fA)", minCurrent, maxCurrent);
+        return PSB_ERROR_INVALID_PARAM;
+    }
+    
+    // Set maximum current first
+    unsigned char txBuffer[8];
+    unsigned char rxBuffer[8];
+    
+    int maxValue = ConvertToDeviceUnits(maxCurrent, PSB_NOMINAL_CURRENT);
+    
+    txBuffer[0] = (unsigned char)handle->slaveAddress;
+    txBuffer[1] = MODBUS_WRITE_SINGLE_REGISTER;
+    txBuffer[2] = (unsigned char)((REG_SINK_CURRENT_MAX >> 8) & 0xFF);
+    txBuffer[3] = (unsigned char)(REG_SINK_CURRENT_MAX & 0xFF);
+    txBuffer[4] = (unsigned char)((maxValue >> 8) & 0xFF);
+    txBuffer[5] = (unsigned char)(maxValue & 0xFF);
+    
+    unsigned short crc = PSB_CalculateCRC(txBuffer, 6);
+    txBuffer[6] = (unsigned char)(crc & 0xFF);
+    txBuffer[7] = (unsigned char)((crc >> 8) & 0xFF);
+    
+    LogMessageEx(LOG_DEVICE_PSB, "Setting sink max current: %.2fA", maxCurrent);
+    
+    int result = SendModbusCommand(handle, txBuffer, 8, rxBuffer, 8);
+    if (result != PSB_SUCCESS) return result;
+    
+    // Set minimum current
+    int minValue = ConvertToDeviceUnits(minCurrent, PSB_NOMINAL_CURRENT);
+    
+    txBuffer[2] = (unsigned char)((REG_SINK_CURRENT_MIN >> 8) & 0xFF);
+    txBuffer[3] = (unsigned char)(REG_SINK_CURRENT_MIN & 0xFF);
+    txBuffer[4] = (unsigned char)((minValue >> 8) & 0xFF);
+    txBuffer[5] = (unsigned char)(minValue & 0xFF);
+    
+    crc = PSB_CalculateCRC(txBuffer, 6);
+    txBuffer[6] = (unsigned char)(crc & 0xFF);
+    txBuffer[7] = (unsigned char)((crc >> 8) & 0xFF);
+    
+    LogMessageEx(LOG_DEVICE_PSB, "Setting sink min current: %.2fA", minCurrent);
+    
+    return SendModbusCommand(handle, txBuffer, 8, rxBuffer, 8);
+}
+
 /******************************************************************************
  * Power Control Functions
  ******************************************************************************/
@@ -727,6 +806,64 @@ int PSB_SetPowerLimit(PSB_Handle *handle, double maxPower) {
     return SendModbusCommand(handle, txBuffer, 8, rxBuffer, 8);
 }
 
+int PSB_SetSinkPower(PSB_Handle *handle, double power) {
+    if (!handle || !handle->isConnected) return PSB_ERROR_NOT_CONNECTED;
+    if (power < 0 || power > PSB_NOMINAL_POWER * 1.02) {
+        LogErrorEx(LOG_DEVICE_PSB, "Invalid sink power %.2fW (range: 0-%.2fW)", 
+                 power, PSB_NOMINAL_POWER * 1.02);
+        return PSB_ERROR_INVALID_PARAM;
+    }
+    
+    unsigned char txBuffer[8];
+    unsigned char rxBuffer[8];
+    
+    int deviceValue = ConvertToDeviceUnits(power, PSB_NOMINAL_POWER);
+    
+    txBuffer[0] = (unsigned char)handle->slaveAddress;
+    txBuffer[1] = MODBUS_WRITE_SINGLE_REGISTER;
+    txBuffer[2] = (unsigned char)((REG_SINK_MODE_POWER >> 8) & 0xFF);
+    txBuffer[3] = (unsigned char)(REG_SINK_MODE_POWER & 0xFF);
+    txBuffer[4] = (unsigned char)((deviceValue >> 8) & 0xFF);
+    txBuffer[5] = (unsigned char)(deviceValue & 0xFF);
+    
+    unsigned short crc = PSB_CalculateCRC(txBuffer, 6);
+    txBuffer[6] = (unsigned char)(crc & 0xFF);
+    txBuffer[7] = (unsigned char)((crc >> 8) & 0xFF);
+    
+    LogMessageEx(LOG_DEVICE_PSB, "Setting sink power: %.2fW (0x%04X)", power, deviceValue);
+    
+    return SendModbusCommand(handle, txBuffer, 8, rxBuffer, 8);
+}
+
+int PSB_SetSinkPowerLimit(PSB_Handle *handle, double maxPower) {
+    if (!handle || !handle->isConnected) return PSB_ERROR_NOT_CONNECTED;
+    if (maxPower < 0 || maxPower > PSB_NOMINAL_POWER * 1.02) {
+        LogErrorEx(LOG_DEVICE_PSB, "Invalid sink power limit %.2fW (range: 0-%.2fW)", 
+                 maxPower, PSB_NOMINAL_POWER * 1.02);
+        return PSB_ERROR_INVALID_PARAM;
+    }
+    
+    unsigned char txBuffer[8];
+    unsigned char rxBuffer[8];
+    
+    int maxValue = ConvertToDeviceUnits(maxPower, PSB_NOMINAL_POWER);
+    
+    txBuffer[0] = (unsigned char)handle->slaveAddress;
+    txBuffer[1] = MODBUS_WRITE_SINGLE_REGISTER;
+    txBuffer[2] = (unsigned char)((REG_SINK_POWER_MAX >> 8) & 0xFF);
+    txBuffer[3] = (unsigned char)(REG_SINK_POWER_MAX & 0xFF);
+    txBuffer[4] = (unsigned char)((maxValue >> 8) & 0xFF);
+    txBuffer[5] = (unsigned char)(maxValue & 0xFF);
+    
+    unsigned short crc = PSB_CalculateCRC(txBuffer, 6);
+    txBuffer[6] = (unsigned char)(crc & 0xFF);
+    txBuffer[7] = (unsigned char)((crc >> 8) & 0xFF);
+    
+    LogMessageEx(LOG_DEVICE_PSB, "Setting sink max power: %.2fW", maxPower);
+    
+    return SendModbusCommand(handle, txBuffer, 8, rxBuffer, 8);
+}
+
 /******************************************************************************
  * Raw Command Execution Support
  * This allows the queue to send raw Modbus commands
@@ -766,7 +903,7 @@ int PSB_GetStatus(PSB_Handle *handle, PSB_Status *status) {
     txBuffer[6] = (unsigned char)(crc & 0xFF);
     txBuffer[7] = (unsigned char)((crc >> 8) & 0xFF);
     
-    LogDebugEx(LOG_DEVICE_PSB,"Reading Device State (Reg 505)");
+    LogDebugEx(LOG_DEVICE_PSB, "Reading Device State (Reg 505)");
     
     // Expected response: Address(1) + Function(1) + ByteCount(1) + Data(4) + CRC(2) = 9 bytes
     int result = SendModbusCommand(handle, txBuffer, 8, rxBuffer, 9);
@@ -774,7 +911,7 @@ int PSB_GetStatus(PSB_Handle *handle, PSB_Status *status) {
     if (result == PSB_SUCCESS) {
         // Verify this is a read response
         if (rxBuffer[1] != MODBUS_READ_HOLDING_REGISTERS) {
-            LogErrorEx(LOG_DEVICE_PSB,"Expected READ response (0x03), got 0x%02X", rxBuffer[1]);
+            LogErrorEx(LOG_DEVICE_PSB, "Expected READ response (0x03), got 0x%02X", rxBuffer[1]);
             return PSB_ERROR_RESPONSE;
         }
         
@@ -784,8 +921,8 @@ int PSB_GetStatus(PSB_Handle *handle, PSB_Status *status) {
         unsigned short reg506_value = (unsigned short)((rxBuffer[5] << 8) | rxBuffer[6]);  // 0x0803
         status->rawState = ((unsigned long)reg505_value << 16) | reg506_value;  // 0x00000803
         
-        LogDebugEx(LOG_DEVICE_PSB,"Raw registers: [505]=0x%04X, [506]=0x%04X", reg505_value, reg506_value);
-        LogDebugEx(LOG_DEVICE_PSB,"Combined 32-bit state: 0x%08lX", status->rawState);
+        LogDebugEx(LOG_DEVICE_PSB, "Raw registers: [505]=0x%04X, [506]=0x%04X", reg505_value, reg506_value);
+        LogDebugEx(LOG_DEVICE_PSB, "Combined 32-bit state: 0x%08lX", status->rawState);
         
         // Parse state bits
         status->controlLocation = (int)(status->rawState & STATE_CONTROL_LOCATION_MASK);
@@ -793,13 +930,15 @@ int PSB_GetStatus(PSB_Handle *handle, PSB_Status *status) {
         status->regulationMode = (int)((status->rawState & STATE_REGULATION_MODE_MASK) >> 9);
         status->remoteMode = (status->rawState & STATE_REMOTE_MODE) ? 1 : 0;
         status->alarmsActive = (status->rawState & STATE_ALARMS_ACTIVE) ? 1 : 0;
+        status->sinkMode = (status->rawState & STATE_SINK_SOURCE_MODE) ? 1 : 0;
         
-        LogDebugEx(LOG_DEVICE_PSB,"Parsed state:");
-        LogDebugEx(LOG_DEVICE_PSB,"  Control Location: 0x%02X", status->controlLocation);
-        LogDebugEx(LOG_DEVICE_PSB,"  Output Enabled: %s", status->outputEnabled ? "YES" : "NO");
-        LogDebugEx(LOG_DEVICE_PSB,"  Remote Mode: %s", status->remoteMode ? "YES" : "NO");
-        LogDebugEx(LOG_DEVICE_PSB,"  Regulation Mode: %d", status->regulationMode);
-        LogDebugEx(LOG_DEVICE_PSB,"  Alarms Active: %s", status->alarmsActive ? "YES" : "NO");
+        LogDebugEx(LOG_DEVICE_PSB, "Parsed state:");
+        LogDebugEx(LOG_DEVICE_PSB, "  Control Location: 0x%02X", status->controlLocation);
+        LogDebugEx(LOG_DEVICE_PSB, "  Output Enabled: %s", status->outputEnabled ? "YES" : "NO");
+        LogDebugEx(LOG_DEVICE_PSB, "  Remote Mode: %s", status->remoteMode ? "YES" : "NO");
+        LogDebugEx(LOG_DEVICE_PSB, "  Regulation Mode: %d", status->regulationMode);
+        LogDebugEx(LOG_DEVICE_PSB, "  Alarms Active: %s", status->alarmsActive ? "YES" : "NO");
+        LogDebugEx(LOG_DEVICE_PSB, "  Sink Mode: %s", status->sinkMode ? "YES (sink)" : "NO (source)");
         
         // Read actual values
         return PSB_GetActualValues(handle, &status->voltage, &status->current, &status->power);
@@ -894,31 +1033,32 @@ void PSB_EnableDebugOutput(int enable) {
 void PSB_PrintStatus(PSB_Status *status) {
     if (!status) return;
     
-    LogMessageEx(LOG_DEVICE_PSB,"=== PSB Status ===");
-    LogMessageEx(LOG_DEVICE_PSB,"Voltage: %.2f V", status->voltage);
-    LogMessageEx(LOG_DEVICE_PSB,"Current: %.2f A", status->current);
-    LogMessageEx(LOG_DEVICE_PSB,"Power: %.2f W", status->power);
-    LogMessageEx(LOG_DEVICE_PSB,"Output Enabled: %s", status->outputEnabled ? "YES" : "NO");
-    LogMessageEx(LOG_DEVICE_PSB,"Remote Mode: %s", status->remoteMode ? "YES" : "NO");
-    LogMessageEx(LOG_DEVICE_PSB,"Control Location: ");
+    LogMessageEx(LOG_DEVICE_PSB, "=== PSB Status ===");
+    LogMessageEx(LOG_DEVICE_PSB, "Voltage: %.2f V", status->voltage);
+    LogMessageEx(LOG_DEVICE_PSB, "Current: %.2f A", status->current);
+    LogMessageEx(LOG_DEVICE_PSB, "Power: %.2f W", status->power);
+    LogMessageEx(LOG_DEVICE_PSB, "Output Enabled: %s", status->outputEnabled ? "YES" : "NO");
+    LogMessageEx(LOG_DEVICE_PSB, "Remote Mode: %s", status->remoteMode ? "YES" : "NO");
+    LogMessageEx(LOG_DEVICE_PSB, "Operation Mode: %s", status->sinkMode ? "SINK (Electronic Load)" : "SOURCE (Power Supply)");
+    LogMessageEx(LOG_DEVICE_PSB, "Control Location: ");
     
     switch (status->controlLocation) {
-        case CONTROL_FREE: LogMessageEx(LOG_DEVICE_PSB,"  FREE"); break;
-        case CONTROL_LOCAL: LogMessageEx(LOG_DEVICE_PSB,"  LOCAL"); break;
-        case CONTROL_USB: LogMessageEx(LOG_DEVICE_PSB,"  USB"); break;
-        case CONTROL_ANALOG: LogMessageEx(LOG_DEVICE_PSB,"  ANALOG"); break;
-        default: LogMessageEx(LOG_DEVICE_PSB,"  OTHER (0x%02X)", status->controlLocation); break;
+        case CONTROL_FREE: LogMessageEx(LOG_DEVICE_PSB, "  FREE"); break;
+        case CONTROL_LOCAL: LogMessageEx(LOG_DEVICE_PSB, "  LOCAL"); break;
+        case CONTROL_USB: LogMessageEx(LOG_DEVICE_PSB, "  USB"); break;
+        case CONTROL_ANALOG: LogMessageEx(LOG_DEVICE_PSB, "  ANALOG"); break;
+        default: LogMessageEx(LOG_DEVICE_PSB, "  OTHER (0x%02X)", status->controlLocation); break;
     }
     
-    LogMessageEx(LOG_DEVICE_PSB,"Regulation Mode: ");
+    LogMessageEx(LOG_DEVICE_PSB, "Regulation Mode: ");
     switch (status->regulationMode) {
-        case 0: LogMessageEx(LOG_DEVICE_PSB,"  CV (Constant Voltage)"); break;
-        case 1: LogMessageEx(LOG_DEVICE_PSB,"  CR (Constant Resistance)"); break;
-        case 2: LogMessageEx(LOG_DEVICE_PSB,"  CC (Constant Current)"); break;
-        case 3: LogMessageEx(LOG_DEVICE_PSB,"  CP (Constant Power)"); break;
+        case 0: LogMessageEx(LOG_DEVICE_PSB, "  CV (Constant Voltage)"); break;
+        case 1: LogMessageEx(LOG_DEVICE_PSB, "  CR (Constant Resistance)"); break;
+        case 2: LogMessageEx(LOG_DEVICE_PSB, "  CC (Constant Current)"); break;
+        case 3: LogMessageEx(LOG_DEVICE_PSB, "  CP (Constant Power)"); break;
     }
     
-    LogMessageEx(LOG_DEVICE_PSB,"Alarms Active: %s", status->alarmsActive ? "YES" : "NO");
-    LogMessageEx(LOG_DEVICE_PSB,"Raw State: 0x%08lX", status->rawState);
-    LogMessageEx(LOG_DEVICE_PSB,"==================");
+    LogMessageEx(LOG_DEVICE_PSB, "Alarms Active: %s", status->alarmsActive ? "YES" : "NO");
+    LogMessageEx(LOG_DEVICE_PSB, "Raw State: 0x%08lX", status->rawState);
+    LogMessageEx(LOG_DEVICE_PSB, "==================");
 }

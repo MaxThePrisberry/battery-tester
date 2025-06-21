@@ -45,6 +45,10 @@
 
      /* tab page panel controls */
 #define  CAPACITY_BTN_EXP_CAPACITY        2       /* control type: command, callback function: StartCapacityExperimentCallback */
+#define  CAPACITY_NUM_CURRENT_THRESHOLD   3       /* control type: numeric, callback function: (none) */
+#define  CAPACITY_NUM_INTERVAL            4       /* control type: numeric, callback function: (none) */
+#define  CAPACITY_NUM_DISCHARGE_CAP       5       /* control type: numeric, callback function: (none) */
+#define  CAPACITY_NUM_CHARGE_CAP          6       /* control type: numeric, callback function: (none) */
 
 
      /* Control Arrays: */

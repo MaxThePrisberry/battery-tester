@@ -50,6 +50,8 @@
 #define REG_SERIAL_NUMBER           151     // 0x0097
 #define REG_REMOTE_MODE             402     // 0x0192
 #define REG_DC_OUTPUT               405     // 0x0195
+#define REG_SINK_MODE_POWER         498     // 0x01F2
+#define REG_SINK_MODE_CURRENT       499     // 0x01F3
 #define REG_SET_VOLTAGE             500     // 0x01F4
 #define REG_SET_CURRENT             501     // 0x01F5
 #define REG_SET_POWER_SOURCE        502     // 0x01F6
@@ -62,6 +64,9 @@
 #define REG_CURRENT_MAX             9002    // 0x232A
 #define REG_CURRENT_MIN             9003    // 0x232B
 #define REG_POWER_MAX               9004    // 0x232C
+#define REG_SINK_POWER_MAX          9005    // 0x232D
+#define REG_SINK_CURRENT_MAX        9008    // 0x2330
+#define REG_SINK_CURRENT_MIN        9009    // 0x2331
 
 // Coil values
 #define COIL_OFF                    0x0000
@@ -72,6 +77,7 @@
 #define STATE_OUTPUT_ENABLED        0x00000080  // Bit 7
 #define STATE_REGULATION_MODE_MASK  0x00000600  // Bits 9-10
 #define STATE_REMOTE_MODE           0x00000800  // Bit 11
+#define STATE_SINK_SOURCE_MODE      0x00001000  // Bit 12: 0=source, 1=sink
 #define STATE_ALARMS_ACTIVE         0x00008000  // Bit 15
 
 // Control locations
@@ -104,6 +110,7 @@ typedef struct {
     int regulationMode;     // 0=CV, 1=CR, 2=CC, 3=CP
     int controlLocation;    // Control location (0=free, 1=local, etc.)
     int alarmsActive;       // 1 = alarms active, 0 = no alarms
+    int sinkMode;           // 1 = sink mode, 0 = source mode
     unsigned long rawState; // Raw 32-bit state value for debugging
 } PSB_Status;
 
@@ -139,10 +146,14 @@ int PSB_SetVoltageLimits(PSB_Handle *handle, double minVoltage, double maxVoltag
 // Current Control Functions
 int PSB_SetCurrent(PSB_Handle *handle, double current);
 int PSB_SetCurrentLimits(PSB_Handle *handle, double minCurrent, double maxCurrent);
+int PSB_SetSinkCurrent(PSB_Handle *handle, double current);
+int PSB_SetSinkCurrentLimits(PSB_Handle *handle, double minCurrent, double maxCurrent);
 
 // Power Control Functions
 int PSB_SetPower(PSB_Handle *handle, double power);
 int PSB_SetPowerLimit(PSB_Handle *handle, double maxPower);
+int PSB_SetSinkPower(PSB_Handle *handle, double power);
+int PSB_SetSinkPowerLimit(PSB_Handle *handle, double maxPower);
 
 // Status Functions
 int PSB_GetStatus(PSB_Handle *handle, PSB_Status *status);

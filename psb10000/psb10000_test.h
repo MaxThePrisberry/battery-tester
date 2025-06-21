@@ -50,6 +50,36 @@
 #define TEST_DELAY_MEDIUM       1.0     // seconds
 #define TEST_DELAY_LONG         2.0     // seconds
 
+// Sink mode test values - same ranges as source mode
+#define TEST_SINK_CURRENT_LOW        5.0     // A
+#define TEST_SINK_CURRENT_MID        15.0    // A  
+#define TEST_SINK_CURRENT_HIGH       30.0    // A
+#define TEST_SINK_CURRENT_MAX        60.0    // A
+
+#define TEST_SINK_POWER_LOW          100.0   // W
+#define TEST_SINK_POWER_MID          400.0   // W
+#define TEST_SINK_POWER_HIGH         800.0   // W
+#define TEST_SINK_POWER_MAX          1200.0  // W
+
+// Sink mode limit test values
+#define TEST_SINK_CURRENT_LIMIT_MIN  5.0     // A
+#define TEST_SINK_CURRENT_LIMIT_MAX  40.0    // A
+#define TEST_SINK_CURRENT_LIMIT_TEST 20.0    // A (within limits)
+
+#define TEST_SINK_POWER_LIMIT_1      1000.0  // W
+#define TEST_SINK_POWER_LIMIT_2      600.0   // W
+#define TEST_SINK_POWER_LIMIT_TEST   800.0   // W (below limit)
+
+// Invalid sink mode test values
+#define TEST_SINK_CURRENT_NEGATIVE   -10.0   // A
+#define TEST_SINK_POWER_NEGATIVE     -100.0  // W
+#define TEST_SINK_CURRENT_MIN_NEG    -5.0    // A
+#define TEST_SINK_POWER_ABOVE_LIMIT  100.0   // W (added to limit)
+
+// Inverted limits for error testing
+#define TEST_SINK_CURRENT_LIMIT_MIN_INV  30.0   // A (intentionally > max)
+#define TEST_SINK_CURRENT_LIMIT_MAX_INV  10.0   // A (intentionally < min)
+
 /******************************************************************************
  * Test Result Structure
  ******************************************************************************/
@@ -109,6 +139,10 @@ int Test_InvalidParameters(PSB_Handle *handle, char *errorMsg, int errorMsgSize)
 int Test_SequenceOperations(PSB_Handle *handle, char *errorMsg, int errorMsgSize);
 int Test_BoundaryConditions(PSB_Handle *handle, char *errorMsg, int errorMsgSize);
 int Test_OutputVoltageVerification(PSB_Handle *handle, char *errorMsg, int errorMsgSize);
+int Test_SinkCurrentControl(PSB_Handle *handle, char *errorMsg, int errorMsgSize);
+int Test_SinkPowerControl(PSB_Handle *handle, char *errorMsg, int errorMsgSize);
+int Test_SinkCurrentLimits(PSB_Handle *handle, char *errorMsg, int errorMsgSize);
+int Test_SinkPowerLimit(PSB_Handle *handle, char *errorMsg, int errorMsgSize);
 
 // Utility functions
 void UpdateTestProgress(TestSuiteContext *context, const char *message);

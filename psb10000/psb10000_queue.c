@@ -25,7 +25,11 @@ static const char* g_commandTypeNames[] = {
     "SET_POWER_LIMIT",
     "GET_STATUS",
     "GET_ACTUAL_VALUES",
-    "RAW_MODBUS"
+    "RAW_MODBUS",
+	"SET_SINK_CURRENT",
+	"SET_SINK_POWER",
+	"SET_SINK_CURRENT_LIMITS",
+	"SET_SINK_POWER_LIMIT",
 };
 
 // Global queue manager pointer
@@ -234,7 +238,26 @@ static int PSB_AdapterExecuteCommand(void *deviceContext, int commandType, void 
             // TODO: Implement raw Modbus command execution using PSB_SendRawModbus
             cmdResult->errorCode = PSB_ERROR_NOT_SUPPORTED;
             break;
-            
+			
+		case PSB_CMD_SET_SINK_CURRENT:
+		    cmdResult->errorCode = PSB_SetSinkCurrent(&ctx->handle, cmdParams->setSinkCurrent.current);
+		    break;
+		    
+		case PSB_CMD_SET_SINK_POWER:
+		    cmdResult->errorCode = PSB_SetSinkPower(&ctx->handle, cmdParams->setSinkPower.power);
+		    break;
+        
+		case PSB_CMD_SET_SINK_CURRENT_LIMITS:
+		    cmdResult->errorCode = PSB_SetSinkCurrentLimits(&ctx->handle,
+		        cmdParams->sinkCurrentLimits.minCurrent,
+		        cmdParams->sinkCurrentLimits.maxCurrent);
+		    break;
+		    
+		case PSB_CMD_SET_SINK_POWER_LIMIT:
+		    cmdResult->errorCode = PSB_SetSinkPowerLimit(&ctx->handle, 
+		        cmdParams->sinkPowerLimit.maxPower);
+		    break;
+	
         default:
             cmdResult->errorCode = PSB_ERROR_INVALID_PARAM;
             break;
@@ -605,6 +628,50 @@ int PSB_GetActualValuesQueued(PSB_Handle *handle, double *voltage, double *curre
         if (power) *power = result.data.actualValues.power;
     }
     return error;
+}
+
+int PSB_SetSinkCurrentQueued(PSB_Handle *handle, double current) {
+    if (!g_psbQueueManager) return PSB_SetSinkCurrent(handle, current);
+    
+    PSBCommandParams params = {.setSinkCurrent = {current}};
+    PSBCommandResult result;
+    
+    return PSB_QueueCommandBlocking(g_psbQueueManager, PSB_CMD_SET_SINK_CURRENT,
+                                  &params, PSB_PRIORITY_HIGH, &result,
+                                  PSB_QUEUE_COMMAND_TIMEOUT_MS);
+}
+
+int PSB_SetSinkPowerQueued(PSB_Handle *handle, double power) {
+    if (!g_psbQueueManager) return PSB_SetSinkPower(handle, power);
+    
+    PSBCommandParams params = {.setSinkPower = {power}};
+    PSBCommandResult result;
+    
+    return PSB_QueueCommandBlocking(g_psbQueueManager, PSB_CMD_SET_SINK_POWER,
+                                  &params, PSB_PRIORITY_HIGH, &result,
+                                  PSB_QUEUE_COMMAND_TIMEOUT_MS);
+}
+
+int PSB_SetSinkCurrentLimitsQueued(PSB_Handle *handle, double minCurrent, double maxCurrent) {
+    if (!g_psbQueueManager) return PSB_SetSinkCurrentLimits(handle, minCurrent, maxCurrent);
+    
+    PSBCommandParams params = {.sinkCurrentLimits = {minCurrent, maxCurrent}};
+    PSBCommandResult result;
+    
+    return PSB_QueueCommandBlocking(g_psbQueueManager, PSB_CMD_SET_SINK_CURRENT_LIMITS,
+                                  &params, PSB_PRIORITY_HIGH, &result,
+                                  PSB_QUEUE_COMMAND_TIMEOUT_MS);
+}
+
+int PSB_SetSinkPowerLimitQueued(PSB_Handle *handle, double maxPower) {
+    if (!g_psbQueueManager) return PSB_SetSinkPowerLimit(handle, maxPower);
+    
+    PSBCommandParams params = {.sinkPowerLimit = {maxPower}};
+    PSBCommandResult result;
+    
+    return PSB_QueueCommandBlocking(g_psbQueueManager, PSB_CMD_SET_SINK_POWER_LIMIT,
+                                  &params, PSB_PRIORITY_HIGH, &result,
+                                  PSB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
 /******************************************************************************

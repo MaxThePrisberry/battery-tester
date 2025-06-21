@@ -33,6 +33,10 @@ static TestCase testCases[] = {
     {"Current Limits", Test_CurrentLimits, 0, "", 0.0},
     {"Power Control", Test_PowerControl, 0, "", 0.0},
     {"Power Limit", Test_PowerLimit, 0, "", 0.0},
+	{"Sink Current Control", Test_SinkCurrentControl, 0, "", 0.0},
+    {"Sink Power Control", Test_SinkPowerControl, 0, "", 0.0},
+    {"Sink Current Limits", Test_SinkCurrentLimits, 0, "", 0.0},
+    {"Sink Power Limit", Test_SinkPowerLimit, 0, "", 0.0},
     {"Output Control", Test_OutputControl, 0, "", 0.0},
     {"Invalid Parameters", Test_InvalidParameters, 0, "", 0.0},
     {"Boundary Conditions", Test_BoundaryConditions, 0, "", 0.0},
@@ -665,6 +669,16 @@ int Test_PowerLimit(PSB_Handle *handle, char *errorMsg, int errorMsgSize) {
         return -1;
     }
     
+    // First, ensure power is set to a low value to avoid conflicts
+    LogDebugEx(LOG_DEVICE_PSB, "Setting initial power to %.1fW...", TEST_POWER_LOW);
+    result = PSB_SetPowerQueued(handle, TEST_POWER_LOW);
+    if (result != PSB_SUCCESS) {
+        LogWarningEx(LOG_DEVICE_PSB, "Failed to set initial power: %s", 
+                   PSB_GetErrorString(result));
+    }
+    
+    Delay(TEST_DELAY_SHORT);
+    
     // Test setting valid power limit
     double testPowerLimit = TEST_POWER_MAX;  // 1200W - just below device max
     
@@ -687,9 +701,9 @@ int Test_PowerLimit(PSB_Handle *handle, char *errorMsg, int errorMsgSize) {
         return -1;
     }
     
-    // Test that power above limit is rejected
+    // Test that power above limit is rejected or clamped
     LogDebugEx(LOG_DEVICE_PSB, "Testing power above limit...");
-    result = PSB_SetPowerQueued(handle, testPowerLimit + 100.0);
+    result = PSB_SetPowerQueued(handle, testPowerLimit + TEST_SINK_POWER_ABOVE_LIMIT);
     if (result == PSB_SUCCESS) {
         LogWarningEx(LOG_DEVICE_PSB, "Power above limit was accepted (may be clamped by device)");
     } else {
@@ -717,6 +731,396 @@ int Test_PowerLimit(PSB_Handle *handle, char *errorMsg, int errorMsgSize) {
               PSB_GetErrorString(result));
     
     LogDebugEx(LOG_DEVICE_PSB, "Power limit test completed");
+    return 1;
+}
+
+int Test_SinkCurrentControl(PSB_Handle *handle, char *errorMsg, int errorMsgSize) {
+    LogDebugEx(LOG_DEVICE_PSB, "Testing sink current control...");
+    
+    int result;
+    PSB_Status status;
+    
+    // Ensure remote mode
+    result = EnsureRemoteModeQueued(handle);
+    if (result != PSB_SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Failed to ensure remote mode: %s", 
+                PSB_GetErrorString(result));
+        return -1;
+    }
+    
+    // Note: The PSB will automatically switch to sink mode when:
+    // 1. A sink parameter is set, AND
+    // 2. The connected voltage is higher than the PSB's output voltage setting
+    
+    // First, set output voltage low to allow sink mode activation
+    LogDebugEx(LOG_DEVICE_PSB, "Setting output voltage to 0V to prepare for sink mode...");
+    result = PSB_SetVoltageQueued(handle, PSB_TEST_VOLTAGE_MIN_WIDE);
+    if (result != PSB_SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Failed to set voltage to 0V: %s", 
+                PSB_GetErrorString(result));
+        return -1;
+    }
+    
+    // Ensure output is disabled for safety
+    LogDebugEx(LOG_DEVICE_PSB, "Ensuring output is disabled...");
+    result = PSB_SetOutputEnableQueued(handle, 0);
+    if (result != PSB_SUCCESS) {
+        LogWarningEx(LOG_DEVICE_PSB, "Failed to disable output: %s", 
+                   PSB_GetErrorString(result));
+    }
+    
+    Delay(TEST_DELAY_SHORT);
+    
+    // Test setting different sink current values
+    double testSinkCurrents[] = {
+        TEST_SINK_CURRENT_LOW, 
+        TEST_SINK_CURRENT_MID, 
+        TEST_SINK_CURRENT_HIGH
+    };
+    
+    for (int i = 0; i < 3; i++) {
+        LogDebugEx(LOG_DEVICE_PSB, "Setting sink current to %.2fA...", testSinkCurrents[i]);
+        
+        result = PSB_SetSinkCurrentQueued(handle, testSinkCurrents[i]);
+        if (result != PSB_SUCCESS) {
+            snprintf(errorMsg, errorMsgSize, "Failed to set sink current to %.2fA: %s", 
+                    testSinkCurrents[i], PSB_GetErrorString(result));
+            return -1;
+        }
+        
+        Delay(TEST_DELAY_SHORT);
+        
+        // Read status to check if device is in sink mode
+        result = PSB_GetStatusQueued(handle, &status);
+        if (result != PSB_SUCCESS) {
+            snprintf(errorMsg, errorMsgSize, "Failed to read status after setting sink current: %s", 
+                    PSB_GetErrorString(result));
+            return -1;
+        }
+        
+        LogDebugEx(LOG_DEVICE_PSB, "Sink current set to %.2fA, Mode: %s", 
+                  testSinkCurrents[i], status.sinkMode ? "SINK" : "SOURCE");
+    }
+    
+    // Test invalid sink current (negative)
+    LogDebugEx(LOG_DEVICE_PSB, "Testing negative sink current (%.1fA)...", TEST_SINK_CURRENT_NEGATIVE);
+    result = PSB_SetSinkCurrentQueued(handle, TEST_SINK_CURRENT_NEGATIVE);
+    if (result == PSB_SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Should have rejected negative sink current");
+        return -1;
+    }
+    LogDebugEx(LOG_DEVICE_PSB, "Correctly rejected negative sink current: %s", 
+              PSB_GetErrorString(result));
+    
+    // Test sink current beyond limit
+    LogDebugEx(LOG_DEVICE_PSB, "Testing sink current beyond limit (%.1fA)...", TEST_CURRENT_INVALID);
+    result = PSB_SetSinkCurrentQueued(handle, TEST_CURRENT_INVALID);
+    if (result == PSB_SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Should have rejected sink current %.1fA (max is %.1fA)", 
+                TEST_CURRENT_INVALID, PSB_TEST_CURRENT_MAX_WIDE);
+        return -1;
+    }
+    LogDebugEx(LOG_DEVICE_PSB, "Correctly rejected excessive sink current: %s", 
+              PSB_GetErrorString(result));
+    
+    LogDebugEx(LOG_DEVICE_PSB, "Sink current control test passed");
+    return 1;
+}
+
+int Test_SinkPowerControl(PSB_Handle *handle, char *errorMsg, int errorMsgSize) {
+    LogDebugEx(LOG_DEVICE_PSB, "Testing sink power control...");
+    
+    int result;
+    PSB_Status status;
+    
+    // Ensure remote mode
+    result = EnsureRemoteModeQueued(handle);
+    if (result != PSB_SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Failed to ensure remote mode: %s", 
+                PSB_GetErrorString(result));
+        return -1;
+    }
+    
+    // Prepare for sink mode
+    LogDebugEx(LOG_DEVICE_PSB, "Preparing for sink mode operation...");
+    result = PSB_SetVoltageQueued(handle, PSB_TEST_VOLTAGE_MIN_WIDE);
+    if (result != PSB_SUCCESS) {
+        LogWarningEx(LOG_DEVICE_PSB, "Failed to set voltage to 0V: %s", 
+                   PSB_GetErrorString(result));
+    }
+    
+    result = PSB_SetOutputEnableQueued(handle, 0);
+    if (result != PSB_SUCCESS) {
+        LogWarningEx(LOG_DEVICE_PSB, "Failed to disable output: %s", 
+                   PSB_GetErrorString(result));
+    }
+    
+    Delay(TEST_DELAY_SHORT);
+    
+    // Test setting different sink power values
+    double testSinkPowers[] = {
+        TEST_SINK_POWER_LOW,
+        TEST_SINK_POWER_MID,
+        TEST_SINK_POWER_HIGH
+    };
+    
+    for (int i = 0; i < 3; i++) {
+        LogDebugEx(LOG_DEVICE_PSB, "Setting sink power to %.2fW...", testSinkPowers[i]);
+        
+        result = PSB_SetSinkPowerQueued(handle, testSinkPowers[i]);
+        if (result != PSB_SUCCESS) {
+            snprintf(errorMsg, errorMsgSize, "Failed to set sink power to %.2fW: %s", 
+                    testSinkPowers[i], PSB_GetErrorString(result));
+            return -1;
+        }
+        
+        Delay(TEST_DELAY_SHORT);
+        
+        // Read status
+        result = PSB_GetStatusQueued(handle, &status);
+        if (result != PSB_SUCCESS) {
+            snprintf(errorMsg, errorMsgSize, "Failed to read status after setting sink power: %s", 
+                    PSB_GetErrorString(result));
+            return -1;
+        }
+        
+        LogDebugEx(LOG_DEVICE_PSB, "Sink power set to %.2fW, Mode: %s", 
+                  testSinkPowers[i], status.sinkMode ? "SINK" : "SOURCE");
+    }
+    
+    // Test invalid sink power (negative)
+    LogDebugEx(LOG_DEVICE_PSB, "Testing negative sink power (%.1fW)...", TEST_SINK_POWER_NEGATIVE);
+    result = PSB_SetSinkPowerQueued(handle, TEST_SINK_POWER_NEGATIVE);
+    if (result == PSB_SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Should have rejected negative sink power");
+        return -1;
+    }
+    LogDebugEx(LOG_DEVICE_PSB, "Correctly rejected negative sink power: %s", 
+              PSB_GetErrorString(result));
+    
+    // Test sink power beyond limit
+    LogDebugEx(LOG_DEVICE_PSB, "Testing sink power beyond limit (%.1fW)...", TEST_POWER_INVALID);
+    result = PSB_SetSinkPowerQueued(handle, TEST_POWER_INVALID);
+    if (result == PSB_SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Should have rejected sink power %.1fW (max is %.1fW)", 
+                TEST_POWER_INVALID, PSB_TEST_POWER_MAX_WIDE);
+        return -1;
+    }
+    LogDebugEx(LOG_DEVICE_PSB, "Correctly rejected excessive sink power: %s", 
+              PSB_GetErrorString(result));
+    
+    LogDebugEx(LOG_DEVICE_PSB, "Sink power control test passed");
+    return 1;
+}
+
+int Test_SinkCurrentLimits(PSB_Handle *handle, char *errorMsg, int errorMsgSize) {
+    LogDebugEx(LOG_DEVICE_PSB, "Testing sink current limits...");
+    
+    int result;
+    
+    // Ensure remote mode
+    result = EnsureRemoteModeQueued(handle);
+    if (result != PSB_SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Failed to ensure remote mode: %s", 
+                PSB_GetErrorString(result));
+        return -1;
+    }
+    
+    // First set wide sink limits to ensure clean state
+    LogDebugEx(LOG_DEVICE_PSB, "Setting wide sink current limits for baseline...");
+    result = PSB_SetSinkCurrentLimitsQueued(handle, PSB_TEST_CURRENT_MIN_WIDE, PSB_TEST_CURRENT_MAX_WIDE);
+    if (result != PSB_SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Failed to set wide sink current limits: %s", 
+                PSB_GetErrorString(result));
+        return -1;
+    }
+    
+    Delay(TEST_DELAY_SHORT);
+    
+    // Test setting valid sink current limits
+    LogDebugEx(LOG_DEVICE_PSB, "Setting sink current limits: %.2fA - %.2fA...", 
+               TEST_SINK_CURRENT_LIMIT_MIN, TEST_SINK_CURRENT_LIMIT_MAX);
+    
+    result = PSB_SetSinkCurrentLimitsQueued(handle, TEST_SINK_CURRENT_LIMIT_MIN, TEST_SINK_CURRENT_LIMIT_MAX);
+    if (result != PSB_SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Failed to set sink current limits (%.1fA-%.1fA): %s", 
+                TEST_SINK_CURRENT_LIMIT_MIN, TEST_SINK_CURRENT_LIMIT_MAX, PSB_GetErrorString(result));
+        return -1;
+    }
+    
+    Delay(TEST_DELAY_SHORT);
+    
+    // Test that sink current can be set within limits
+    LogDebugEx(LOG_DEVICE_PSB, "Testing sink current within limits (%.1fA)...", TEST_SINK_CURRENT_LIMIT_TEST);
+    result = PSB_SetSinkCurrentQueued(handle, TEST_SINK_CURRENT_LIMIT_TEST);
+    if (result != PSB_SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Failed to set sink current within limits: %s", 
+                PSB_GetErrorString(result));
+        return -1;
+    }
+    
+    // Test sink current at max limit
+    LogDebugEx(LOG_DEVICE_PSB, "Testing sink current at max limit (%.1fA)...", TEST_SINK_CURRENT_LIMIT_MAX);
+    result = PSB_SetSinkCurrentQueued(handle, TEST_SINK_CURRENT_LIMIT_MAX);
+    if (result != PSB_SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Failed to set sink current at max limit: %s", 
+                PSB_GetErrorString(result));
+        return -1;
+    }
+    
+    // Test sink current at min limit
+    LogDebugEx(LOG_DEVICE_PSB, "Testing sink current at min limit (%.1fA)...", TEST_SINK_CURRENT_LIMIT_MIN);
+    result = PSB_SetSinkCurrentQueued(handle, TEST_SINK_CURRENT_LIMIT_MIN);
+    if (result != PSB_SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Failed to set sink current at min limit: %s", 
+                PSB_GetErrorString(result));
+        return -1;
+    }
+    
+    // Test invalid limits (min > max)
+    LogDebugEx(LOG_DEVICE_PSB, "Testing invalid sink current limits (min > max)...");
+    result = PSB_SetSinkCurrentLimitsQueued(handle, TEST_SINK_CURRENT_LIMIT_MIN_INV, TEST_SINK_CURRENT_LIMIT_MAX_INV);
+    if (result == PSB_SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Should have rejected inverted sink current limits");
+        return -1;
+    }
+    LogDebugEx(LOG_DEVICE_PSB, "Correctly rejected inverted sink current limits: %s", 
+              PSB_GetErrorString(result));
+    
+    // Test negative minimum limit
+    LogDebugEx(LOG_DEVICE_PSB, "Testing negative minimum sink current limit (%.1fA)...", TEST_SINK_CURRENT_MIN_NEG);
+    result = PSB_SetSinkCurrentLimitsQueued(handle, TEST_SINK_CURRENT_MIN_NEG, TEST_SINK_CURRENT_LIMIT_MAX);
+    if (result == PSB_SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Should have rejected negative minimum sink current limit");
+        return -1;
+    }
+    LogDebugEx(LOG_DEVICE_PSB, "Correctly rejected negative minimum limit: %s", 
+              PSB_GetErrorString(result));
+    
+    // Test excessive maximum limit
+    LogDebugEx(LOG_DEVICE_PSB, "Testing excessive maximum sink current limit (%.1fA)...", TEST_CURRENT_INVALID);
+    result = PSB_SetSinkCurrentLimitsQueued(handle, PSB_TEST_CURRENT_MIN_WIDE, TEST_CURRENT_INVALID);
+    if (result == PSB_SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Should have rejected excessive maximum sink current limit");
+        return -1;
+    }
+    LogDebugEx(LOG_DEVICE_PSB, "Correctly rejected excessive maximum limit: %s", 
+              PSB_GetErrorString(result));
+    
+    // Restore wide limits
+    LogDebugEx(LOG_DEVICE_PSB, "Restoring wide sink current limits...");
+    result = PSB_SetSinkCurrentLimitsQueued(handle, PSB_TEST_CURRENT_MIN_WIDE, PSB_TEST_CURRENT_MAX_WIDE);
+    if (result != PSB_SUCCESS) {
+        LogWarningEx(LOG_DEVICE_PSB, "Failed to restore wide sink current limits: %s", 
+                    PSB_GetErrorString(result));
+    }
+    
+    LogDebugEx(LOG_DEVICE_PSB, "Sink current limits test passed");
+    return 1;
+}
+
+int Test_SinkPowerLimit(PSB_Handle *handle, char *errorMsg, int errorMsgSize) {
+    LogDebugEx(LOG_DEVICE_PSB, "Testing sink power limit...");
+    
+    int result;
+    
+    // Ensure remote mode
+    result = EnsureRemoteModeQueued(handle);
+    if (result != PSB_SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Failed to ensure remote mode: %s", 
+                PSB_GetErrorString(result));
+        return -1;
+    }
+    
+    // First, ensure sink power is set to a low value to avoid conflicts
+    LogDebugEx(LOG_DEVICE_PSB, "Setting initial sink power to %.1fW...", TEST_SINK_POWER_LOW);
+    result = PSB_SetSinkPowerQueued(handle, TEST_SINK_POWER_LOW);
+    if (result != PSB_SUCCESS) {
+        LogWarningEx(LOG_DEVICE_PSB, "Failed to set initial sink power: %s", 
+                   PSB_GetErrorString(result));
+    }
+    
+    Delay(TEST_DELAY_SHORT);
+    
+    // Test setting valid sink power limit
+    LogDebugEx(LOG_DEVICE_PSB, "Setting sink power limit to %.2fW...", TEST_SINK_POWER_LIMIT_1);
+    result = PSB_SetSinkPowerLimitQueued(handle, TEST_SINK_POWER_LIMIT_1);
+    if (result != PSB_SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Failed to set sink power limit to %.1fW: %s", 
+                TEST_SINK_POWER_LIMIT_1, PSB_GetErrorString(result));
+        return -1;
+    }
+    
+    Delay(TEST_DELAY_SHORT);
+    
+    // Verify we can set sink power below the limit
+    LogDebugEx(LOG_DEVICE_PSB, "Testing sink power below limit (%.1fW)...", TEST_SINK_POWER_LIMIT_TEST);
+    result = PSB_SetSinkPowerQueued(handle, TEST_SINK_POWER_LIMIT_TEST);
+    if (result != PSB_SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Failed to set sink power below limit: %s", 
+                PSB_GetErrorString(result));
+        return -1;
+    }
+    
+    // Test sink power at the limit
+    LogDebugEx(LOG_DEVICE_PSB, "Testing sink power at limit (%.1fW)...", TEST_SINK_POWER_LIMIT_1);
+    result = PSB_SetSinkPowerQueued(handle, TEST_SINK_POWER_LIMIT_1);
+    if (result != PSB_SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Failed to set sink power at limit: %s", 
+                PSB_GetErrorString(result));
+        return -1;
+    }
+    
+    // IMPORTANT: Before changing to a lower limit, first reduce the sink power
+    LogDebugEx(LOG_DEVICE_PSB, "Reducing sink power to %.1fW before lowering limit...", TEST_SINK_POWER_LOW);
+    result = PSB_SetSinkPowerQueued(handle, TEST_SINK_POWER_LOW);
+    if (result != PSB_SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Failed to reduce sink power before changing limit: %s", 
+                PSB_GetErrorString(result));
+        return -1;
+    }
+    
+    Delay(TEST_DELAY_SHORT);
+    
+    // Now test different (lower) power limit
+    LogDebugEx(LOG_DEVICE_PSB, "Changing sink power limit to %.2fW...", TEST_SINK_POWER_LIMIT_2);
+    result = PSB_SetSinkPowerLimitQueued(handle, TEST_SINK_POWER_LIMIT_2);
+    if (result != PSB_SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Failed to change sink power limit to %.1fW: %s", 
+                TEST_SINK_POWER_LIMIT_2, PSB_GetErrorString(result));
+        return -1;
+    }
+    
+    // Test negative power limit (should fail)
+    LogDebugEx(LOG_DEVICE_PSB, "Testing negative sink power limit (%.1fW)...", TEST_SINK_POWER_NEGATIVE);
+    result = PSB_SetSinkPowerLimitQueued(handle, TEST_SINK_POWER_NEGATIVE);
+    if (result == PSB_SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Should have rejected negative sink power limit");
+        return -1;
+    }
+    LogDebugEx(LOG_DEVICE_PSB, "Correctly rejected negative sink power limit: %s", 
+              PSB_GetErrorString(result));
+    
+    // Test excessive power limit
+    LogDebugEx(LOG_DEVICE_PSB, "Testing excessive sink power limit (%.1fW)...", TEST_POWER_INVALID);
+    result = PSB_SetSinkPowerLimitQueued(handle, TEST_POWER_INVALID);
+    if (result == PSB_SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Should have rejected sink power limit %.1fW (max is %.1fW)", 
+                TEST_POWER_INVALID, PSB_TEST_POWER_MAX_WIDE);
+        return -1;
+    }
+    LogDebugEx(LOG_DEVICE_PSB, "Correctly rejected excessive sink power limit: %s", 
+              PSB_GetErrorString(result));
+    
+    // Restore maximum power limit
+    LogDebugEx(LOG_DEVICE_PSB, "Restoring maximum sink power limit (%.1fW)...", PSB_TEST_POWER_MAX_WIDE);
+    result = PSB_SetSinkPowerLimitQueued(handle, PSB_TEST_POWER_MAX_WIDE);
+    if (result != PSB_SUCCESS) {
+        LogWarningEx(LOG_DEVICE_PSB, "Failed to restore max sink power limit: %s", 
+                    PSB_GetErrorString(result));
+    }
+    
+    LogDebugEx(LOG_DEVICE_PSB, "Sink power limit test passed");
     return 1;
 }
 
