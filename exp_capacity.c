@@ -264,6 +264,34 @@ static int CVICALLBACK CapacityTestThread(void *functionData) {
         LogWarning("Failed to set sink current limits: %s", PSB_GetErrorString(result));
     }
     
+	// Set source power for charging
+    params.setPower.power = CAPACITY_TEST_POWER_LIMIT_W;
+    result = PSB_QueueCommandBlocking(PSB_GetGlobalQueueManager(), 
+                                    PSB_CMD_SET_POWER,
+                                    &params, PSB_PRIORITY_HIGH, &cmdResult,
+                                    PSB_QUEUE_COMMAND_TIMEOUT_MS);
+    if (result != PSB_SUCCESS) {
+        LogError("Failed to set source power: %s", PSB_GetErrorString(result));
+        MessagePopup("Error", "Failed to set source power.");
+        ctx->state = CAPACITY_STATE_ERROR;
+        goto cleanup;
+    }
+    LogMessage("Set source power to %.1f W", CAPACITY_TEST_POWER_LIMIT_W);
+    
+    // Set sink power for discharging
+    params.setSinkPower.power = CAPACITY_TEST_POWER_LIMIT_W;
+    result = PSB_QueueCommandBlocking(PSB_GetGlobalQueueManager(), 
+                                    PSB_CMD_SET_SINK_POWER,
+                                    &params, PSB_PRIORITY_HIGH, &cmdResult,
+                                    PSB_QUEUE_COMMAND_TIMEOUT_MS);
+    if (result != PSB_SUCCESS) {
+        LogError("Failed to set sink power: %s", PSB_GetErrorString(result));
+        MessagePopup("Error", "Failed to set sink power.");
+        ctx->state = CAPACITY_STATE_ERROR;
+        goto cleanup;
+    }
+    LogMessage("Set sink power to %.1f W", CAPACITY_TEST_POWER_LIMIT_W);
+	
     // Set power limit
     params.powerLimit.maxPower = CAPACITY_TEST_POWER_LIMIT_W;
     result = PSB_QueueCommandBlocking(PSB_GetGlobalQueueManager(), 
@@ -509,6 +537,9 @@ static int RunTestPhase(CapacityTestContext *ctx, CapacityTestPhase phase) {
         fclose(ctx->csvFile);
         return result;
     }
+	
+	LogMessage("Waiting for output to stabilize...");
+    Delay(2.0);
     
     // Initialize timing and capacity
     ctx->phaseStartTime = Timer();
@@ -520,7 +551,7 @@ static int RunTestPhase(CapacityTestContext *ctx, CapacityTestPhase phase) {
     ctx->dataPointCount = 0;
     
     // Reset capacity display
-    SetCtrlVal(ctx->mainPanelHandle, capacityControl, 0.0);
+    SetCtrlVal(ctx->tabPanelHandle, capacityControl, 0.0);
     
     LogMessage("%s phase started", phaseName);
     
@@ -619,7 +650,7 @@ static int LogDataPoint(CapacityTestContext *ctx, CapacityDataPoint *point) {
         ctx->accumulatedCapacity_mAh += capacityIncrement;
         
         // Update capacity display
-        SetCtrlVal(ctx->mainPanelHandle, ctx->capacityControl, ctx->accumulatedCapacity_mAh);
+        SetCtrlVal(ctx->tabPanelHandle, ctx->capacityControl, ctx->accumulatedCapacity_mAh);
     }
     
     // Store for next calculation
