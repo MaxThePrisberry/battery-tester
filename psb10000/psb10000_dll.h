@@ -23,6 +23,13 @@
 #define PSB_NOMINAL_CURRENT     60.0    // A
 #define PSB_NOMINAL_POWER       1200.0  // W (derated due to the outlet)
 
+// Safe operating limits for PSB 10000 (60V/60A derated version)
+#define PSB_SAFE_VOLTAGE_MIN    0.0     // V
+#define PSB_SAFE_VOLTAGE_MAX    61.2    // V (102% of nominal)
+#define PSB_SAFE_CURRENT_MIN    0.0     // A
+#define PSB_SAFE_CURRENT_MAX    61.2    // A (102% of nominal)
+#define PSB_SAFE_POWER_MAX      1224.0  // W (102% of nominal)
+
 // PSB-specific error codes (using base from common.h)
 #define PSB_SUCCESS                 SUCCESS
 #define PSB_ERROR_COMM             (ERR_BASE_PSB - 1)

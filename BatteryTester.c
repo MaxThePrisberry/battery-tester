@@ -12,6 +12,7 @@
 #include "psb10000_dll.h"
 #include "psb10000_queue.h"
 #include "psb10000_test.h"
+#include "exp_capacity.h"
 #include "logging.h"
 #include "status.h"
 
@@ -40,7 +41,6 @@ int g_systemBusy = 0;
 /******************************************************************************
  * Module-Specific Global Variables
  ******************************************************************************/
-static CmtThreadFunctionID testSuiteThreadID = 0;
 static int testButtonControl = 0;
 
 // Test suite context
@@ -530,6 +530,16 @@ int CVICALLBACK PanelCallback(int panel, int event, void *callbackData,
             LogMessage("Shutting down Battery Tester application");
             LogMessage("========================================");
             
+            // Check if capacity test is running and abort it
+            if (CapacityTest_IsRunning()) {
+                LogMessage("Aborting running capacity test...");
+                CapacityTest_Abort();
+                
+                // Give it a moment to clean up properly
+                ProcessSystemEvents();
+                Delay(0.5);
+            }
+            
             // Stop status monitoring first
             LogMessage("Stopping status monitoring...");
             Status_Stop();
@@ -541,26 +551,30 @@ int CVICALLBACK PanelCallback(int panel, int event, void *callbackData,
             Delay(0.2);
             
             // Shutdown PSB queue manager
-			if (g_psbQueueMgr) {
-			    LogMessage("Shutting down PSB queue manager...");
-			    PSBQueueManager *tempMgr = g_psbQueueMgr;
-			    g_psbQueueMgr = NULL;  // Clear global pointer FIRST
-			    PSB_SetGlobalQueueManager(NULL);  // Clear global reference
-			    PSB_QueueShutdown(tempMgr);  // Then shutdown
-			}
+            if (g_psbQueueMgr) {
+                LogMessage("Shutting down PSB queue manager...");
+                PSBQueueManager *tempMgr = g_psbQueueMgr;
+                g_psbQueueMgr = NULL;  // Clear global pointer FIRST
+                PSB_SetGlobalQueueManager(NULL);  // Clear global reference
+                PSB_QueueShutdown(tempMgr);  // Then shutdown
+            }
             
             // Shutdown BioLogic queue manager
-			if (g_bioQueueMgr) {
-			    LogMessage("Shutting down BioLogic queue manager...");
-			    BioQueueManager *tempMgr = g_bioQueueMgr;
-			    g_bioQueueMgr = NULL;  // Clear global pointer FIRST
-			    BIO_SetGlobalQueueManager(NULL);  // Clear global reference
-			    BIO_QueueShutdown(tempMgr);  // Then shutdown
-			}
+            if (g_bioQueueMgr) {
+                LogMessage("Shutting down BioLogic queue manager...");
+                BioQueueManager *tempMgr = g_bioQueueMgr;
+                g_bioQueueMgr = NULL;  // Clear global pointer FIRST
+                BIO_SetGlobalQueueManager(NULL);  // Clear global reference
+                BIO_QueueShutdown(tempMgr);  // Then shutdown
+            }
             
             // Both queue shutdown functions already wait for their threads
             ProcessSystemEvents();
             Delay(0.2);
+            
+            // Clean up capacity test module
+            LogMessage("Cleaning up capacity test module...");
+            CapacityTest_Cleanup();
             
             // Clean up status module
             Status_Cleanup();
@@ -573,6 +587,7 @@ int CVICALLBACK PanelCallback(int panel, int event, void *callbackData,
                 // - Status_Stop() waits for its threads
                 // - PSB_QueueShutdown() waits for its thread
                 // - BIO_QueueShutdown() waits for its thread
+                // - CapacityTest_Abort() waits for its thread
                 
                 // Just give a small delay to ensure everything is cleaned up
                 ProcessSystemEvents();

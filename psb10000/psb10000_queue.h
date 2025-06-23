@@ -221,4 +221,25 @@ int PSB_QueueGetCommandDelay(PSBCommandType type);
 void PSB_SetGlobalQueueManager(PSBQueueManager *mgr);
 PSBQueueManager* PSB_GetGlobalQueueManager(void);
 
+/**
+ * Initialize PSB to safe state with wide limits
+ * This function ensures the PSB is in a known safe state by:
+ * 1. Disabling output
+ * 2. Setting all values to zero
+ * 3. Setting limits to maximum safe values
+ * 4. Optionally setting specific operating limits
+ * 
+ * @param handle - PSB handle (can be NULL to use global queue manager)
+ * @param setOperatingLimits - If true, sets the provided operating limits after wide limits
+ * @param maxVoltage - Maximum voltage limit to set (0 = use safe maximum)
+ * @param maxCurrent - Maximum current limit to set (0 = use safe maximum)  
+ * @param maxPower - Maximum power limit to set (0 = use safe maximum)
+ * @return PSB_SUCCESS or error code
+ */
+int PSB_InitializeSafeLimits(PSB_Handle *handle, 
+                            bool setOperatingLimits,
+                            double maxVoltage, 
+                            double maxCurrent,
+                            double maxPower);
+
 #endif // PSB10000_QUEUE_H

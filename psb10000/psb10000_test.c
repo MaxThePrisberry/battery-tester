@@ -100,56 +100,22 @@ static int EnsureRemoteModeQueued(PSB_Handle *handle) {
 static int SetWideLimitsQueued(PSB_Handle *handle) {
     LogDebugEx(LOG_DEVICE_PSB, "Setting wide limits for testing...");
     
-    int result;
-    int errors = 0;
+    // Use the new helper function to safely set wide limits
+    // Note: PSB_TEST_*_WIDE constants would need to be updated to use PSB_SAFE_* constants
+    // or you can keep test-specific limits if they differ from the safe maximums
+    int result = PSB_InitializeSafeLimits(handle, 
+                                        false,  // Don't set operating limits, just use safe maximums
+                                        0,      // Use default (safe max)
+                                        0,      // Use default (safe max)
+                                        0);     // Use default (safe max)
     
-    // Ensure remote mode using queued command
-    result = PSB_SetRemoteModeQueued(handle, 1);
-    if (result != PSB_SUCCESS) {
-        return PSB_ERROR_COMM;
-    }
-    
-    Delay(TEST_DELAY_SHORT);
-    
-    // Set voltage limits using queued command
-    LogDebugEx(LOG_DEVICE_PSB, "Setting voltage limits: %.1fV - %.1fV...", 
-           PSB_TEST_VOLTAGE_MIN_WIDE, PSB_TEST_VOLTAGE_MAX_WIDE);
-    result = PSB_SetVoltageLimitsQueued(handle, PSB_TEST_VOLTAGE_MIN_WIDE, PSB_TEST_VOLTAGE_MAX_WIDE);
-    if (result != PSB_SUCCESS) {
-        LogWarningEx(LOG_DEVICE_PSB, "Failed to set voltage limits");
-        errors++;
+    if (result == PSB_SUCCESS) {
+        LogDebugEx(LOG_DEVICE_PSB, "Wide limits set successfully");
     } else {
-        LogDebugEx(LOG_DEVICE_PSB, "Voltage limits set successfully");
+        LogWarningEx(LOG_DEVICE_PSB, "Failed to set wide limits: %s", PSB_GetErrorString(result));
     }
     
-    // Set current limits using queued command
-    LogDebugEx(LOG_DEVICE_PSB, "Setting current limits: %.1fA - %.1fA...", 
-           PSB_TEST_CURRENT_MIN_WIDE, PSB_TEST_CURRENT_MAX_WIDE);
-    result = PSB_SetCurrentLimitsQueued(handle, PSB_TEST_CURRENT_MIN_WIDE, PSB_TEST_CURRENT_MAX_WIDE);
-    if (result != PSB_SUCCESS) {
-        LogWarningEx(LOG_DEVICE_PSB, "Failed to set current limits: %s", PSB_GetErrorString(result));
-        errors++;
-    } else {
-        LogDebugEx(LOG_DEVICE_PSB, "Current limits set successfully");
-    }
-    
-    // Set power limit using queued command
-    LogDebugEx(LOG_DEVICE_PSB, "Setting power limit: %.1fW...", PSB_TEST_POWER_MAX_WIDE);
-    result = PSB_SetPowerLimitQueued(handle, PSB_TEST_POWER_MAX_WIDE);
-    if (result != PSB_SUCCESS) {
-        LogWarningEx(LOG_DEVICE_PSB, "Failed to set power limit: %s", PSB_GetErrorString(result));
-        errors++;
-    } else {
-        LogDebugEx(LOG_DEVICE_PSB, "Power limit set successfully");
-    }
-    
-    if (errors == 0) {
-        LogDebugEx(LOG_DEVICE_PSB, "All wide limits set successfully");
-        return PSB_SUCCESS;
-    } else {
-        LogWarningEx(LOG_DEVICE_PSB, "Failed to set %d limit(s)", errors);
-        return PSB_ERROR_COMM;
-    }
+    return result;
 }
 
 /******************************************************************************
