@@ -23,7 +23,7 @@
 #define CAPACITY_TEST_VOLTAGE_MARGIN    0.1
 
 // Graph update rate during testing (seconds)
-#define CAPACITY_TEST_GRAPH_UPDATE_RATE 0.5
+#define CAPACITY_TEST_GRAPH_UPDATE_RATE 3.0
 
 // Maximum test duration for safety (hours)
 #define CAPACITY_TEST_MAX_DURATION_H    10.0
