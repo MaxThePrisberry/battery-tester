@@ -323,11 +323,38 @@ int FileExists(const char *filename);
 int CreateDirectoryPath(const char *path);  // Renamed to avoid Windows conflict
 int GetExecutableDirectory(char *path, int pathSize);
 
-// UI helper functions (implemented in a UI utility module)
+/******************************************************************************
+ * UI Helper Functions (implemented in a UI utility module)
+ ******************************************************************************/
 void UpdateUIString(void *panel, void *control, void *text);
 void UpdateUINumeric(void *panel, void *control, void *value);
 void EnablePanel(int panel, int enable);
 void ShowBusyCursor(int show);
+
+/**
+ * Dim/enable all controls in a control array
+ * @param panel - Panel handle containing the controls
+ * @param arrayID - Control array resource ID (e.g., BATTERY_CONSTANTS_ARR)
+ * @param dim - 1 to dim controls, 0 to enable them
+ */
+void DimControlArray(int panel, int arrayID, int dim);
+
+/**
+ * Dim/enable controls for capacity experiment
+ * This function handles:
+ * - Control arrays (BATTERY_CONSTANTS_ARR, MANUAL_CONTROL_ARR)
+ * - Tab control locking
+ * - Specific controls on the capacity tab
+ * 
+ * @param mainPanel - Main panel handle
+ * @param tabPanel - Tab panel handle (capacity tab)
+ * @param dim - 1 to dim controls, 0 to enable them
+ * @param currentThresholdCtrl - Control ID for current threshold numeric
+ * @param intervalCtrl - Control ID for interval numeric
+ * @param return50Ctrl - Control ID for return to 50% checkbox
+ */
+void DimCapacityExperimentControls(int mainPanel, int tabPanel, int dim,
+                                   int currentThresholdCtrl, int intervalCtrl, int return50Ctrl);
 
 // Thread synchronization helpers
 int WaitForCondition(int (*condition)(void), double timeoutSeconds);

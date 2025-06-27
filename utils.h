@@ -45,6 +45,14 @@
 // None currently needed - all constants are in common.h
 
 //==============================================================================
+// Internal UI Control IDs for DimControlArray
+//==============================================================================
+
+// These are needed for the implementation of DimControlArray
+// They map array IDs to specific controls
+// Note: These values should match what's defined in BatteryTester.h
+
+//==============================================================================
 // End of Header
 //==============================================================================
 

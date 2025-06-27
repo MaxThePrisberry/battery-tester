@@ -8,6 +8,8 @@
 #include "utils.h"
 #include "biologic_dll.h"  // For BL_GetErrorString
 #include "psb10000_dll.h"  // For PSB_GetErrorString
+#include "BatteryTester.h" // For UI control IDs
+#include "logging.h"       // For LogWarning
 #include <errno.h>  // For errno
 #include <limits.h> // For INT_MAX, INT_MIN
 #include <ctype.h>  // For isspace
@@ -287,6 +289,81 @@ void EnablePanel(int panel, int enable) {
 
 void ShowBusyCursor(int show) {
     SetWaitCursor(show);
+}
+
+/******************************************************************************
+ * UI Control Array Dimming Functions
+ ******************************************************************************/
+
+void DimControlArray(int panel, int arrayID, int dim) {
+    // Manual approach - handle each control array by ID
+    // Since we don't have the exact API for iterating control arrays,
+    // we'll manually dim the controls that belong to each array
+    
+    switch (arrayID) {
+        case BATTERY_CONSTANTS_ARR:
+            // Battery constants controls - voltage and current settings
+            SetCtrlAttribute(panel, PANEL_NUM_SET_CHARGE_V, ATTR_DIMMED, dim);
+            SetCtrlAttribute(panel, PANEL_NUM_SET_DISCHARGE_V, ATTR_DIMMED, dim);
+            SetCtrlAttribute(panel, PANEL_NUM_SET_CHARGE_I, ATTR_DIMMED, dim);
+            SetCtrlAttribute(panel, PANEL_NUM_SET_DISCHARGE_I, ATTR_DIMMED, dim);
+            break;
+            
+        case MANUAL_CONTROL_ARR:
+            // Manual control controls - test buttons and remote mode toggle
+            SetCtrlAttribute(panel, PANEL_TOGGLE_REMOTE_MODE, ATTR_DIMMED, dim);
+            SetCtrlAttribute(panel, PANEL_BTN_TEST_PSB, ATTR_DIMMED, dim);
+            SetCtrlAttribute(panel, PANEL_BTN_TEST_BIOLOGIC, ATTR_DIMMED, dim);
+            break;
+            
+        default:
+            LogWarning("DimControlArray: Unknown control array ID: %d", arrayID);
+            break;
+    }
+}
+
+void DimCapacityExperimentControls(int mainPanel, int tabPanel, int dim,
+                                   int currentThresholdCtrl, int intervalCtrl, int return50Ctrl) {
+    // Dim control arrays on main panel
+    DimControlArray(mainPanel, BATTERY_CONSTANTS_ARR, dim);
+    DimControlArray(mainPanel, MANUAL_CONTROL_ARR, dim);
+    
+    // Lock/unlock tab control - dim all tabs except the current one
+    int numTabs;
+    GetNumTabPages(mainPanel, PANEL_EXPERIMENTS, &numTabs);
+    
+    if (dim) {
+        // Get current tab index
+        int currentTab;
+        GetActiveTabPage(mainPanel, PANEL_EXPERIMENTS, &currentTab);
+        
+        // Dim all other tabs
+        for (int i = 0; i < numTabs; i++) {
+            if (i != currentTab) {
+                SetTabPageAttribute(mainPanel, PANEL_EXPERIMENTS, i, ATTR_DIMMED, 1);
+            }
+        }
+    } else {
+        // Re-enable all tabs
+        for (int i = 0; i < numTabs; i++) {
+            SetTabPageAttribute(mainPanel, PANEL_EXPERIMENTS, i, ATTR_DIMMED, 0);
+        }
+    }
+    
+    // Dim specific controls on the capacity tab
+    if (currentThresholdCtrl > 0) {
+        SetCtrlAttribute(tabPanel, currentThresholdCtrl, ATTR_DIMMED, dim);
+    }
+    
+    if (intervalCtrl > 0) {
+        SetCtrlAttribute(tabPanel, intervalCtrl, ATTR_DIMMED, dim);
+    }
+    
+    if (return50Ctrl > 0) {
+        SetCtrlAttribute(tabPanel, return50Ctrl, ATTR_DIMMED, dim);
+    }
+    
+    // Note: BTN_EXP_CAPACITY is NOT dimmed as requested
 }
 
 /******************************************************************************

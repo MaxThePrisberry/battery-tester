@@ -103,11 +103,7 @@ static int SetWideLimitsQueued(PSB_Handle *handle) {
     // Use the new helper function to safely set wide limits
     // Note: PSB_TEST_*_WIDE constants would need to be updated to use PSB_SAFE_* constants
     // or you can keep test-specific limits if they differ from the safe maximums
-    int result = PSB_InitializeSafeLimits(handle, 
-                                        false,  // Don't set operating limits, just use safe maximums
-                                        0,      // Use default (safe max)
-                                        0,      // Use default (safe max)
-                                        0);     // Use default (safe max)
+    int result = PSB_InitializeSafeLimits(handle);
     
     if (result == PSB_SUCCESS) {
         LogDebugEx(LOG_DEVICE_PSB, "Wide limits set successfully");

@@ -236,10 +236,62 @@ PSBQueueManager* PSB_GetGlobalQueueManager(void);
  * @param maxPower - Maximum power limit to set (0 = use safe maximum)
  * @return PSB_SUCCESS or error code
  */
-int PSB_InitializeSafeLimits(PSB_Handle *handle, 
-                            bool setOperatingLimits,
-                            double maxVoltage, 
-                            double maxCurrent,
-                            double maxPower);
+int PSB_InitializeSafeLimits(PSB_Handle *handle);
+
+/**
+ * Safely set voltage with limits
+ * Sets wide limits first, then voltage, then desired limits to avoid PSB errors
+ * @param handle - PSB handle (can be NULL to use global queue manager)
+ * @param voltage - Target voltage
+ * @param minVoltage - Minimum voltage limit (0 = use safe minimum)
+ * @param maxVoltage - Maximum voltage limit (0 = use safe maximum)
+ * @return PSB_SUCCESS or error code
+ */
+int PSB_SetVoltageWithLimits(PSB_Handle *handle, double voltage, 
+                            double minVoltage, double maxVoltage);
+
+/**
+ * Safely set current with limits
+ * Sets wide limits first, then current, then desired limits to avoid PSB errors
+ * @param handle - PSB handle (can be NULL to use global queue manager)
+ * @param current - Target current
+ * @param minCurrent - Minimum current limit (0 = use safe minimum)
+ * @param maxCurrent - Maximum current limit (0 = use safe maximum)
+ * @return PSB_SUCCESS or error code
+ */
+int PSB_SetCurrentWithLimits(PSB_Handle *handle, double current,
+                            double minCurrent, double maxCurrent);
+
+/**
+ * Safely set sink current with limits
+ * Sets wide limits first, then sink current, then desired limits to avoid PSB errors
+ * @param handle - PSB handle (can be NULL to use global queue manager)
+ * @param current - Target sink current
+ * @param minCurrent - Minimum sink current limit (0 = use safe minimum)
+ * @param maxCurrent - Maximum sink current limit (0 = use safe maximum)
+ * @return PSB_SUCCESS or error code
+ */
+int PSB_SetSinkCurrentWithLimits(PSB_Handle *handle, double current,
+                                double minCurrent, double maxCurrent);
+
+/**
+ * Safely set power with limit
+ * Sets wide limit first, then power, then desired limit to avoid PSB errors
+ * @param handle - PSB handle (can be NULL to use global queue manager)
+ * @param power - Target power
+ * @param maxPower - Maximum power limit (0 = use safe maximum)
+ * @return PSB_SUCCESS or error code
+ */
+int PSB_SetPowerWithLimit(PSB_Handle *handle, double power, double maxPower);
+
+/**
+ * Safely set sink power with limit
+ * Sets wide limit first, then sink power, then desired limit to avoid PSB errors
+ * @param handle - PSB handle (can be NULL to use global queue manager)
+ * @param power - Target sink power
+ * @param maxPower - Maximum sink power limit (0 = use safe maximum)
+ * @return PSB_SUCCESS or error code
+ */
+int PSB_SetSinkPowerWithLimit(PSB_Handle *handle, double power, double maxPower);
 
 #endif // PSB10000_QUEUE_H

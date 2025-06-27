@@ -49,6 +49,7 @@
 #define  CAPACITY_NUM_INTERVAL            4       /* control type: numeric, callback function: (none) */
 #define  CAPACITY_NUM_DISCHARGE_CAP       5       /* control type: numeric, callback function: (none) */
 #define  CAPACITY_NUM_CHARGE_CAP          6       /* control type: numeric, callback function: (none) */
+#define  CAPACITY_CHECKBOX_RETURN_50      7       /* control type: radioButton, callback function: (none) */
 
 
      /* Control Arrays: */

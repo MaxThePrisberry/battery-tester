@@ -674,160 +674,88 @@ int PSB_SetSinkPowerLimitQueued(PSB_Handle *handle, double maxPower) {
                                   PSB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int PSB_InitializeSafeLimits(PSB_Handle *handle, 
-                            bool setOperatingLimits,
-                            double maxVoltage, 
-                            double maxCurrent,
-                            double maxPower) {
+int PSB_InitializeSafeLimits(PSB_Handle *handle) {
     PSBQueueManager *queueMgr = PSB_GetGlobalQueueManager();
     if (!queueMgr && !handle) {
         return PSB_ERROR_NOT_CONNECTED;
     }
     
     int result;
-    PSBCommandParams params = {0};
-    PSBCommandResult cmdResult = {0};
     
     LogMessageEx(LOG_DEVICE_PSB, "Initializing PSB to safe state...");
     
-    // Step 1: Ensure output is disabled
-    params.outputEnable.enable = 0;
-    result = queueMgr ? 
-        PSB_QueueCommandBlocking(queueMgr, PSB_CMD_SET_OUTPUT_ENABLE,
-                               &params, PSB_PRIORITY_HIGH, &cmdResult,
-                               PSB_QUEUE_COMMAND_TIMEOUT_MS) :
-        PSB_SetOutputEnable(handle, 0);
-    
+    // Disable output
+    result = PSB_SetOutputEnableQueued(handle, 0);
     if (result != PSB_SUCCESS) {
         LogErrorEx(LOG_DEVICE_PSB, "Failed to disable output: %s", PSB_GetErrorString(result));
         return result;
     }
     
-    Delay(0.1);
-    
-    // Step 2: Set wide safety limits FIRST to ensure we can set any value
-    LogDebugEx(LOG_DEVICE_PSB, "Setting wide safety limits...");
-    
     // Set voltage limits to maximum safe range
-    params.voltageLimits.minVoltage = PSB_SAFE_VOLTAGE_MIN;
-    params.voltageLimits.maxVoltage = PSB_SAFE_VOLTAGE_MAX;
-    result = queueMgr ?
-        PSB_QueueCommandBlocking(queueMgr, PSB_CMD_SET_VOLTAGE_LIMITS,
-                               &params, PSB_PRIORITY_HIGH, &cmdResult,
-                               PSB_QUEUE_COMMAND_TIMEOUT_MS) :
-        PSB_SetVoltageLimits(handle, PSB_SAFE_VOLTAGE_MIN, PSB_SAFE_VOLTAGE_MAX);
+    result = PSB_SetVoltageLimitsQueued(handle, PSB_SAFE_VOLTAGE_MIN, PSB_SAFE_VOLTAGE_MAX);
     if (result != PSB_SUCCESS) {
         LogErrorEx(LOG_DEVICE_PSB, "Failed to set voltage limits: %s", PSB_GetErrorString(result));
         return result;
     }
     
+    // Set voltage to 0V
+    result = PSB_SetVoltageQueued(handle, 0.0);
+    if (result != PSB_SUCCESS) {
+        LogErrorEx(LOG_DEVICE_PSB, "Failed to set voltage to 0V: %s", PSB_GetErrorString(result));
+        return result;
+    }
+    
     // Set current limits to maximum safe range
-    params.currentLimits.minCurrent = PSB_SAFE_CURRENT_MIN;
-    params.currentLimits.maxCurrent = PSB_SAFE_CURRENT_MAX;
-    result = queueMgr ?
-        PSB_QueueCommandBlocking(queueMgr, PSB_CMD_SET_CURRENT_LIMITS,
-                               &params, PSB_PRIORITY_HIGH, &cmdResult,
-                               PSB_QUEUE_COMMAND_TIMEOUT_MS) :
-        PSB_SetCurrentLimits(handle, PSB_SAFE_CURRENT_MIN, PSB_SAFE_CURRENT_MAX);
+    result = PSB_SetCurrentLimitsQueued(handle, PSB_SAFE_CURRENT_MIN, PSB_SAFE_CURRENT_MAX);
     if (result != PSB_SUCCESS) {
         LogErrorEx(LOG_DEVICE_PSB, "Failed to set current limits: %s", PSB_GetErrorString(result));
         return result;
     }
     
-    // Set power limit to maximum safe value
-    params.powerLimit.maxPower = PSB_SAFE_POWER_MAX;
-    result = queueMgr ?
-        PSB_QueueCommandBlocking(queueMgr, PSB_CMD_SET_POWER_LIMIT,
-                               &params, PSB_PRIORITY_HIGH, &cmdResult,
-                               PSB_QUEUE_COMMAND_TIMEOUT_MS) :
-        PSB_SetPowerLimit(handle, PSB_SAFE_POWER_MAX);
+    // Set current to 0A
+    result = PSB_SetCurrentQueued(handle, 0.0);
     if (result != PSB_SUCCESS) {
-        LogErrorEx(LOG_DEVICE_PSB, "Failed to set source power limit: %s", PSB_GetErrorString(result));
+        LogErrorEx(LOG_DEVICE_PSB, "Failed to set current to 0A: %s", PSB_GetErrorString(result));
         return result;
     }
     
-    // Set sink mode limits to maximum safe range
-    params.sinkCurrentLimits.minCurrent = PSB_SAFE_CURRENT_MIN;
-    params.sinkCurrentLimits.maxCurrent = PSB_SAFE_CURRENT_MAX;
-    result = queueMgr ?
-        PSB_QueueCommandBlocking(queueMgr, PSB_CMD_SET_SINK_CURRENT_LIMITS,
-                               &params, PSB_PRIORITY_HIGH, &cmdResult,
-                               PSB_QUEUE_COMMAND_TIMEOUT_MS) :
-        PSB_SetSinkCurrentLimits(handle, PSB_SAFE_CURRENT_MIN, PSB_SAFE_CURRENT_MAX);
+    // Set sink current limits to maximum safe range
+    result = PSB_SetSinkCurrentLimitsQueued(handle, PSB_SAFE_CURRENT_MIN, PSB_SAFE_CURRENT_MAX);
     if (result != PSB_SUCCESS) {
         LogWarningEx(LOG_DEVICE_PSB, "Failed to set sink current limits: %s", PSB_GetErrorString(result));
     }
     
-    params.sinkPowerLimit.maxPower = PSB_SAFE_POWER_MAX;
-    result = queueMgr ?
-        PSB_QueueCommandBlocking(queueMgr, PSB_CMD_SET_SINK_POWER_LIMIT,
-                               &params, PSB_PRIORITY_HIGH, &cmdResult,
-                               PSB_QUEUE_COMMAND_TIMEOUT_MS) :
-        PSB_SetSinkPowerLimit(handle, PSB_SAFE_POWER_MAX);
-    if (result != PSB_SUCCESS) {
-        LogWarningEx(LOG_DEVICE_PSB, "Failed to set sink power limit: %s", PSB_GetErrorString(result));
-    }
-    
-    Delay(0.2); // Give device time to process limit changes
-    
-    // Step 3: Now set all values to zero (within the wide limits)
-    LogDebugEx(LOG_DEVICE_PSB, "Setting all values to zero...");
-    
-    // Set voltage to 0V
-    params.setVoltage.voltage = 0.0;
-    result = queueMgr ?
-        PSB_QueueCommandBlocking(queueMgr, PSB_CMD_SET_VOLTAGE,
-                               &params, PSB_PRIORITY_HIGH, &cmdResult,
-                               PSB_QUEUE_COMMAND_TIMEOUT_MS) :
-        PSB_SetVoltage(handle, 0.0);
-    if (result != PSB_SUCCESS) {
-        LogWarningEx(LOG_DEVICE_PSB, "Failed to set voltage to 0V: %s", PSB_GetErrorString(result));
-    }
-    
-    // Set current to 0A
-    params.setCurrent.current = 0.0;
-    result = queueMgr ?
-        PSB_QueueCommandBlocking(queueMgr, PSB_CMD_SET_CURRENT,
-                               &params, PSB_PRIORITY_HIGH, &cmdResult,
-                               PSB_QUEUE_COMMAND_TIMEOUT_MS) :
-        PSB_SetCurrent(handle, 0.0);
-    if (result != PSB_SUCCESS) {
-        LogWarningEx(LOG_DEVICE_PSB, "Failed to set current to 0A: %s", PSB_GetErrorString(result));
-    }
-    
-    // Set power to 0W
-    params.setPower.power = 0.0;
-    result = queueMgr ?
-        PSB_QueueCommandBlocking(queueMgr, PSB_CMD_SET_POWER,
-                               &params, PSB_PRIORITY_HIGH, &cmdResult,
-                               PSB_QUEUE_COMMAND_TIMEOUT_MS) :
-        PSB_SetPower(handle, 0.0);
-    if (result != PSB_SUCCESS) {
-        LogWarningEx(LOG_DEVICE_PSB, "Failed to set source power to 0W: %s", PSB_GetErrorString(result));
-    }
-    
-    // Set sink mode values to 0
-    params.setSinkCurrent.current = 0.0;
-    result = queueMgr ?
-        PSB_QueueCommandBlocking(queueMgr, PSB_CMD_SET_SINK_CURRENT,
-                               &params, PSB_PRIORITY_HIGH, &cmdResult,
-                               PSB_QUEUE_COMMAND_TIMEOUT_MS) :
-        PSB_SetSinkCurrent(handle, 0.0);
+    // Set sink current to 0A
+    result = PSB_SetSinkCurrentQueued(handle, 0.0);
     if (result != PSB_SUCCESS) {
         LogWarningEx(LOG_DEVICE_PSB, "Failed to set sink current to 0A: %s", PSB_GetErrorString(result));
     }
     
-    params.setSinkPower.power = 0.0;
-    result = queueMgr ?
-        PSB_QueueCommandBlocking(queueMgr, PSB_CMD_SET_SINK_POWER,
-                               &params, PSB_PRIORITY_HIGH, &cmdResult,
-                               PSB_QUEUE_COMMAND_TIMEOUT_MS) :
-        PSB_SetSinkPower(handle, 0.0);
+    // Set power limit to maximum safe value
+    result = PSB_SetPowerLimitQueued(handle, PSB_SAFE_POWER_MAX);
+    if (result != PSB_SUCCESS) {
+        LogWarningEx(LOG_DEVICE_PSB, "Failed to set power limit: %s", PSB_GetErrorString(result));
+    }
+    
+    // Set power to 0W
+    result = PSB_SetPowerQueued(handle, 0.0);
+    if (result != PSB_SUCCESS) {
+        LogWarningEx(LOG_DEVICE_PSB, "Failed to set power to 0W: %s", PSB_GetErrorString(result));
+    }
+    
+    // Set sink power limit to maximum safe value
+    result = PSB_SetSinkPowerLimitQueued(handle, PSB_SAFE_POWER_MAX);
+    if (result != PSB_SUCCESS) {
+        LogWarningEx(LOG_DEVICE_PSB, "Failed to set sink power limit: %s", PSB_GetErrorString(result));
+    }
+    
+    // Set sink power to 0W
+    result = PSB_SetSinkPowerQueued(handle, 0.0);
     if (result != PSB_SUCCESS) {
         LogWarningEx(LOG_DEVICE_PSB, "Failed to set sink power to 0W: %s", PSB_GetErrorString(result));
     }
     
-    LogMessageEx(LOG_DEVICE_PSB, "PSB initialized to safe state with wide limits");
+    LogMessageEx(LOG_DEVICE_PSB, "PSB initialized to safe state");
     
     return PSB_SUCCESS;
 }

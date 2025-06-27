@@ -107,7 +107,7 @@ typedef struct {
  * Public Function Prototypes
  ******************************************************************************/
 
-// Main callback for starting capacity experiment
+// Main callback for starting/stopping capacity experiment
 int CVICALLBACK StartCapacityExperimentCallback(int panel, int control, int event,
                                                void *callbackData, int eventData1, 
                                                int eventData2);
