@@ -50,7 +50,7 @@ static void CVICALLBACK DeferredStatusUpdate(void* data);
 static void CVICALLBACK DeferredNumericUpdate(void* data);
 static void CVICALLBACK DeferredToggleUpdate(void* data);
 static void PSBStatusCallback(CommandID cmdId, PSBCommandType type, 
-                            PSBCommandResult *result, void *userData);
+                            void *result, void *userData);
 
 /******************************************************************************
  * UI Update Data Structure
@@ -321,9 +321,17 @@ static void Status_TimerUpdate(void) {
  ******************************************************************************/
 
 static void PSBStatusCallback(CommandID cmdId, PSBCommandType type, 
-                            PSBCommandResult *result, void *userData) {
-    if (result->errorCode == PSB_SUCCESS) {
-        PSB_Status *status = &result->data.status;
+                            void *result, void *userData) {
+    // Cast the generic void* to the specific type we expect
+    PSBCommandResult *cmdResult = (PSBCommandResult *)result;
+    
+    if (!cmdResult) {
+        LogErrorEx(LOG_DEVICE_PSB, "PSBStatusCallback: NULL result pointer");
+        return;
+    }
+    
+    if (cmdResult->errorCode == PSB_SUCCESS) {
+        PSB_Status *status = &cmdResult->data.status;
         UpdatePSBValues(status);
         
         // Update remote mode LED

@@ -345,6 +345,21 @@ int CVICALLBACK TestPSBWorkerThread(void *functionData) {
     // Resume status monitoring
     Status_Resume();
     
+    // Update UI based on test results
+    if (result > 0) {
+        // Success - all tests passed
+        LogMessageEx(LOG_DEVICE_PSB, "PSB test suite completed successfully (%d tests passed)", result);
+        SetCtrlVal(g_mainPanelHandle, PANEL_STR_PSB_STATUS, "All tests passed!");
+    } else if (result == 0) {
+        // Some tests failed
+        LogWarningEx(LOG_DEVICE_PSB, "PSB test suite completed with failures");
+        SetCtrlVal(g_mainPanelHandle, PANEL_STR_PSB_STATUS, "Some tests failed - check log");
+    } else {
+        // Error during test execution
+        LogErrorEx(LOG_DEVICE_PSB, "PSB test suite failed with error: %d", result);
+        SetCtrlVal(g_mainPanelHandle, PANEL_STR_PSB_STATUS, "Test suite error - check log");
+    }
+    
     // Clean up
     PSB_TestSuite_Cleanup(context);
     free(context);
