@@ -197,10 +197,33 @@ int CreateDirectoryPath(const char *path) {
     if (!path) return ERR_NULL_POINTER;
     
     #ifdef _CVI_
-        // LabWindows/CVI provides MakeDir function
-        if (MakeDir(path) == 0 || GetFileAttrs(path, NULL, NULL, NULL, NULL) >= 0) {
+        // LabWindows/CVI specific implementation
+        // Temporarily disable runtime error checking for MakeDir
+        int prevSetting = SetBreakOnLibraryErrors(0);
+        
+        // Try to create the directory
+        int result = MakeDir(path);
+        
+        // Restore previous error checking setting
+        SetBreakOnLibraryErrors(prevSetting);
+        
+        if (result == 0) {
+            // Successfully created
             return SUCCESS;
+        } else if (result == -9) {
+            // Error -9 specifically means directory already exists
+            // This is actually success for our purposes
+            return SUCCESS;
+        } else {
+            // Some other error occurred
+            // Common errors:
+            // -1: Path not found (parent directory doesn't exist)
+            // -2: Access denied
+            // -3: Invalid path
+            LogDebug("MakeDir failed with error code: %d for path: %s", result, path);
+            return ERR_BASE_FILE - 1;
         }
+        
     #elif defined(_WIN32)
         if (_mkdir(path) == 0 || errno == EEXIST) {
             return SUCCESS;
@@ -385,4 +408,113 @@ int WaitForCondition(int (*condition)(void), double timeoutSeconds) {
     }
     
     return SUCCESS;
+}
+
+/******************************************************************************
+ * Directory Utilities
+ ******************************************************************************/
+
+int CreateTimestampedDirectory(const char *baseDir, const char *prefix, 
+                              char *resultPath, int resultPathSize) {
+    if (!baseDir || !resultPath || resultPathSize <= 0) {
+        return ERR_NULL_POINTER;
+    }
+    
+    // Get current time
+    time_t now = time(NULL);
+    struct tm *timeinfo = localtime(&now);
+    char timestamp[64];
+    
+    // Format: YYYYMMDD_HHMMSS
+    strftime(timestamp, sizeof(timestamp), "%Y%m%d_%H%M%S", timeinfo);
+    
+    // Build full path
+    if (prefix && strlen(prefix) > 0) {
+        SAFE_SPRINTF(resultPath, resultPathSize, "%s%s%s_%s", 
+                    baseDir, PATH_SEPARATOR, prefix, timestamp);
+    } else {
+        SAFE_SPRINTF(resultPath, resultPathSize, "%s%s%s", 
+                    baseDir, PATH_SEPARATOR, timestamp);
+    }
+    
+    // Create the directory
+    return CreateDirectoryPath(resultPath);
+}
+
+/******************************************************************************
+ * Battery Calculation Utilities
+ ******************************************************************************/
+
+double CalculateCoulombicEfficiency(double chargeCapacity_mAh, double dischargeCapacity_mAh) {
+    if (dischargeCapacity_mAh <= 0) return 0.0;
+    return (chargeCapacity_mAh / dischargeCapacity_mAh) * 100.0;
+}
+
+double CalculateEnergyEfficiency(double chargeEnergy_Wh, double dischargeEnergy_Wh) {
+    if (chargeEnergy_Wh <= 0) return 0.0;
+    return (dischargeEnergy_Wh / chargeEnergy_Wh) * 100.0;
+}
+
+double CalculateStateOfCharge(double currentCapacity_mAh, double totalCapacity_mAh) {
+    if (totalCapacity_mAh <= 0) return 0.0;
+    return CLAMP((currentCapacity_mAh / totalCapacity_mAh) * 100.0, 0.0, 100.0);
+}
+
+/******************************************************************************
+ * Graph Utility Functions
+ ******************************************************************************/
+
+void ClearAllGraphPlots(int panel, int graph) {
+    if (panel > 0 && graph > 0) {
+        DeleteGraphPlot(panel, graph, -1, VAL_IMMEDIATE_DRAW);
+    }
+}
+
+/******************************************************************************
+ * File Writing Utilities
+ ******************************************************************************/
+
+int WriteINISection(FILE *file, const char *sectionName) {
+    if (!file || !sectionName) return ERR_NULL_POINTER;
+    
+    if (fprintf(file, "[%s]\n", sectionName) < 0) {
+        return ERR_BASE_FILE;
+    }
+    
+    return SUCCESS;
+}
+
+int WriteINIValue(FILE *file, const char *key, const char *format, ...) {
+    if (!file || !key || !format) return ERR_NULL_POINTER;
+    
+    // Write key
+    if (fprintf(file, "%s=", key) < 0) {
+        return ERR_BASE_FILE;
+    }
+    
+    // Write value
+    va_list args;
+    va_start(args, format);
+    int result = vfprintf(file, format, args);
+    va_end(args);
+    
+    if (result < 0) {
+        return ERR_BASE_FILE;
+    }
+    
+    // Write newline
+    if (fprintf(file, "\n") < 0) {
+        return ERR_BASE_FILE;
+    }
+    
+    return SUCCESS;
+}
+
+int WriteINIDouble(FILE *file, const char *key, double value, int precision) {
+    if (!file || !key) return ERR_NULL_POINTER;
+    
+    char format[32];
+    SAFE_SPRINTF(format, sizeof(format), "%%.%df", precision);
+    
+    return WriteINIValue(file, key, format, value);
 }

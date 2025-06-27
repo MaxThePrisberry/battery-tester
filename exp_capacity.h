@@ -28,6 +28,12 @@
 // Maximum test duration for safety (hours)
 #define CAPACITY_TEST_MAX_DURATION_H    10.0
 
+// Data directory name
+#define CAPACITY_TEST_DATA_DIR          "data"
+
+// Results file name
+#define CAPACITY_TEST_RESULTS_FILE      "results.txt"
+
 // CSV file names
 #define CAPACITY_TEST_DISCHARGE_FILE    "discharge.csv"
 #define CAPACITY_TEST_CHARGE_FILE       "charge.csv"
@@ -71,23 +77,44 @@ typedef struct {
     unsigned int logInterval;   // Logging interval in seconds
 } CapacityTestParams;
 
+// Phase results for tracking
+typedef struct {
+    double capacity_mAh;        // Total capacity for this phase
+    double energy_Wh;           // Total energy for this phase
+    double duration_s;          // Phase duration
+    double startVoltage;        // Starting voltage
+    double endVoltage;          // Ending voltage
+    double avgCurrent;          // Average current
+    double avgVoltage;          // Average voltage
+    double sumCurrent;          // Sum for averaging
+    double sumVoltage;          // Sum for averaging
+    int dataPoints;             // Number of data points
+} PhaseResults;
+
 // Test context
 typedef struct {
     CapacityTestState state;
     CapacityTestParams params;
     
     // Timing
-    double startTime;
-    double phaseStartTime;
+    double testStartTime;        // Overall test start
+    double testEndTime;          // Overall test end
+    double phaseStartTime;       // Current phase start
     double lastLogTime;
     double lastGraphUpdate;
     
     // Data collection
     FILE *csvFile;
-    int dataPointCount;
-    double accumulatedCapacity_mAh;
+    char testDirectory[MAX_PATH_LENGTH];  // Directory for this test run
+    double accumulatedCapacity_mAh;       // Current phase capacity
+    double accumulatedEnergy_Wh;          // Current phase energy
     double lastCurrent;
     double lastTime;
+    int dataPointCount;
+    
+    // Results tracking
+    PhaseResults dischargeResults;
+    PhaseResults chargeResults;
     
     // UI handles
     int mainPanelHandle;     // Main panel handle
@@ -95,8 +122,8 @@ typedef struct {
     int buttonControl;       // Button control ID on tab panel
     int statusControl;
     int capacityControl;
-    int graph1Handle;  // Current vs Time
-    int graph2Handle;  // Voltage vs Time
+    int graph1Handle;        // Current vs Time
+    int graph2Handle;        // Voltage vs Time
     
     // PSB handle
     PSB_Handle *psbHandle;

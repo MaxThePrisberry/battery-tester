@@ -299,6 +299,92 @@ void LogWarning(const char *format, ...);
  *   PostDeferredCall(MyUIUpdateCallback, data);
  */
 
+/******************************************************************************
+ * Directory Utilities
+ ******************************************************************************/
+
+/**
+ * Create a timestamped directory
+ * @param baseDir - Base directory path
+ * @param prefix - Optional prefix for the timestamp (can be NULL)
+ * @param resultPath - Buffer to receive the created directory path
+ * @param resultPathSize - Size of resultPath buffer
+ * @return SUCCESS or error code
+ */
+int CreateTimestampedDirectory(const char *baseDir, const char *prefix, 
+                              char *resultPath, int resultPathSize);
+
+/******************************************************************************
+ * Battery Calculation Utilities
+ ******************************************************************************/
+
+/**
+ * Calculate coulombic efficiency (charge efficiency)
+ * @param chargeCapacity_mAh - Capacity during charge
+ * @param dischargeCapacity_mAh - Capacity during discharge
+ * @return Efficiency percentage (0-100)
+ */
+double CalculateCoulombicEfficiency(double chargeCapacity_mAh, double dischargeCapacity_mAh);
+
+/**
+ * Calculate round-trip energy efficiency
+ * @param chargeEnergy_Wh - Energy consumed during charge
+ * @param dischargeEnergy_Wh - Energy delivered during discharge
+ * @return Efficiency percentage (0-100)
+ */
+double CalculateEnergyEfficiency(double chargeEnergy_Wh, double dischargeEnergy_Wh);
+
+/**
+ * Calculate state of charge percentage
+ * @param currentCapacity_mAh - Current capacity
+ * @param totalCapacity_mAh - Total/nominal capacity
+ * @return State of charge percentage (0-100)
+ */
+double CalculateStateOfCharge(double currentCapacity_mAh, double totalCapacity_mAh);
+
+/******************************************************************************
+ * Graph Utility Functions
+ ******************************************************************************/
+
+/**
+ * Clear all plots from a graph control
+ * @param panel - Panel handle
+ * @param graph - Graph control ID
+ */
+void ClearAllGraphPlots(int panel, int graph);
+
+/******************************************************************************
+ * File Writing Utilities
+ ******************************************************************************/
+
+/**
+ * Write an INI file section header
+ * @param file - Open file handle
+ * @param sectionName - Name of the section
+ * @return SUCCESS or error code
+ */
+int WriteINISection(FILE *file, const char *sectionName);
+
+/**
+ * Write a key-value pair to an INI file
+ * @param file - Open file handle
+ * @param key - Key name
+ * @param format - Printf-style format string for the value
+ * @param ... - Variable arguments for the format string
+ * @return SUCCESS or error code
+ */
+int WriteINIValue(FILE *file, const char *key, const char *format, ...);
+
+/**
+ * Write a double value to an INI file with specified precision
+ * @param file - Open file handle
+ * @param key - Key name
+ * @param value - Double value to write
+ * @param precision - Number of decimal places
+ * @return SUCCESS or error code
+ */
+int WriteINIDouble(FILE *file, const char *key, double value, int precision);
+
 //==============================================================================
 // Common Utility Functions
 //==============================================================================
