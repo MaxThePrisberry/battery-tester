@@ -109,7 +109,7 @@ typedef struct {
     int panelHandle;
     int statusStringControl;
     int cancelRequested;
-    int isRunning;
+    TestState state;
     TestSummary summary;
     void (*progressCallback)(const char *message);
 } TestSuiteContext;

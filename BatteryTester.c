@@ -26,7 +26,6 @@
  * Function Prototypes
  ******************************************************************************/
 static int CVICALLBACK UpdateThread(void *functionData);
-static int CVICALLBACK PSBTestSuiteThread(void *functionData);
 void PSB_SetGlobalQueueManager(PSBQueueManager *mgr);
 
 /******************************************************************************
@@ -41,98 +40,14 @@ int g_systemBusy = 0;
 /******************************************************************************
  * Module-Specific Global Variables
  ******************************************************************************/
-static int testButtonControl = 0;
-
-// Test suite context
-static TestSuiteContext testContext;
-static TestState testSuiteState = TEST_STATE_IDLE;
+// Test suite contexts for different devices
+static TestSuiteContext g_psbTestContext = {0};
+static TestSuiteContext g_bioTestContext = {0};
+static TestSuiteContext *g_psbRunningContext = NULL;  // Pointer to the actual running context
 
 // Queue managers
 static PSBQueueManager *g_psbQueueMgr = NULL;
 static BioQueueManager *g_bioQueueMgr = NULL;
-
-/******************************************************************************
- * Test Suite Thread Function
- ******************************************************************************/
-static int CVICALLBACK PSBTestSuiteThread(void *functionData) {
-    testSuiteState = TEST_STATE_RUNNING;
-    
-    LogMessageEx(LOG_DEVICE_PSB, "Initializing test suite...");
-    
-    // Pause status monitoring to prevent concurrent access
-    Status_Pause();
-	
-	// Wait for the status to pause completely to avoid data corruption
-	Delay(UI_UPDATE_RATE_SLOW);
-    
-    // Get PSB handle from queue manager
-    PSB_Handle* psb = PSB_QueueGetHandle(g_psbQueueMgr);
-    if (psb == NULL) {
-        // Update UI and log error
-        if (g_mainPanelHandle > 0) {
-            SetCtrlVal(g_mainPanelHandle, PANEL_STR_PSB_STATUS, "PSB not connected at thread execution");
-        }
-        LogErrorEx(LOG_DEVICE_PSB, "PSB not connected at thread execution");
-        testSuiteState = TEST_STATE_ERROR;
-        
-        // Resume status monitoring
-        Status_Resume();
-        
-        // Re-enable the test button
-        if (testButtonControl > 0) {
-            SetCtrlAttribute(g_mainPanelHandle, testButtonControl, ATTR_DIMMED, 0);
-        }
-        return -1;
-    }
-    
-    // Initialize test context (no progress callback needed since we're logging directly)
-    PSB_TestSuite_Initialize(&testContext, psb, g_mainPanelHandle, PANEL_STR_PSB_STATUS);
-    testContext.progressCallback = NULL;
-    
-    // Run the test suite
-    int result = PSB_TestSuite_Run(&testContext);
-    
-    // Cleanup
-    PSB_TestSuite_Cleanup(&testContext);
-    
-    // Final status
-    char finalMsg[MEDIUM_BUFFER_SIZE];
-    if (result > 0) {
-        SAFE_SPRINTF(finalMsg, sizeof(finalMsg), 
-                "Test Suite PASSED! All %d tests completed successfully.", 
-                testContext.summary.totalTests);
-        testSuiteState = TEST_STATE_COMPLETED;
-        
-        // Update UI and log success
-        if (g_mainPanelHandle > 0) {
-            SetCtrlVal(g_mainPanelHandle, PANEL_STR_PSB_STATUS, finalMsg);
-        }
-        LogMessageEx(LOG_DEVICE_PSB, "%s", finalMsg);
-    } else {
-        SAFE_SPRINTF(finalMsg, sizeof(finalMsg), 
-                "Test Suite FAILED: %d passed, %d failed out of %d tests.", 
-                testContext.summary.passedTests,
-                testContext.summary.failedTests,
-                testContext.summary.totalTests);
-        testSuiteState = TEST_STATE_ERROR;
-        
-        // Update UI and log error
-        if (g_mainPanelHandle > 0) {
-            SetCtrlVal(g_mainPanelHandle, PANEL_STR_PSB_STATUS, finalMsg);
-        }
-        LogErrorEx(LOG_DEVICE_PSB, "%s", finalMsg);
-    }
-    
-    // Resume status monitoring
-    Status_Resume();
-    
-    // Re-enable the test button
-    if (testButtonControl > 0) {
-        SetCtrlAttribute(g_mainPanelHandle, testButtonControl, ATTR_DIMMED, 0);
-    }
-    
-    return 0;
-}
 
 /******************************************************************************
  * Main Function
@@ -345,30 +260,69 @@ int CVICALLBACK TestPSBWorkerThread(void *functionData) {
     // Resume status monitoring
     Status_Resume();
     
-    // Update UI based on test results
-    if (result > 0) {
-        // Success - all tests passed
-        LogMessageEx(LOG_DEVICE_PSB, "PSB test suite completed successfully (%d tests passed)", result);
-        SetCtrlVal(g_mainPanelHandle, PANEL_STR_PSB_STATUS, "All tests passed!");
-    } else if (result == 0) {
-        // Some tests failed
-        LogWarningEx(LOG_DEVICE_PSB, "PSB test suite completed with failures");
-        SetCtrlVal(g_mainPanelHandle, PANEL_STR_PSB_STATUS, "Some tests failed - check log");
+    // Create one-line summary for status control
+    char statusMsg[MEDIUM_BUFFER_SIZE];
+    if (context->state == TEST_STATE_ABORTED) {
+        SAFE_SPRINTF(statusMsg, sizeof(statusMsg), 
+                    "Test cancelled: %d/%d passed", 
+                    context->summary.passedTests, 
+                    context->summary.totalTests);
+    } else if (context->state == TEST_STATE_COMPLETED) {
+        SAFE_SPRINTF(statusMsg, sizeof(statusMsg), 
+                    "All tests passed (%d/%d)", 
+                    context->summary.passedTests,
+                    context->summary.totalTests);
     } else {
-        // Error during test execution
+        SAFE_SPRINTF(statusMsg, sizeof(statusMsg), 
+                    "Tests failed: %d/%d passed", 
+                    context->summary.passedTests,
+                    context->summary.totalTests);
+    }
+    
+    // Update status control with summary
+    SetCtrlVal(g_mainPanelHandle, PANEL_STR_PSB_STATUS, statusMsg);
+    
+    // Log detailed results
+    if (result > 0) {
+        LogMessageEx(LOG_DEVICE_PSB, "PSB test suite completed successfully (%d tests passed)", result);
+    } else if (result == -2) {
+        LogMessageEx(LOG_DEVICE_PSB, "PSB test suite cancelled by user");
+    } else if (result == 0) {
+        LogWarningEx(LOG_DEVICE_PSB, "PSB test suite completed with failures");
+    } else {
         LogErrorEx(LOG_DEVICE_PSB, "PSB test suite failed with error: %d", result);
-        SetCtrlVal(g_mainPanelHandle, PANEL_STR_PSB_STATUS, "Test suite error - check log");
     }
     
     // Clean up
     PSB_TestSuite_Cleanup(context);
+    
+    // Update global context state
+    g_psbTestContext.state = context->state;
+    g_psbTestContext.summary = context->summary;
+    
+    // Clear the running context pointer
+    g_psbRunningContext = NULL;
+    
     free(context);
     
-    // Re-enable UI controls
-    SetCtrlAttribute(g_mainPanelHandle, PANEL_BTN_TEST_PSB, ATTR_DIMMED, 0);
+    // Restore UI controls
+    // Re-enable EXPERIMENTS tab control
+    SetCtrlAttribute(g_mainPanelHandle, PANEL_EXPERIMENTS, ATTR_DIMMED, 0);
+    
+    // Re-enable all tabs
+    int numTabs;
+    GetNumTabPages(g_mainPanelHandle, PANEL_EXPERIMENTS, &numTabs);
+    for (int i = 0; i < numTabs; i++) {
+        SetTabPageAttribute(g_mainPanelHandle, PANEL_EXPERIMENTS, i, ATTR_DIMMED, 0);
+    }
+    
+    // Re-enable manual controls
     SetCtrlAttribute(g_mainPanelHandle, PANEL_TOGGLE_REMOTE_MODE, ATTR_DIMMED, 0);
     SetCtrlAttribute(g_mainPanelHandle, PANEL_BTN_TEST_BIOLOGIC, ATTR_DIMMED, 0);
-    // ... enable other controls
+    
+    // Restore Test PSB button
+    SetCtrlAttribute(g_mainPanelHandle, PANEL_BTN_TEST_PSB, ATTR_LABEL_TEXT, "Test PSB");
+    SetCtrlAttribute(g_mainPanelHandle, PANEL_BTN_TEST_PSB, ATTR_DIMMED, 0);
     
     // Clear busy flag
     CmtGetLock(g_busyLock);
@@ -382,7 +336,20 @@ int CVICALLBACK TestPSBCallback (int panel, int control, int event,
                                 void *callbackData, int eventData1, int eventData2) {
     switch (event) {
         case EVENT_COMMIT:
-            // Check if system is busy
+            // Check if this is a cancel request (test is running)
+            if (g_psbRunningContext != NULL) {
+                LogMessage("User requested to cancel PSB test suite");
+                PSB_TestSuite_Cancel(g_psbRunningContext);
+                
+                // Update button text to show cancelling
+                SetCtrlAttribute(panel, control, ATTR_LABEL_TEXT, "Cancelling...");
+                SetCtrlAttribute(panel, control, ATTR_DIMMED, 1);
+                
+                return 0;
+            }
+            
+            // Otherwise, this is a start request
+            // Check if system is busy with another operation
             CmtGetLock(g_busyLock);
             if (g_systemBusy) {
                 CmtReleaseLock(g_busyLock);
@@ -408,26 +375,51 @@ int CVICALLBACK TestPSBCallback (int panel, int control, int event,
                 return 0;
             }
             
-            // Disable UI controls during test
-            SetCtrlAttribute(panel, PANEL_BTN_TEST_PSB, ATTR_DIMMED, 1);
+            // Dim EXPERIMENTS tab control
+            SetCtrlAttribute(panel, PANEL_EXPERIMENTS, ATTR_DIMMED, 1);
+            
+            // Dim all tabs
+            int numTabs;
+            GetNumTabPages(panel, PANEL_EXPERIMENTS, &numTabs);
+            for (int i = 0; i < numTabs; i++) {
+                SetTabPageAttribute(panel, PANEL_EXPERIMENTS, i, ATTR_DIMMED, 1);
+            }
+            
+            // Dim manual controls except Test PSB button
             SetCtrlAttribute(panel, PANEL_TOGGLE_REMOTE_MODE, ATTR_DIMMED, 1);
             SetCtrlAttribute(panel, PANEL_BTN_TEST_BIOLOGIC, ATTR_DIMMED, 1);
-            // ... disable other controls
+            
+            // Change Test PSB button text to "Cancel"
+            SetCtrlAttribute(panel, control, ATTR_LABEL_TEXT, "Cancel");
             
             // Create test context
             TestSuiteContext *context = calloc(1, sizeof(TestSuiteContext));
             if (context) {
                 PSB_TestSuite_Initialize(context, psbHandle, panel, PANEL_STR_PSB_STATUS);
+                context->state = TEST_STATE_PREPARING;
+                
+                // Store pointer to running context
+                g_psbRunningContext = context;
+                
+                // Store copy in global context for status tracking
+                g_psbTestContext = *context;
                 
                 // Start test in worker thread
                 CmtThreadFunctionID threadID;
                 CmtScheduleThreadPoolFunction(g_threadPool, 
                     TestPSBWorkerThread, context, &threadID);
             } else {
-                // Failed to allocate
-                SetCtrlAttribute(panel, PANEL_BTN_TEST_PSB, ATTR_DIMMED, 0);
+                // Failed to allocate - restore UI
+                SetCtrlAttribute(panel, PANEL_EXPERIMENTS, ATTR_DIMMED, 0);
+                
+                // Re-enable all tabs
+                for (int i = 0; i < numTabs; i++) {
+                    SetTabPageAttribute(panel, PANEL_EXPERIMENTS, i, ATTR_DIMMED, 0);
+                }
+                
                 SetCtrlAttribute(panel, PANEL_TOGGLE_REMOTE_MODE, ATTR_DIMMED, 0);
                 SetCtrlAttribute(panel, PANEL_BTN_TEST_BIOLOGIC, ATTR_DIMMED, 0);
+                SetCtrlAttribute(panel, control, ATTR_LABEL_TEXT, "Test PSB");
                 
                 CmtGetLock(g_busyLock);
                 g_systemBusy = 0;

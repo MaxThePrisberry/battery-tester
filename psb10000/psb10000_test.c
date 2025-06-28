@@ -127,7 +127,7 @@ int PSB_TestSuite_Initialize(TestSuiteContext *context, PSB_Handle *handle,
     context->panelHandle = panel;
     context->statusStringControl = statusControl;
     context->cancelRequested = 0;
-    context->isRunning = 0;
+    context->state = TEST_STATE_IDLE;
     
     // Reset all test results
     for (int i = 0; i < numTestCases; i++) {
@@ -143,7 +143,7 @@ int PSB_TestSuite_Run(TestSuiteContext *context) {
     if (!context || !context->psbHandle) return -1;
     if (!context->psbHandle->isConnected) return -1;
     
-    context->isRunning = 1;
+    context->state = TEST_STATE_RUNNING;
     context->cancelRequested = 0;
     
     LogMessageEx(LOG_DEVICE_PSB, "Starting PSB Test Suite");
@@ -154,12 +154,18 @@ int PSB_TestSuite_Run(TestSuiteContext *context) {
     if (SetWideLimitsQueued(context->psbHandle) != PSB_SUCCESS) {
         LogErrorEx(LOG_DEVICE_PSB, "Failed to set wide limits for testing");
         UpdateTestProgress(context, "Failed to set test parameters");
-        context->isRunning = 0;
+        context->state = TEST_STATE_ERROR;
         return -1;
     }
     
     // Run each test
-    for (int i = 0; i < numTestCases && !context->cancelRequested; i++) {
+    for (int i = 0; i < numTestCases; i++) {
+        // Check for cancellation before starting each test
+        if (context->cancelRequested) {
+            LogMessageEx(LOG_DEVICE_PSB, "Test suite cancelled before test %d", i + 1);
+            break;
+        }
+        
         TestCase* test = &testCases[i];
         
         char progressMsg[256];
@@ -187,7 +193,7 @@ int PSB_TestSuite_Run(TestSuiteContext *context) {
         context->summary.totalTests++;
         
         // Short delay between tests
-        if (i < numTestCases - 1) {
+        if (i < numTestCases - 1 && !context->cancelRequested) {
             Delay(TEST_DELAY_BETWEEN_TESTS);
         }
     }
@@ -195,14 +201,29 @@ int PSB_TestSuite_Run(TestSuiteContext *context) {
     // Generate summary
     GenerateTestSummary(&context->summary, testCases, numTestCases);
     
-    context->isRunning = 0;
+    // Set final state
+    if (context->cancelRequested) {
+        context->state = TEST_STATE_ABORTED;
+    } else if (context->summary.failedTests == 0) {
+        context->state = TEST_STATE_COMPLETED;
+    } else {
+        context->state = TEST_STATE_ERROR;
+    }
     
-    return (context->summary.failedTests == 0) ? 1 : -1;
+    // Return value based on state
+    if (context->state == TEST_STATE_ABORTED) {
+        return -2; // Special value to indicate cancellation
+    } else if (context->state == TEST_STATE_COMPLETED) {
+        return context->summary.totalTests; // All passed
+    } else {
+        return 0; // Some failed
+    }
 }
 
 void PSB_TestSuite_Cancel(TestSuiteContext *context) {
     if (context) {
         context->cancelRequested = 1;
+        LogMessageEx(LOG_DEVICE_PSB, "Test suite cancellation requested");
     }
 }
 
