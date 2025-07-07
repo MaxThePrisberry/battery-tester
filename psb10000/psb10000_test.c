@@ -547,6 +547,16 @@ int Test_CurrentLimits(PSB_Handle *handle, char *errorMsg, int errorMsgSize) {
     // Test setting current limits within valid range
     double testMinCurrent = TEST_CURRENT_LOW;   // 6.0A
     double testMaxCurrent = TEST_CURRENT_HIGH;  // 50.0A
+	
+	LogDebugEx(LOG_DEVICE_PSB, "Setting current to %.2fA (within new limits)...", TEST_CURRENT_MID);
+    result = PSB_SetCurrentQueued(handle, TEST_CURRENT_MID);  // 30.0A - within 6-50A range
+    if (result != PSB_SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Failed to set current before limits: %s", 
+                PSB_GetErrorString(result));
+        return -1;
+    }
+    
+    Delay(TEST_DELAY_SHORT);
     
     LogDebugEx(LOG_DEVICE_PSB, "Setting current limits: %.2fA - %.2fA...", 
                testMinCurrent, testMaxCurrent);
@@ -1467,6 +1477,23 @@ int Test_OutputVoltageVerification(PSB_Handle *handle, char *errorMsg, int error
     result = PSB_SetVoltageQueued(handle, 0.0);
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to set initial voltage: %s", 
+                PSB_GetErrorString(result));
+        return -1;
+    }
+	
+	// Set power limit and value high to avoid hitting CP mode during the test
+	LogWarningEx(LOG_DEVICE_PSB, "Setting power limit to 600W...");
+    result = PSB_SetPowerLimitQueued(handle, 600.0);
+    if (result != PSB_SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Failed to set initial power limit: %s", 
+                PSB_GetErrorString(result));
+        return -1;
+    }
+	
+	LogWarningEx(LOG_DEVICE_PSB, "Setting power to 600W...");
+    result = PSB_SetPowerQueued(handle, 600.0);
+    if (result != PSB_SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Failed to set initial power: %s", 
                 PSB_GetErrorString(result));
         return -1;
     }
