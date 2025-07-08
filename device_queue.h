@@ -3,6 +3,7 @@
  * 
  * Generic thread-safe command queue implementation for device control
  * Provides priority-based command queuing with blocking/async operation support
+ * and guaranteed sequential transaction execution
  ******************************************************************************/
 
 #ifndef DEVICE_QUEUE_H
@@ -28,6 +29,7 @@
 
 // Transaction limits
 #define DEVICE_MAX_TRANSACTION_COMMANDS    20
+#define DEVICE_DEFAULT_TRANSACTION_TIMEOUT_MS  60000
 
 /******************************************************************************
  * Type Definitions
@@ -46,14 +48,29 @@ typedef enum {
     DEVICE_PRIORITY_LOW = 2      // Background tasks
 } DevicePriority;
 
+// Transaction behavior flags
+typedef enum {
+    DEVICE_TXN_CONTINUE_ON_ERROR = 0x00,  // Continue executing commands even if one fails
+    DEVICE_TXN_ABORT_ON_ERROR    = 0x01,  // Stop transaction if any command fails
+} DeviceTransactionFlags;
+
+// Individual transaction command result
+typedef struct {
+    int commandType;
+    int errorCode;
+    void *result;  // Command-specific result data (caller should not free)
+} TransactionCommandResult;
+
 // Generic command callback
 typedef void (*DeviceCommandCallback)(DeviceCommandID cmdId, int commandType, 
                                     void *result, void *userData);
 
-// Generic transaction callback
+// Enhanced transaction callback with detailed results
 typedef void (*DeviceTransactionCallback)(DeviceTransactionHandle txn, 
                                         int successCount, int failureCount,
-                                        void *results, void *userData);
+                                        TransactionCommandResult *results,
+                                        int resultCount,
+                                        void *userData);
 
 /******************************************************************************
  * Device Adapter Interface
@@ -102,6 +119,8 @@ typedef struct {
     int reconnectAttempts;
     int isConnected;
     int isProcessing;
+    int activeTransactionId;     // Non-zero if transaction is executing
+    int isInTransactionMode;     // 1 if processing thread is in transaction mode
 } DeviceQueueStats;
 
 /******************************************************************************
@@ -155,16 +174,34 @@ bool DeviceQueue_HasCommandType(DeviceQueueManager *mgr, int commandType);
 // Begin a transaction
 DeviceTransactionHandle DeviceQueue_BeginTransaction(DeviceQueueManager *mgr);
 
+// Configure transaction behavior
+int DeviceQueue_SetTransactionFlags(DeviceQueueManager *mgr, 
+                                   DeviceTransactionHandle txn,
+                                   DeviceTransactionFlags flags);
+
+// Set transaction priority (default is HIGH)
+int DeviceQueue_SetTransactionPriority(DeviceQueueManager *mgr,
+                                     DeviceTransactionHandle txn,
+                                     DevicePriority priority);
+
+// Set transaction timeout (default is DEVICE_DEFAULT_TRANSACTION_TIMEOUT_MS)
+int DeviceQueue_SetTransactionTimeout(DeviceQueueManager *mgr,
+                                    DeviceTransactionHandle txn,
+                                    int timeoutMs);
+
 // Add command to transaction
 int DeviceQueue_AddToTransaction(DeviceQueueManager *mgr, DeviceTransactionHandle txn,
                                int commandType, void *params);
 
-// Commit transaction (async)
+// Commit transaction (async) - guarantees sequential execution
 int DeviceQueue_CommitTransaction(DeviceQueueManager *mgr, DeviceTransactionHandle txn,
                                 DeviceTransactionCallback callback, void *userData);
 
-// Cancel transaction
+// Cancel transaction (only works if not yet executing)
 int DeviceQueue_CancelTransaction(DeviceQueueManager *mgr, DeviceTransactionHandle txn);
+
+// Check if currently in a transaction
+bool DeviceQueue_IsInTransaction(DeviceQueueManager *mgr);
 
 /******************************************************************************
  * Logging Support

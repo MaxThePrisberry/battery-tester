@@ -65,6 +65,7 @@
 #define ERR_NOT_SUPPORTED       (ERR_BASE_SYSTEM - 8)
 #define ERR_INVALID_STATE       (ERR_BASE_SYSTEM - 9)
 #define ERR_COMM_FAILED         (ERR_BASE_SYSTEM - 10)
+#define ERR_NOT_CONNECTED       (ERR_BASE_SYSTEM - 11)
 
 // Queue-specific errors
 #define ERR_QUEUE_FULL          (ERR_BASE_SYSTEM - 11)
