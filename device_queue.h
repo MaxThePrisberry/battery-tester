@@ -130,7 +130,8 @@ typedef struct {
 // Create a queue manager for a device
 DeviceQueueManager* DeviceQueue_Create(const DeviceAdapter *adapter, 
                                       void *deviceContext,
-                                      void *connectionParams);
+                                      void *connectionParams,
+									  CmtThreadPoolHandle threadPool);
 
 // Destroy the queue manager
 void DeviceQueue_Destroy(DeviceQueueManager *mgr);

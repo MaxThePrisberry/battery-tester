@@ -373,7 +373,7 @@ BioQueueManager* BIO_QueueInit(const char *address) {
     connParams->timeout = TIMEOUT;
     
     // Create the generic device queue
-    BioQueueManager *mgr = DeviceQueue_Create(&g_bioAdapter, context, connParams);
+    BioQueueManager *mgr = DeviceQueue_Create(&g_bioAdapter, context, connParams, 0);
     
     if (!mgr) {
         free(context);

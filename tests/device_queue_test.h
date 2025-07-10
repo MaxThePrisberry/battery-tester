@@ -10,6 +10,7 @@
 
 #include "common.h"
 #include "device_queue.h"
+#include <toolbox.h>  // For List functions
 
 /******************************************************************************
  * Test Configuration
@@ -30,6 +31,7 @@
 // Thread testing
 #define TEST_THREAD_COUNT       4       // Number of concurrent threads to test
 #define COMMANDS_PER_THREAD     10      // Commands each thread will submit
+#define TEST_THREAD_POOL_SIZE   10      // Size of test-specific thread pool
 
 // Queue testing limits
 #define TEST_MAX_COMMANDS       100     // Maximum commands for stress testing
@@ -106,6 +108,8 @@ typedef struct {
     // UI integration
     int panelHandle;
     int buttonControl;
+    int statusStringControl;
+    void (*progressCallback)(const char *message);
     
     // Test tracking
     int totalTests;
@@ -124,6 +128,14 @@ typedef struct {
     // Thread testing
     CmtThreadFunctionID workerThreads[TEST_THREAD_COUNT];
     int threadResults[TEST_THREAD_COUNT];
+    
+    // Queue manager tracking
+    ListType activeQueueManagers;      // List of DeviceQueueManager*
+    CmtThreadLockHandle queueListLock;
+    
+    // Test-specific thread pool
+    CmtThreadPoolHandle testThreadPool;
+    int testThreadPoolSize;
     
 } DeviceQueueTestContext;
 

@@ -87,6 +87,9 @@ struct DeviceQueueManager {
     const DeviceAdapter *adapter;
     void *deviceContext;
     void *connectionParams;
+	
+	// Thread pool for processing
+    CmtThreadPoolHandle threadPool;
     
     // Thread-safe queues
     CmtTSQHandle highPriorityQueue;
@@ -184,7 +187,8 @@ static bool ValidateAdapter(const DeviceAdapter *adapter);
 
 DeviceQueueManager* DeviceQueue_Create(const DeviceAdapter *adapter, 
                                      void *deviceContext,
-                                     void *connectionParams) {
+                                     void *connectionParams,
+									 CmtThreadPoolHandle threadPool) {
     if (!adapter || !deviceContext) {
         LogError("DeviceQueue_Create: Invalid parameters");
         return NULL;
@@ -195,6 +199,11 @@ DeviceQueueManager* DeviceQueue_Create(const DeviceAdapter *adapter,
         LogError("DeviceQueue_Create: Invalid adapter - missing required functions");
         return NULL;
     }
+	
+	// If threadPool is unspecified use g_threadPool
+	if (!threadPool) {
+		threadPool = g_threadPool;
+	}
     
     DeviceQueueManager *mgr = calloc(1, sizeof(DeviceQueueManager));
     if (!mgr) {
@@ -1061,6 +1070,9 @@ static int CVICALLBACK ProcessingThreadFunction(void *functionData) {
             QueuedCommand *cmd = NULL;
             int itemsRead = 0;
             
+            // Acquire manipulation lock before reading from queues
+            CmtGetLock(mgr->queueManipulationLock);
+            
             // Check queues in priority order
             itemsRead = CmtReadTSQData(mgr->highPriorityQueue, &cmd, 1, 0, 0);
             if (itemsRead <= 0) {
@@ -1069,6 +1081,9 @@ static int CVICALLBACK ProcessingThreadFunction(void *functionData) {
                     itemsRead = CmtReadTSQData(mgr->lowPriorityQueue, &cmd, 1, 0, 0);
                 }
             }
+            
+            // Release manipulation lock immediately after reading
+            CmtReleaseLock(mgr->queueManipulationLock);
             
             if (itemsRead > 0 && cmd) {
                 // During shutdown, just release the command

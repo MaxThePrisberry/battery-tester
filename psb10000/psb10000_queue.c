@@ -375,7 +375,7 @@ PSBQueueManager* PSB_QueueInit(const char *targetSerial) {
     connParams->autoDiscovery = true;
     
     // Create the generic device queue
-    PSBQueueManager *mgr = DeviceQueue_Create(&g_psbAdapter, context, connParams);
+    PSBQueueManager *mgr = DeviceQueue_Create(&g_psbAdapter, context, connParams, 0);
     
     if (!mgr) {
         free(context);
@@ -411,7 +411,7 @@ PSBQueueManager* PSB_QueueInitSpecific(int comPort, int slaveAddress, int baudRa
     connParams->autoDiscovery = false;
     
     // Create the generic device queue
-    PSBQueueManager *mgr = DeviceQueue_Create(&g_psbAdapter, context, connParams);
+    PSBQueueManager *mgr = DeviceQueue_Create(&g_psbAdapter, context, connParams, 0);
     
     if (!mgr) {
         free(context);
