@@ -349,15 +349,17 @@ static int Mock_ExecuteCommand(void *deviceContext, int commandType, void *param
 static void* Mock_CreateCommandParams(int commandType, void *sourceParams) {
     if (!sourceParams) return NULL;
     
-    MockCommandParams *params = malloc(sizeof(MockCommandParams));
+    MockCommandParams *params = (MockCommandParams*)malloc(sizeof(MockCommandParams));
     if (!params) return NULL;
     
-    *params = *(MockCommandParams*)sourceParams;
+    memcpy(params, sourceParams, sizeof(MockCommandParams));
     return params;
 }
 
 static void Mock_FreeCommandParams(int commandType, void *params) {
-    free(params);
+    if (params) {
+        free(params);
+    }
 }
 
 static void* Mock_CreateCommandResult(int commandType) {

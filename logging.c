@@ -216,7 +216,7 @@ static int InitializeLogging(void) {
         }
         
         // Try to open/create the log file
-        g_logFile = fopen(logPath, "a");
+        g_logFile = fopen(logPath, "w");
         if (!g_logFile) {
             // Try creating in current directory as fallback
             g_logFile = fopen(LOG_FILE_NAME, "a");
