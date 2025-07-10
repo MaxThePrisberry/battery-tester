@@ -939,6 +939,12 @@ int DeviceQueueTest_IsRunning(void) {
  * Individual Test Implementations
  ******************************************************************************/
 
+// Each test should:
+// 1. Check ctx->cancelRequested at start and key points
+// 2. Use CreateTestQueueManager instead of DeviceQueue_Create
+// 3. Use DestroyTestQueueManager for cleanup
+// 4. Return -1 if cancelled
+
 int Test_QueueCreation(DeviceQueueTestContext *ctx, char *errorMsg, int errorMsgSize) {
     if (ctx->cancelRequested) return -1;
     
@@ -1459,6 +1465,7 @@ int Test_Transactions(DeviceQueueTestContext *ctx, char *errorMsg, int errorMsgS
     }
     
     // Test 1: Basic transaction
+    LogDebug("Test 1: Basic transaction");
     DeviceTransactionHandle txn = DeviceQueue_BeginTransaction(ctx->queueManager);
     if (txn == 0) {
         snprintf(errorMsg, errorMsgSize, "Failed to begin transaction");
@@ -1466,7 +1473,8 @@ int Test_Transactions(DeviceQueueTestContext *ctx, char *errorMsg, int errorMsgS
     }
     
     // Add commands to transaction
-    for (int i = 0; i < 5; i++) {
+    int commandCount = 5;
+    for (int i = 0; i < commandCount; i++) {
         if (ctx->cancelRequested) goto cleanup;
         
         MockCommandParams params = {.value = i * 100};
@@ -1478,19 +1486,8 @@ int Test_Transactions(DeviceQueueTestContext *ctx, char *errorMsg, int errorMsgS
         }
     }
     
-    // Structure to track detailed results
-    typedef struct {
-        volatile int completed;
-        int expectedResults[5];
-        int actualResults[5];
-        int allCorrect;
-    } DetailedTracker;
-    
-    DetailedTracker tracker = {
-        .completed = 0,
-        .expectedResults = {0, 100, 200, 300, 400},
-        .allCorrect = 1
-    };
+    // Use the existing TransactionTracker
+    TransactionTracker tracker = {0};
     
     // Commit transaction
     int error = DeviceQueue_CommitTransaction(ctx->queueManager, txn, 
@@ -1514,7 +1511,20 @@ int Test_Transactions(DeviceQueueTestContext *ctx, char *errorMsg, int errorMsgS
         goto cleanup;
     }
     
+    // Verify all commands succeeded
+    if (tracker.successCount != commandCount) {
+        snprintf(errorMsg, errorMsgSize, "Expected %d successful commands, got %d", 
+                commandCount, tracker.successCount);
+        goto cleanup;
+    }
+    
+    if (tracker.failureCount != 0) {
+        snprintf(errorMsg, errorMsgSize, "Expected 0 failures, got %d", tracker.failureCount);
+        goto cleanup;
+    }
+    
     // Test 2: Transaction with abort on error
+    LogDebug("Test 2: Transaction with abort on error");
     txn = DeviceQueue_BeginTransaction(ctx->queueManager);
     error = DeviceQueue_SetTransactionFlags(ctx->queueManager, txn, DEVICE_TXN_ABORT_ON_ERROR);
     if (error != SUCCESS) {
@@ -1561,7 +1571,338 @@ int Test_Transactions(DeviceQueueTestContext *ctx, char *errorMsg, int errorMsgS
         goto cleanup;
     }
     
-    // Additional transaction tests omitted for brevity but follow same pattern...
+    // Test 3: Transaction cancellation before execution
+    LogDebug("Test 3: Transaction cancellation before execution");
+    
+    // Slow down execution to ensure we can cancel before execution
+    Mock_SetCommandDelay(ctx->mockContext, 200);
+    
+    // Create a transaction
+    txn = DeviceQueue_BeginTransaction(ctx->queueManager);
+    
+    // Add multiple commands
+    for (int i = 0; i < 10; i++) {
+        MockCommandParams params = {.value = i * 50};
+        error = DeviceQueue_AddToTransaction(ctx->queueManager, txn, 
+                                           MOCK_CMD_SET_VALUE, &params);
+        if (error != SUCCESS) {
+            snprintf(errorMsg, errorMsgSize, "Failed to add command %d for cancel test", i);
+            goto cleanup;
+        }
+    }
+    
+    // Commit the transaction
+    TransactionTracker cancelTracker = {0};
+    error = DeviceQueue_CommitTransaction(ctx->queueManager, txn,
+                                        TransactionCallback, &cancelTracker);
+    if (error != SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Failed to commit transaction for cancel test");
+        goto cleanup;
+    }
+    
+    // Immediately cancel it
+    error = DeviceQueue_CancelTransaction(ctx->queueManager, txn);
+    if (error != SUCCESS && error != ERR_OPERATION_FAILED) {
+        // ERR_OPERATION_FAILED is OK if transaction already started
+        snprintf(errorMsg, errorMsgSize, "Failed to cancel transaction: %d", error);
+        goto cleanup;
+    }
+    
+    // Wait briefly to see if callback is called
+    Delay(0.5);
+    
+    // If cancelled before execution, callback might not be called
+    // If it started executing, we should see some failures
+    if (cancelTracker.completed) {
+        LogDebug("Transaction started before cancel - %d success, %d failed", 
+                 cancelTracker.successCount, cancelTracker.failureCount);
+    } else {
+        LogDebug("Transaction cancelled before execution");
+    }
+    
+    // Restore normal command delay
+    Mock_SetCommandDelay(ctx->mockContext, MOCK_COMMAND_DELAY_MS);
+    
+    // Test 4: Transaction priority changes (using TransactionOrderTracker)
+    LogDebug("Test 4: Transaction priority changes");
+    
+    // Reset global counter
+    g_transactionExecutionCounter = 0;
+    
+    // Create three transactions with different priorities
+    TransactionOrderTracker priorityTrackers[3] = {0};
+    
+    DeviceTransactionHandle lowPriorityTxn = DeviceQueue_BeginTransaction(ctx->queueManager);
+    DeviceTransactionHandle normalPriorityTxn = DeviceQueue_BeginTransaction(ctx->queueManager);
+    DeviceTransactionHandle highPriorityTxn = DeviceQueue_BeginTransaction(ctx->queueManager);
+    
+    // Set priorities
+    error = DeviceQueue_SetTransactionPriority(ctx->queueManager, lowPriorityTxn, DEVICE_PRIORITY_LOW);
+    error |= DeviceQueue_SetTransactionPriority(ctx->queueManager, normalPriorityTxn, DEVICE_PRIORITY_NORMAL);
+    error |= DeviceQueue_SetTransactionPriority(ctx->queueManager, highPriorityTxn, DEVICE_PRIORITY_HIGH);
+    
+    if (error != SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Failed to set transaction priorities");
+        goto cleanup;
+    }
+    
+    // Add commands to each transaction
+    MockCommandParams lowParams = {.value = 1000};
+    MockCommandParams normalParams = {.value = 2000};
+    MockCommandParams highParams = {.value = 3000};
+    
+    DeviceQueue_AddToTransaction(ctx->queueManager, lowPriorityTxn, MOCK_CMD_SET_VALUE, &lowParams);
+    DeviceQueue_AddToTransaction(ctx->queueManager, normalPriorityTxn, MOCK_CMD_SET_VALUE, &normalParams);
+    DeviceQueue_AddToTransaction(ctx->queueManager, highPriorityTxn, MOCK_CMD_SET_VALUE, &highParams);
+    
+    // Commit in reverse priority order to test queuing
+    priorityTrackers[0].txnId = lowPriorityTxn;
+    priorityTrackers[1].txnId = normalPriorityTxn;
+    priorityTrackers[2].txnId = highPriorityTxn;
+    
+    DeviceQueue_CommitTransaction(ctx->queueManager, lowPriorityTxn,
+                                TransactionOrderCallback, &priorityTrackers[0]);
+    DeviceQueue_CommitTransaction(ctx->queueManager, normalPriorityTxn,
+                                TransactionOrderCallback, &priorityTrackers[1]);
+    DeviceQueue_CommitTransaction(ctx->queueManager, highPriorityTxn,
+                                TransactionOrderCallback, &priorityTrackers[2]);
+    
+    // Wait for all to complete
+    timeout = Timer() + 3.0;
+    while (Timer() < timeout && !ctx->cancelRequested) {
+        if (priorityTrackers[0].completed && priorityTrackers[1].completed && priorityTrackers[2].completed) {
+            break;
+        }
+        ProcessSystemEvents();
+        Delay(0.05);
+    }
+    
+    if (!priorityTrackers[0].completed || !priorityTrackers[1].completed || !priorityTrackers[2].completed) {
+        snprintf(errorMsg, errorMsgSize, "Not all priority transactions completed");
+        goto cleanup;
+    }
+    
+    // Test 5: Multiple concurrent transactions
+    LogDebug("Test 5: Multiple concurrent transactions");
+    
+    TransactionTracker concurrentTrackers[5] = {0};
+    DeviceTransactionHandle concurrentTxns[5] = {0};
+    int concurrentCmdCounts[5] = {0};
+    
+    // Create and commit multiple transactions rapidly
+    for (int i = 0; i < 5; i++) {
+        if (ctx->cancelRequested) goto cleanup;
+        
+        concurrentTxns[i] = DeviceQueue_BeginTransaction(ctx->queueManager);
+        if (concurrentTxns[i] == 0) {
+            snprintf(errorMsg, errorMsgSize, "Failed to begin concurrent transaction %d", i);
+            goto cleanup;
+        }
+        
+        // Add 2-4 commands per transaction
+        concurrentCmdCounts[i] = 2 + (i % 3);
+        for (int j = 0; j < concurrentCmdCounts[i]; j++) {
+            MockCommandParams params = {.value = i * 1000 + j};
+            error = DeviceQueue_AddToTransaction(ctx->queueManager, concurrentTxns[i],
+                                               MOCK_CMD_SET_VALUE, &params);
+            if (error != SUCCESS) {
+                snprintf(errorMsg, errorMsgSize, "Failed to add command to concurrent txn %d", i);
+                goto cleanup;
+            }
+        }
+        
+        // Commit transaction
+        error = DeviceQueue_CommitTransaction(ctx->queueManager, concurrentTxns[i],
+                                            TransactionCallback, &concurrentTrackers[i]);
+        if (error != SUCCESS) {
+            snprintf(errorMsg, errorMsgSize, "Failed to commit concurrent transaction %d", i);
+            goto cleanup;
+        }
+    }
+    
+    // Wait for all concurrent transactions to complete
+    timeout = Timer() + 5.0;
+    int allConcurrentCompleted = 0;
+    while (Timer() < timeout && !allConcurrentCompleted && !ctx->cancelRequested) {
+        allConcurrentCompleted = 1;
+        for (int i = 0; i < 5; i++) {
+            if (!concurrentTrackers[i].completed) {
+                allConcurrentCompleted = 0;
+                break;
+            }
+        }
+        ProcessSystemEvents();
+        Delay(0.05);
+    }
+    
+    if (!allConcurrentCompleted) {
+        snprintf(errorMsg, errorMsgSize, "Not all concurrent transactions completed");
+        goto cleanup;
+    }
+    
+    // Verify all succeeded with correct counts
+    for (int i = 0; i < 5; i++) {
+        if (concurrentTrackers[i].successCount != concurrentCmdCounts[i]) {
+            snprintf(errorMsg, errorMsgSize, "Concurrent transaction %d: expected %d success, got %d",
+                    i, concurrentCmdCounts[i], concurrentTrackers[i].successCount);
+            goto cleanup;
+        }
+        if (concurrentTrackers[i].failureCount != 0) {
+            snprintf(errorMsg, errorMsgSize, "Concurrent transaction %d had %d failures",
+                    i, concurrentTrackers[i].failureCount);
+            goto cleanup;
+        }
+    }
+    
+    // Test 6: Transaction timeout behavior
+    LogDebug("Test 6: Transaction timeout behavior");
+    
+    // Slow down execution to trigger timeout
+    Mock_SetCommandDelay(ctx->mockContext, 300);
+    
+    txn = DeviceQueue_BeginTransaction(ctx->queueManager);
+    
+    // Set a short timeout
+    error = DeviceQueue_SetTransactionTimeout(ctx->queueManager, txn, 500); // 500ms timeout
+    if (error != SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Failed to set transaction timeout");
+        goto cleanup;
+    }
+    
+    // Add 3 commands - with 300ms each, only 1 should complete before timeout
+    for (int i = 0; i < 3; i++) {
+        MockCommandParams params = {.value = 5000 + i};
+        error = DeviceQueue_AddToTransaction(ctx->queueManager, txn,
+                                           MOCK_CMD_SET_VALUE, &params);
+        if (error != SUCCESS) {
+            snprintf(errorMsg, errorMsgSize, "Failed to add command for timeout test");
+            goto cleanup;
+        }
+    }
+    
+    TransactionTracker timeoutTracker = {0};
+    error = DeviceQueue_CommitTransaction(ctx->queueManager, txn,
+                                        TransactionCallback, &timeoutTracker);
+    if (error != SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Failed to commit timeout transaction");
+        goto cleanup;
+    }
+    
+    // Wait for completion
+    timeout = Timer() + 2.0;
+    while (Timer() < timeout && !timeoutTracker.completed && !ctx->cancelRequested) {
+        ProcessSystemEvents();
+        Delay(0.05);
+    }
+    
+    if (!timeoutTracker.completed) {
+        snprintf(errorMsg, errorMsgSize, "Timeout transaction did not complete");
+        goto cleanup;
+    }
+    
+    // Should have some failures due to timeout
+    if (timeoutTracker.failureCount == 0) {
+        snprintf(errorMsg, errorMsgSize, "Expected timeout failures but all succeeded");
+        goto cleanup;
+    }
+    
+    LogDebug("Timeout test: %d succeeded, %d failed", 
+             timeoutTracker.successCount, timeoutTracker.failureCount);
+    
+    // Restore normal command delay
+    Mock_SetCommandDelay(ctx->mockContext, MOCK_COMMAND_DELAY_MS);
+    
+    // Test 7: Mixed transaction and non-transaction commands
+    LogDebug("Test 7: Mixed transaction and non-transaction commands");
+    
+    // Use PriorityTracker for mixed commands (it has executionOrder field)
+    PriorityTracker mixedTrackers[3] = {0};
+    g_executionCounter = 0;  // Reset global counter
+    
+    // Submit regular command (low priority)
+    MockCommandParams regularParams1 = {.value = 6000};
+    DeviceCommandID cmdId1 = DeviceQueue_CommandAsync(ctx->queueManager, MOCK_CMD_SET_VALUE,
+                                                     &regularParams1, DEVICE_PRIORITY_LOW,
+                                                     PriorityCallback, &mixedTrackers[0]);
+    if (cmdId1 == 0) {
+        snprintf(errorMsg, errorMsgSize, "Failed to queue mixed regular command 1");
+        goto cleanup;
+    }
+    mixedTrackers[0].value = 6000;
+    mixedTrackers[0].priority = DEVICE_PRIORITY_LOW;
+    
+    // Create and commit a transaction (normal priority)
+    txn = DeviceQueue_BeginTransaction(ctx->queueManager);
+    DeviceQueue_SetTransactionPriority(ctx->queueManager, txn, DEVICE_PRIORITY_NORMAL);
+    
+    MockCommandParams txnParams1 = {.value = 7000};
+    MockCommandParams txnParams2 = {.value = 7001};
+    DeviceQueue_AddToTransaction(ctx->queueManager, txn, MOCK_CMD_SET_VALUE, &txnParams1);
+    DeviceQueue_AddToTransaction(ctx->queueManager, txn, MOCK_CMD_SET_VALUE, &txnParams2);
+    
+    TransactionTracker mixedTxnTracker = {0};
+    DeviceQueue_CommitTransaction(ctx->queueManager, txn,
+                                TransactionCallback, &mixedTxnTracker);
+    
+    // Submit another regular command (high priority)
+    MockCommandParams regularParams2 = {.value = 8000};
+    DeviceCommandID cmdId2 = DeviceQueue_CommandAsync(ctx->queueManager, MOCK_CMD_SET_VALUE,
+                                                     &regularParams2, DEVICE_PRIORITY_HIGH,
+                                                     PriorityCallback, &mixedTrackers[2]);
+    if (cmdId2 == 0) {
+        snprintf(errorMsg, errorMsgSize, "Failed to queue mixed regular command 2");
+        goto cleanup;
+    }
+    mixedTrackers[2].value = 8000;
+    mixedTrackers[2].priority = DEVICE_PRIORITY_HIGH;
+    
+    // Wait for all to complete
+    timeout = Timer() + 3.0;
+    while (Timer() < timeout && !ctx->cancelRequested) {
+        if (mixedTrackers[0].completed && mixedTrackers[2].completed && mixedTxnTracker.completed) {
+            break;
+        }
+        ProcessSystemEvents();
+        Delay(0.05);
+    }
+    
+    if (!mixedTrackers[0].completed || !mixedTrackers[2].completed || !mixedTxnTracker.completed) {
+        snprintf(errorMsg, errorMsgSize, "Not all mixed commands/transactions completed");
+        goto cleanup;
+    }
+    
+    // Verify transaction commands were executed sequentially
+    if (mixedTxnTracker.successCount != 2) {
+        snprintf(errorMsg, errorMsgSize, "Mixed transaction didn't complete successfully");
+        goto cleanup;
+    }
+    
+    LogDebug("Mixed command test completed - transaction and regular commands processed correctly");
+    
+    // Test 8: Cancel uncommitted transaction
+    LogDebug("Test 8: Cancel uncommitted transaction");
+    
+    txn = DeviceQueue_BeginTransaction(ctx->queueManager);
+    
+    // Add some commands
+    for (int i = 0; i < 3; i++) {
+        MockCommandParams params = {.value = 10000 + i};
+        DeviceQueue_AddToTransaction(ctx->queueManager, txn, MOCK_CMD_SET_VALUE, &params);
+    }
+    
+    // Cancel before committing
+    error = DeviceQueue_CancelTransaction(ctx->queueManager, txn);
+    if (error != SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Failed to cancel uncommitted transaction");
+        goto cleanup;
+    }
+    
+    // Try to commit cancelled transaction - should fail
+    error = DeviceQueue_CommitTransaction(ctx->queueManager, txn, NULL, NULL);
+    if (error != ERR_INVALID_STATE && error != ERR_INVALID_PARAMETER) {
+        snprintf(errorMsg, errorMsgSize, "Committing cancelled transaction should fail");
+        goto cleanup;
+    }
     
     DestroyTestQueueManager(ctx, ctx->queueManager);
     ctx->queueManager = NULL;
@@ -1573,13 +1914,6 @@ cleanup:
     ctx->queueManager = NULL;
     return ctx->cancelRequested ? -1 : -1;
 }
-
-// Similar pattern for remaining tests...
-// Each test should:
-// 1. Check ctx->cancelRequested at start and key points
-// 2. Use CreateTestQueueManager instead of DeviceQueue_Create
-// 3. Use DestroyTestQueueManager for cleanup
-// 4. Return -1 if cancelled
 
 int Test_QueueOverflow(DeviceQueueTestContext *ctx, char *errorMsg, int errorMsgSize) {
     if (ctx->cancelRequested) return -1;
@@ -2956,6 +3290,33 @@ cleanup:
 /******************************************************************************
  * Test Transaction Timeout
  ******************************************************************************/
+// Structure to track transaction timeout results
+typedef struct {
+    volatile int completed;
+    int successCount;
+    int failureCount;
+    int timeoutCount;
+    TransactionCommandResult results[5];
+} TimeoutTracker;
+
+// Callback for transaction timeout test
+static void TimeoutTransactionCallback(DeviceTransactionHandle t, int success, int failed,
+                                     TransactionCommandResult *results, int resultCount,
+                                     void *userData) {
+    TimeoutTracker *tt = (TimeoutTracker*)userData;
+    tt->completed = 1;
+    tt->successCount = success;
+    tt->failureCount = failed;
+    
+    // Count timeouts specifically
+    for (int i = 0; i < resultCount && i < 5; i++) {
+        tt->results[i] = results[i];
+        if (results[i].errorCode == ERR_TIMEOUT) {
+            tt->timeoutCount++;
+        }
+    }
+}
+
 int Test_TransactionTimeout(DeviceQueueTestContext *ctx, char *errorMsg, int errorMsgSize) {
     if (ctx->cancelRequested) return -1;
     
@@ -2965,20 +3326,30 @@ int Test_TransactionTimeout(DeviceQueueTestContext *ctx, char *errorMsg, int err
         return -1;
     }
     
-    // Create transaction with timeout setting (even though not implemented yet)
-    DeviceTransactionHandle txn = DeviceQueue_BeginTransaction(ctx->queueManager);
-    DeviceQueue_SetTransactionTimeout(ctx->queueManager, txn, 500);  // 500ms timeout
+    // Slow down command execution to trigger timeout
+    Mock_SetCommandDelay(ctx->mockContext, 200);  // 200ms per command
     
-    // Add normal commands instead of slow ones
-    MockCommandParams params = {.value = 100};
-    DeviceQueue_AddToTransaction(ctx->queueManager, txn, MOCK_CMD_SET_VALUE, &params);
-    params.value = 200;
-    DeviceQueue_AddToTransaction(ctx->queueManager, txn, MOCK_CMD_SET_VALUE, &params);
+    // Create transaction with short timeout
+    DeviceTransactionHandle txn = DeviceQueue_BeginTransaction(ctx->queueManager);
+    DeviceQueue_SetTransactionTimeout(ctx->queueManager, txn, 300);  // 300ms timeout
+    
+    // Add 5 commands - with 200ms each, only 1-2 should complete before timeout
+    for (int i = 0; i < 5; i++) {
+        MockCommandParams params = {.value = 100 + i};
+        int error = DeviceQueue_AddToTransaction(ctx->queueManager, txn, 
+                                               MOCK_CMD_SET_VALUE, &params);
+        if (error != SUCCESS) {
+            snprintf(errorMsg, errorMsgSize, "Failed to add command %d to transaction", i);
+            goto cleanup;
+        }
+    }
+    
+    TimeoutTracker tracker = {0};
     
     // Commit transaction
-    TransactionTracker tracker = {0};
+    double startTime = Timer();
     int error = DeviceQueue_CommitTransaction(ctx->queueManager, txn,
-                                            TransactionCallback, &tracker);
+                                            TimeoutTransactionCallback, &tracker);
     
     if (error != SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to commit transaction");
@@ -2992,26 +3363,82 @@ int Test_TransactionTimeout(DeviceQueueTestContext *ctx, char *errorMsg, int err
         Delay(0.1);
     }
     
+    if (ctx->cancelRequested) goto cleanup;
+    
     if (!tracker.completed) {
         snprintf(errorMsg, errorMsgSize, "Transaction callback not called");
         goto cleanup;
     }
     
-    // Since timeout isn't implemented, all commands should succeed
-    if (tracker.successCount != 2) {
-        snprintf(errorMsg, errorMsgSize, "Expected 2 successful commands, got %d", 
+    double elapsed = (Timer() - startTime) * 1000.0;
+    
+    // Verify timeout behavior
+    // At least 1 command should succeed (200ms < 300ms)
+    if (tracker.successCount < 1) {
+        snprintf(errorMsg, errorMsgSize, "Expected at least 1 successful command, got %d", 
                 tracker.successCount);
         goto cleanup;
     }
     
-    // TODO: When transaction timeout is implemented, update this test
-    // to verify timeout behavior
+    // Should not complete all 5 commands (5 * 200ms = 1000ms > 300ms timeout)
+    if (tracker.successCount >= 5) {
+        snprintf(errorMsg, errorMsgSize, "All commands completed - timeout not working (elapsed: %.1f ms)", 
+                elapsed);
+        goto cleanup;
+    }
     
+    // Should have timeout errors
+    if (tracker.timeoutCount == 0) {
+        snprintf(errorMsg, errorMsgSize, "Expected timeout errors, but got none");
+        goto cleanup;
+    }
+    
+    // Total commands should be success + failed
+    if (tracker.successCount + tracker.failureCount != 5) {
+        snprintf(errorMsg, errorMsgSize, "Command count mismatch: %d success + %d failed != 5",
+                tracker.successCount, tracker.failureCount);
+        goto cleanup;
+    }
+    
+    // Verify error codes are correct
+    int foundTimeout = 0;
+    for (int i = 0; i < 5; i++) {
+        if (tracker.results[i].errorCode == ERR_TIMEOUT) {
+            foundTimeout = 1;
+            // Commands after timeout should also be timed out
+            for (int j = i + 1; j < 5; j++) {
+                if (tracker.results[j].errorCode != ERR_TIMEOUT) {
+                    snprintf(errorMsg, errorMsgSize, 
+                            "Command %d should be timed out after command %d timed out", j, i);
+                    goto cleanup;
+                }
+            }
+            break;
+        }
+    }
+    
+    if (!foundTimeout) {
+        snprintf(errorMsg, errorMsgSize, "No commands were marked with ERR_TIMEOUT");
+        goto cleanup;
+    }
+    
+    // Execution time should be close to timeout value
+    if (elapsed > 600.0) {  // Should not take much longer than 300ms timeout + some overhead
+        snprintf(errorMsg, errorMsgSize, "Transaction took too long: %.1f ms (timeout was 300ms)", 
+                elapsed);
+        goto cleanup;
+    }
+    
+    LogMessage("Transaction timeout test passed: %d succeeded, %d timed out in %.1f ms",
+               tracker.successCount, tracker.timeoutCount, elapsed);
+    
+    Mock_SetCommandDelay(ctx->mockContext, MOCK_COMMAND_DELAY_MS);
     DestroyTestQueueManager(ctx, ctx->queueManager);
     ctx->queueManager = NULL;
     return 1;
     
 cleanup:
+    Mock_SetCommandDelay(ctx->mockContext, MOCK_COMMAND_DELAY_MS);
     DestroyTestQueueManager(ctx, ctx->queueManager);
     ctx->queueManager = NULL;
     return ctx->cancelRequested ? -1 : -1;

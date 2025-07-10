@@ -75,12 +75,6 @@ typedef struct {
     
     // For tracking execution
     double startTime;
-    
-    // These fields are no longer used but may be referenced in old code
-    // TODO: Remove these after confirming no references
-    int successCount;
-    int failureCount;
-    TransactionCommandResult *results;
 } DeviceTransaction;
 
 // Queue manager structure
@@ -147,7 +141,6 @@ static void Command_Release(DeviceQueueManager *mgr, QueuedCommand *cmd);
 
 // Processing thread
 static int CVICALLBACK ProcessingThreadFunction(void *functionData);
-static int ProcessCommand(DeviceQueueManager *mgr, QueuedCommand *cmd);
 static int ExecuteDeviceCommand(DeviceQueueManager *mgr, QueuedCommand *cmd, void *result);
 
 // Connection management
@@ -1217,6 +1210,17 @@ static int CVICALLBACK ProcessingThreadFunction(void *functionData) {
                 CmtReleaseLock(mgr->transactionLock);
             }
             
+            // Check transaction timeout BEFORE executing command
+            bool skipDueToTimeout = false;
+            if (cmd->transactionId != 0 && currentTransaction) {
+                double elapsedMs = (Timer() - currentTransaction->startTime) * 1000.0;
+                if (elapsedMs > currentTransaction->timeoutMs) {
+                    skipDueToTimeout = true;
+                    LogWarningEx(mgr->logDevice, "Transaction %u timed out after %.1f ms (limit: %d ms)", 
+                               mgr->currentTransactionId, elapsedMs, currentTransaction->timeoutMs);
+                }
+            }
+            
             // Store current command for status
             CmtGetLock(mgr->currentCommandLock);
             mgr->currentCommand = cmd;
@@ -1225,30 +1229,43 @@ static int CVICALLBACK ProcessingThreadFunction(void *functionData) {
             // Process the command
             void *result = NULL;
             BlockingContext *blockingCtx = NULL;
+            int errorCode = SUCCESS;
             
-            // For non-transaction blocking commands
-            if (cmd->transactionId == 0 && cmd->blockingContext) {
-                blockingCtx = (BlockingContext*)cmd->blockingContext;
-                result = blockingCtx->result;
+            if (!skipDueToTimeout) {
+                // For non-transaction blocking commands
+                if (cmd->transactionId == 0 && cmd->blockingContext) {
+                    blockingCtx = (BlockingContext*)cmd->blockingContext;
+                    result = blockingCtx->result;
+                } else {
+                    result = mgr->adapter->createCommandResult(cmd->commandType);
+                }
+                
+                errorCode = ExecuteDeviceCommand(mgr, cmd, result);
+                
+                // Update statistics
+                CmtGetLock(mgr->statsLock);
+                mgr->totalProcessed++;
+                if (errorCode != SUCCESS) {
+                    mgr->totalErrors++;
+                }
+                CmtReleaseLock(mgr->statsLock);
+                
+                // Handle connection loss
+                if (errorCode == ERR_COMM_FAILED || errorCode == ERR_TIMEOUT || errorCode == ERR_NOT_CONNECTED) {
+                    mgr->isConnected = 0;
+                    mgr->lastReconnectTime = Timer();
+                    LogWarningEx(mgr->logDevice, "Lost connection during command execution");
+                }
             } else {
+                // Command skipped due to timeout
+                errorCode = ERR_TIMEOUT;
                 result = mgr->adapter->createCommandResult(cmd->commandType);
-            }
-            
-            int errorCode = ExecuteDeviceCommand(mgr, cmd, result);
-            
-            // Update statistics
-            CmtGetLock(mgr->statsLock);
-            mgr->totalProcessed++;
-            if (errorCode != SUCCESS) {
+                
+                // Update statistics
+                CmtGetLock(mgr->statsLock);
+                mgr->totalProcessed++;
                 mgr->totalErrors++;
-            }
-            CmtReleaseLock(mgr->statsLock);
-            
-            // Handle connection loss
-            if (errorCode == ERR_COMM_FAILED || errorCode == ERR_TIMEOUT || errorCode == ERR_NOT_CONNECTED) {
-                mgr->isConnected = 0;
-                mgr->lastReconnectTime = Timer();
-                LogWarningEx(mgr->logDevice, "Lost connection during command execution");
+                CmtReleaseLock(mgr->statsLock);
             }
             
             // Handle result based on command type
@@ -1260,8 +1277,8 @@ static int CVICALLBACK ProcessingThreadFunction(void *functionData) {
                     transactionResults[transactionCommandIndex].result = result;
                     transactionCommandIndex++;
                     
-                    // Check for abort on error
-                    if (errorCode != SUCCESS && currentTransaction &&
+                    // Check for abort on error (but not for timeout - we handle that differently)
+                    if (errorCode != SUCCESS && errorCode != ERR_TIMEOUT && currentTransaction &&
                         (currentTransaction->flags & DEVICE_TXN_ABORT_ON_ERROR)) {
                         
                         LogWarningEx(mgr->logDevice, "Transaction %u aborted due to error in command %d", 
@@ -1271,6 +1288,18 @@ static int CVICALLBACK ProcessingThreadFunction(void *functionData) {
                         for (int i = transactionCommandIndex; i < expectedTransactionCommands; i++) {
                             transactionResults[i].commandType = 0;
                             transactionResults[i].errorCode = ERR_CANCELLED;
+                            transactionResults[i].result = NULL;
+                        }
+                        
+                        // Force transaction completion
+                        transactionCommandIndex = expectedTransactionCommands;
+                    }
+                    // If command was skipped due to timeout, mark remaining as timed out
+                    else if (skipDueToTimeout) {
+                        // Mark remaining commands as timed out
+                        for (int i = transactionCommandIndex; i < expectedTransactionCommands; i++) {
+                            transactionResults[i].commandType = 0;
+                            transactionResults[i].errorCode = ERR_TIMEOUT;
                             transactionResults[i].result = NULL;
                         }
                         
@@ -1348,8 +1377,8 @@ static int CVICALLBACK ProcessingThreadFunction(void *functionData) {
             mgr->currentCommand = NULL;
             CmtReleaseLock(mgr->currentCommandLock);
             
-            // Apply command delay
-            if (mgr->adapter->getCommandDelay) {
+            // Apply command delay (skip if timed out)
+            if (!skipDueToTimeout && mgr->adapter->getCommandDelay) {
                 int delayMs = mgr->adapter->getCommandDelay(cmd->commandType);
                 if (delayMs > 0) {
                     Delay(delayMs / 1000.0);
@@ -1368,199 +1397,9 @@ static int CVICALLBACK ProcessingThreadFunction(void *functionData) {
     return 0;
 }
 
-static int ProcessCommand(DeviceQueueManager *mgr, QueuedCommand *cmd) {
-    cmd->state = CMD_STATE_EXECUTING;
-    
-    LogDebugEx(mgr->logDevice, "Processing command: %s (ID: %u)", 
-             mgr->adapter->getCommandTypeName(cmd->commandType), cmd->id);
-    
-    // Prepare result storage
-    void *result = NULL;
-    BlockingContext *blockingCtx = (BlockingContext*)cmd->blockingContext;
-    
-    if (blockingCtx) {
-        // Use pre-allocated result from blocking context
-        result = blockingCtx->result;
-    } else {
-        // Create result for async command
-        result = mgr->adapter->createCommandResult(cmd->commandType);
-        if (!result) {
-            // Notify async callback of failure
-            if (cmd->callback) {
-                cmd->callback(cmd->id, cmd->commandType, NULL, cmd->userData);
-            }
-            return ERR_OUT_OF_MEMORY;
-        }
-    }
-    
-    // Execute the command
-    int errorCode = ExecuteDeviceCommand(mgr, cmd, result);
-    
-    // Update statistics
-    CmtGetLock(mgr->statsLock);
-    mgr->totalProcessed++;
-    if (errorCode != SUCCESS) {
-        mgr->totalErrors++;
-    }
-    CmtReleaseLock(mgr->statsLock);
-    
-    // Handle connection loss
-    if (errorCode == ERR_COMM_FAILED || errorCode == ERR_TIMEOUT || errorCode == ERR_NOT_CONNECTED) {
-        mgr->isConnected = 0;
-        mgr->lastReconnectTime = Timer();
-        LogWarningEx(mgr->logDevice, "Lost connection during command execution");
-    }
-    
-    // Mark as completed
-    cmd->state = CMD_STATE_COMPLETED;
-    
-    // Notify completion
-    if (blockingCtx) {
-        // Signal blocking thread
-        blockingCtx->errorCode = errorCode;
-        blockingCtx->completed = 1;
-        // The blocking thread will handle result cleanup
-    } else {
-        // Notify async callback
-        if (cmd->callback) {
-            cmd->callback(cmd->id, cmd->commandType, result, cmd->userData);
-        }
-        // Free async result
-        mgr->adapter->freeCommandResult(cmd->commandType, result);
-    }
-    
-    // Apply command-specific delay
-    if (mgr->adapter->getCommandDelay) {
-        int delayMs = mgr->adapter->getCommandDelay(cmd->commandType);
-        if (delayMs > 0) {
-            Delay(delayMs / 1000.0);
-        }
-    }
-    
-    return errorCode;
-}
-
 /******************************************************************************
  * Internal Processing Functions
  ******************************************************************************/
-static int ProcessTransaction(DeviceQueueManager *mgr, DeviceTransaction *txn) {
-    LogMessageEx(mgr->logDevice, "Processing transaction %u with %d commands", 
-               txn->id, txn->commandCount);
-    
-    txn->startTime = Timer();
-    txn->successCount = 0;
-    txn->failureCount = 0;
-    
-    // Process each command in sequence
-    for (int i = 0; i < txn->commandCount; i++) {
-        // Check for shutdown
-        if (mgr->shutdownRequested) {
-            LogWarningEx(mgr->logDevice, "Transaction %u interrupted by shutdown", txn->id);
-            
-            // Mark remaining commands as cancelled
-            for (int j = i; j < txn->commandCount; j++) {
-                txn->results[j].errorCode = ERR_CANCELLED;
-                txn->failureCount++;
-            }
-            break;
-        }
-        
-        // Check timeout
-        if ((Timer() - txn->startTime) * 1000.0 > txn->timeoutMs) {
-            LogWarningEx(mgr->logDevice, "Transaction %u timed out after %d ms", 
-                       txn->id, (int)((Timer() - txn->startTime) * 1000.0));
-            
-            // Mark remaining commands as timed out
-            for (int j = i; j < txn->commandCount; j++) {
-                txn->results[j].errorCode = ERR_TIMEOUT;
-                txn->failureCount++;
-            }
-            break;
-        }
-        
-        QueuedCommand *cmd = txn->commands[i];
-        void *result = txn->results[i].result;
-        
-        LogDebugEx(mgr->logDevice, "Transaction %u: Executing command %d/%d: %s", 
-                 txn->id, i + 1, txn->commandCount,
-                 mgr->adapter->getCommandTypeName(cmd->commandType));
-        
-        // Execute the command
-        int errorCode = ExecuteDeviceCommand(mgr, cmd, result);
-        
-        // Store result
-        txn->results[i].errorCode = errorCode;
-        
-        if (errorCode == SUCCESS) {
-            txn->successCount++;
-        } else {
-            txn->failureCount++;
-            
-            // Check if we should abort on error
-            if (txn->flags & DEVICE_TXN_ABORT_ON_ERROR) {
-                LogWarningEx(mgr->logDevice, "Transaction %u aborted after command %d failed", 
-                           txn->id, i + 1);
-                
-                // Mark remaining commands as not executed
-                for (int j = i + 1; j < txn->commandCount; j++) {
-                    txn->results[j].errorCode = ERR_CANCELLED;
-                    txn->failureCount++;
-                }
-                break;
-            }
-        }
-        
-        // Update statistics
-        CmtGetLock(mgr->statsLock);
-        mgr->totalProcessed++;
-        if (errorCode != SUCCESS) {
-            mgr->totalErrors++;
-        }
-        CmtReleaseLock(mgr->statsLock);
-        
-        // Apply command-specific delay
-        if (mgr->adapter->getCommandDelay) {
-            int delayMs = mgr->adapter->getCommandDelay(cmd->commandType);
-            if (delayMs > 0) {
-                Delay(delayMs / 1000.0);
-            }
-        }
-    }
-    
-    LogMessageEx(mgr->logDevice, "Transaction %u completed: %d success, %d failed", 
-               txn->id, txn->successCount, txn->failureCount);
-    
-    // Call transaction callback
-    if (txn->callback) {
-        txn->callback(txn->id, txn->successCount, txn->failureCount, 
-                     txn->results, txn->commandCount, txn->userData);
-    }
-    
-    // Remove transaction from uncommitted list
-	CmtGetLock(mgr->transactionLock);
-	int count = ListNumItems(mgr->uncommittedTransactions);
-	for (int i = 1; i <= count; i++) {
-	    DeviceTransaction **txnPtr = ListGetPtrToItem(mgr->uncommittedTransactions, i);
-	    if (txnPtr && *txnPtr && (*txnPtr)->id == mgr->currentTransactionId) {
-	        free(*txnPtr);
-	        ListRemoveItem(mgr->uncommittedTransactions, 0, i);
-	        break;
-	    }
-	}
-	CmtReleaseLock(mgr->transactionLock);
-    
-    // Free commands and results
-    for (int i = 0; i < txn->commandCount; i++) {
-        if (txn->commands[i]) {
-            Command_Release(mgr, txn->commands[i]);
-        }
-    }
-    
-    free(txn);
-    
-    return SUCCESS;
-}
-
 static int ExecuteDeviceCommand(DeviceQueueManager *mgr, QueuedCommand *cmd, void *result) {
     if (!mgr->adapter->executeCommand) {
         return ERR_OPERATION_FAILED;
