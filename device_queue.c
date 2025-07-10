@@ -67,18 +67,20 @@ typedef struct {
     DeviceTransactionCallback callback;
     void *userData;
     bool committed;
-    bool executing;
     
     // Configuration
     DeviceTransactionFlags flags;
     DevicePriority priority;
     int timeoutMs;
     
-    // Results tracking
-    TransactionCommandResult *results;
+    // For tracking execution
+    double startTime;
+    
+    // These fields are no longer used but may be referenced in old code
+    // TODO: Remove these after confirming no references
     int successCount;
     int failureCount;
-    double startTime;
+    TransactionCommandResult *results;
 } DeviceTransaction;
 
 // Queue manager structure
@@ -87,8 +89,8 @@ struct DeviceQueueManager {
     const DeviceAdapter *adapter;
     void *deviceContext;
     void *connectionParams;
-	
-	// Thread pool for processing
+    
+    // Thread pool for processing
     CmtThreadPoolHandle threadPool;
     
     // Thread-safe queues
@@ -114,11 +116,13 @@ struct DeviceQueueManager {
     volatile DeviceTransactionHandle nextTransactionId;
     CmtThreadLockHandle commandLock;
     
-    // Active transactions
-    ListType activeTransactions;
+    // Transaction tracking
+    ListType uncommittedTransactions;      // List of uncommitted DeviceTransaction*
     CmtThreadLockHandle transactionLock;
-    volatile int activeTransactionHandle;  // Currently executing transaction
-    volatile int inTransactionMode;        // Processing thread is in transaction mode
+    
+    // Current transaction state (for processing thread)
+    volatile DeviceTransactionHandle currentTransactionId;
+    CmtTSQHandle currentTransactionQueue;
     
     // Statistics
     volatile int totalProcessed;
@@ -153,14 +157,13 @@ static int AttemptReconnection(DeviceQueueManager *mgr);
 
 // Transaction management
 static DeviceTransaction* FindTransaction(DeviceQueueManager *mgr, DeviceTransactionHandle id);
-static DeviceTransaction* GetNextReadyTransaction(DeviceQueueManager *mgr);
-static int ProcessTransaction(DeviceQueueManager *mgr, DeviceTransaction *txn);
-static void CleanupTransactionResults(DeviceQueueManager *mgr, DeviceTransaction *txn);
 
 // Cancellation helpers
 static int CancelCommandInQueue(CmtTSQHandle queue, DeviceCommandID cmdId, DeviceQueueManager *mgr);
 static int CancelByTypeInQueue(CmtTSQHandle queue, int commandType, DeviceQueueManager *mgr);
 static int CancelByAgeInQueue(CmtTSQHandle queue, double currentTime, double maxAge, DeviceQueueManager *mgr);
+static int CancelCommandsWithTransactionId(CmtTSQHandle queue, DeviceTransactionHandle txnId, 
+                                         DeviceQueueManager *mgr);
 
 // Validation
 static bool ValidateAdapter(const DeviceAdapter *adapter);
@@ -188,7 +191,7 @@ static bool ValidateAdapter(const DeviceAdapter *adapter);
 DeviceQueueManager* DeviceQueue_Create(const DeviceAdapter *adapter, 
                                      void *deviceContext,
                                      void *connectionParams,
-									 CmtThreadPoolHandle threadPool) {
+                                     CmtThreadPoolHandle threadPool) {
     if (!adapter || !deviceContext) {
         LogError("DeviceQueue_Create: Invalid parameters");
         return NULL;
@@ -199,11 +202,11 @@ DeviceQueueManager* DeviceQueue_Create(const DeviceAdapter *adapter,
         LogError("DeviceQueue_Create: Invalid adapter - missing required functions");
         return NULL;
     }
-	
-	// If threadPool is unspecified use g_threadPool
-	if (!threadPool) {
-		threadPool = g_threadPool;
-	}
+    
+    // If threadPool is unspecified use g_threadPool
+    if (!threadPool) {
+        threadPool = g_threadPool;
+    }
     
     DeviceQueueManager *mgr = calloc(1, sizeof(DeviceQueueManager));
     if (!mgr) {
@@ -220,15 +223,13 @@ DeviceQueueManager* DeviceQueue_Create(const DeviceAdapter *adapter,
     mgr->isConnected = 0;
     mgr->shutdownRequested = 0;
     mgr->logDevice = LOG_DEVICE_NONE;
-    mgr->activeTransactionHandle = 0;
-    mgr->inTransactionMode = 0;
     mgr->currentCommand = NULL;
     
     // Create queues
     int error = 0;
-    error |= CmtNewTSQ(DEVICE_QUEUE_HIGH_PRIORITY_SIZE, sizeof(DeviceQueuedCommand*), 0, &mgr->highPriorityQueue);
-    error |= CmtNewTSQ(DEVICE_QUEUE_NORMAL_PRIORITY_SIZE, sizeof(DeviceQueuedCommand*), 0, &mgr->normalPriorityQueue);
-    error |= CmtNewTSQ(DEVICE_QUEUE_LOW_PRIORITY_SIZE, sizeof(DeviceQueuedCommand*), 0, &mgr->lowPriorityQueue);
+    error |= CmtNewTSQ(DEVICE_QUEUE_HIGH_PRIORITY_SIZE, sizeof(QueuedCommand*), 0, &mgr->highPriorityQueue);
+    error |= CmtNewTSQ(DEVICE_QUEUE_NORMAL_PRIORITY_SIZE, sizeof(QueuedCommand*), 0, &mgr->normalPriorityQueue);
+    error |= CmtNewTSQ(DEVICE_QUEUE_LOW_PRIORITY_SIZE, sizeof(QueuedCommand*), 0, &mgr->lowPriorityQueue);
     
     if (error < 0) {
         LogError("DeviceQueue_Create: Failed to create queues");
@@ -236,15 +237,15 @@ DeviceQueueManager* DeviceQueue_Create(const DeviceAdapter *adapter,
         return NULL;
     }
     
-    // Create locks and events
+    // Create locks
     CmtNewLock(NULL, 0, &mgr->commandLock);
     CmtNewLock(NULL, 0, &mgr->transactionLock);
     CmtNewLock(NULL, 0, &mgr->statsLock);
     CmtNewLock(NULL, 0, &mgr->currentCommandLock);
-	CmtNewLock(NULL, 0, &mgr->queueManipulationLock);
+    CmtNewLock(NULL, 0, &mgr->queueManipulationLock);
     
-    // Initialize transaction list
-    mgr->activeTransactions = ListCreate(sizeof(DeviceTransaction*));
+    // Initialize transaction list (only for uncommitted transactions)
+    mgr->uncommittedTransactions = ListCreate(sizeof(DeviceTransaction*));
     
     // Attempt initial connection
     LogMessageEx(mgr->logDevice, "Attempting to connect to %s...", adapter->deviceName);
@@ -261,8 +262,9 @@ DeviceQueueManager* DeviceQueue_Create(const DeviceAdapter *adapter,
     }
     
     // Start processing thread
-    if (g_threadPool > 0) {
-        error = CmtScheduleThreadPoolFunction(g_threadPool, ProcessingThreadFunction, 
+    if (threadPool > 0) {
+        mgr->threadPool = threadPool;
+        error = CmtScheduleThreadPoolFunction(threadPool, ProcessingThreadFunction, 
                                             mgr, &mgr->processingThreadId);
         if (error != 0) {
             LogErrorEx(mgr->logDevice, "DeviceQueue_Create: Failed to start processing thread");
@@ -291,7 +293,7 @@ void DeviceQueue_Destroy(DeviceQueueManager *mgr) {
     if (mgr->processingThreadId != 0) {
         LogMessageEx(mgr->logDevice, "Waiting for processing thread to complete...");
         
-        CmtWaitForThreadPoolFunctionCompletion(g_threadPool, mgr->processingThreadId,
+        CmtWaitForThreadPoolFunctionCompletion(mgr->threadPool, mgr->processingThreadId,
                                              OPT_TP_PROCESS_EVENTS_WHILE_WAITING);
         
         LogMessageEx(mgr->logDevice, "%s queue processing thread stopped", mgr->adapter->deviceName);
@@ -312,13 +314,13 @@ void DeviceQueue_Destroy(DeviceQueueManager *mgr) {
     // Disconnect device
     DisconnectDevice(mgr);
     
-    // Clean up transactions
-    if (mgr->activeTransactions) {
+    // Clean up uncommitted transactions
+    if (mgr->uncommittedTransactions) {
         CmtGetLock(mgr->transactionLock);
-        int count = ListNumItems(mgr->activeTransactions);
+        int count = ListNumItems(mgr->uncommittedTransactions);
         
         for (int i = count; i >= 1; i--) {
-            DeviceTransaction **txnPtr = ListGetPtrToItem(mgr->activeTransactions, i);
+            DeviceTransaction **txnPtr = ListGetPtrToItem(mgr->uncommittedTransactions, i);
             if (txnPtr && *txnPtr) {
                 DeviceTransaction *txn = *txnPtr;
                 
@@ -329,13 +331,12 @@ void DeviceQueue_Destroy(DeviceQueueManager *mgr) {
                     }
                 }
                 
-                CleanupTransactionResults(mgr, txn);
                 free(txn);
             }
         }
         
         CmtReleaseLock(mgr->transactionLock);
-        ListDispose(mgr->activeTransactions);
+        ListDispose(mgr->uncommittedTransactions);
     }
     
     // Dispose queues
@@ -384,10 +385,8 @@ void DeviceQueue_GetStats(DeviceQueueManager *mgr, DeviceQueueStats *stats) {
     stats->isConnected = mgr->isConnected;
     stats->isProcessing = (mgr->processingThreadId != 0);
     
-    CmtGetLock(mgr->transactionLock);
-    stats->activeTransactionId = mgr->activeTransactionHandle;
-    stats->isInTransactionMode = mgr->inTransactionMode;
-    CmtReleaseLock(mgr->transactionLock);
+    stats->activeTransactionId = 0;
+    stats->isInTransactionMode = 0;
 }
 
 void DeviceQueue_SetLogDevice(DeviceQueueManager *mgr, LogDevice device) {
@@ -399,9 +398,9 @@ void DeviceQueue_SetLogDevice(DeviceQueueManager *mgr, LogDevice device) {
 bool DeviceQueue_IsInTransaction(DeviceQueueManager *mgr) {
     if (!mgr) return false;
     
-    CmtGetLock(mgr->transactionLock);
-    bool inTransaction = mgr->inTransactionMode;
-    CmtReleaseLock(mgr->transactionLock);
+    CmtGetLock(mgr->currentCommandLock);
+    bool inTransaction = (mgr->currentCommand && mgr->currentCommand->transactionId != 0);
+    CmtReleaseLock(mgr->currentCommandLock);
     
     return inTransaction;
 }
@@ -515,6 +514,11 @@ int DeviceQueue_CommandBlocking(DeviceQueueManager *mgr, int commandType,
             finalError = ctx.errorCode;
             break;
         }
+		
+		if (mgr->shutdownRequested) {
+	        finalError = ERR_CANCELLED;
+	        break;
+	    }
         
         if (timeoutMs == 0) {
             break;  // Immediate timeout
@@ -818,40 +822,87 @@ int DeviceQueue_CancelTransaction(DeviceQueueManager *mgr, DeviceTransactionHand
         return ERR_INVALID_PARAMETER;
     }
     
-    // Cannot cancel if already executing
-    if (txn->executing) {
+    if (txn->committed) {
+        // Transaction already committed - need to cancel queued commands
         CmtReleaseLock(mgr->transactionLock);
-        LogWarningEx(mgr->logDevice, "Cannot cancel executing transaction %u", txnId);
-        return ERR_INVALID_STATE;
+        
+        // Cancel commands in all queues with this transaction ID
+        int cancelled = 0;
+        CmtGetLock(mgr->queueManipulationLock);
+        
+        cancelled += CancelCommandsWithTransactionId(mgr->highPriorityQueue, txnId, mgr);
+        cancelled += CancelCommandsWithTransactionId(mgr->normalPriorityQueue, txnId, mgr);
+        cancelled += CancelCommandsWithTransactionId(mgr->lowPriorityQueue, txnId, mgr);
+        
+        CmtReleaseLock(mgr->queueManipulationLock);
+        
+        LogMessageEx(mgr->logDevice, "Cancelled %d commands from transaction %u", 
+                   cancelled, txnId);
+        return cancelled > 0 ? SUCCESS : ERR_OPERATION_FAILED;
+    } else {
+        // Transaction not committed - just remove from list
+        int count = ListNumItems(mgr->uncommittedTransactions);
+        for (int i = 1; i <= count; i++) {
+            DeviceTransaction **txnPtr = ListGetPtrToItem(mgr->uncommittedTransactions, i);
+            if (txnPtr && *txnPtr == txn) {
+                ListRemoveItem(mgr->uncommittedTransactions, 0, i);
+                break;
+            }
+        }
+        
+        // Free commands
+        for (int i = 0; i < txn->commandCount; i++) {
+            if (txn->commands[i]) {
+                Command_Release(mgr, txn->commands[i]);
+            }
+        }
+        
+        free(txn);
+        CmtReleaseLock(mgr->transactionLock);
+        
+        LogMessageEx(mgr->logDevice, "Cancelled uncommitted transaction %u", txnId);
+        return SUCCESS;
     }
+}
+
+static int CancelCommandsWithTransactionId(CmtTSQHandle queue, DeviceTransactionHandle txnId, 
+                                         DeviceQueueManager *mgr) {
+    int queueSize = 0;
+    CmtGetTSQAttribute(queue, ATTR_TSQ_ITEMS_IN_QUEUE, &queueSize);
+    if (queueSize == 0) return 0;
     
-    // Remove from active list
-    int count = ListNumItems(mgr->activeTransactions);
-    for (int i = 1; i <= count; i++) {
-        DeviceTransaction **txnPtr = ListGetPtrToItem(mgr->activeTransactions, i);
-        if (txnPtr && *txnPtr == txn) {
-            ListRemoveItem(mgr->activeTransactions, 0, i);
-            break;
+    QueuedCommand **commands = calloc(queueSize, sizeof(QueuedCommand*));
+    if (!commands) return 0;
+    
+    int itemsRead = CmtReadTSQData(queue, commands, queueSize, 0, 0);
+    int cancelled = 0;
+    
+    for (int i = 0; i < itemsRead; i++) {
+        if (commands[i] && commands[i]->transactionId == txnId) {
+            Command_Release(mgr, commands[i]);
+            commands[i] = NULL;
+            cancelled++;
         }
     }
     
-    // Free commands using reference counting
-    for (int i = 0; i < txn->commandCount; i++) {
-        if (txn->commands[i]) {
-            Command_Release(mgr, txn->commands[i]);
+    // Write back non-cancelled commands
+    if (cancelled > 0) {
+        int writeIdx = 0;
+        for (int i = 0; i < itemsRead; i++) {
+            if (commands[i] != NULL) {
+                commands[writeIdx++] = commands[i];
+            }
         }
+        
+        if (writeIdx > 0) {
+            CmtWriteTSQData(queue, commands, writeIdx, TSQ_INFINITE_TIMEOUT, NULL);
+        }
+    } else {
+        CmtWriteTSQData(queue, commands, itemsRead, TSQ_INFINITE_TIMEOUT, NULL);
     }
     
-    // Clean up results if allocated
-    if (txn->results) {
-        CleanupTransactionResults(mgr, txn);
-    }
-    
-    free(txn);
-    CmtReleaseLock(mgr->transactionLock);
-    
-    LogMessageEx(mgr->logDevice, "Cancelled transaction %u", txnId);
-    return SUCCESS;
+    free(commands);
+    return cancelled;
 }
 
 /******************************************************************************
@@ -874,7 +925,7 @@ DeviceTransactionHandle DeviceQueue_BeginTransaction(DeviceQueueManager *mgr) {
     txn->priority = DEVICE_PRIORITY_HIGH;       // Default priority
     txn->timeoutMs = DEVICE_DEFAULT_TRANSACTION_TIMEOUT_MS;
     
-    ListInsertItem(mgr->activeTransactions, &txn, END_OF_LIST);
+    ListInsertItem(mgr->uncommittedTransactions, &txn, END_OF_LIST);
     CmtReleaseLock(mgr->transactionLock);
     
     LogDebugEx(mgr->logDevice, "Thread %d started transaction %u", 
@@ -889,7 +940,7 @@ int DeviceQueue_SetTransactionFlags(DeviceQueueManager *mgr,
     
     CmtGetLock(mgr->transactionLock);
     DeviceTransaction *txn = FindTransaction(mgr, txnId);
-    if (!txn || txn->committed || txn->executing) {
+    if (!txn || txn->committed) {
         CmtReleaseLock(mgr->transactionLock);
         return ERR_INVALID_STATE;
     }
@@ -907,7 +958,7 @@ int DeviceQueue_SetTransactionPriority(DeviceQueueManager *mgr,
     
     CmtGetLock(mgr->transactionLock);
     DeviceTransaction *txn = FindTransaction(mgr, txnId);
-    if (!txn || txn->committed || txn->executing) {
+    if (!txn || txn->committed) {
         CmtReleaseLock(mgr->transactionLock);
         return ERR_INVALID_STATE;
     }
@@ -925,7 +976,7 @@ int DeviceQueue_SetTransactionTimeout(DeviceQueueManager *mgr,
     
     CmtGetLock(mgr->transactionLock);
     DeviceTransaction *txn = FindTransaction(mgr, txnId);
-    if (!txn || txn->committed || txn->executing) {
+    if (!txn || txn->committed) {
         CmtReleaseLock(mgr->transactionLock);
         return ERR_INVALID_STATE;
     }
@@ -942,7 +993,7 @@ int DeviceQueue_AddToTransaction(DeviceQueueManager *mgr, DeviceTransactionHandl
     
     CmtGetLock(mgr->transactionLock);
     DeviceTransaction *txn = FindTransaction(mgr, txnId);
-    if (!txn || txn->committed || txn->executing) {
+    if (!txn || txn->committed) {
         CmtReleaseLock(mgr->transactionLock);
         return ERR_INVALID_STATE;
     }
@@ -974,33 +1025,60 @@ int DeviceQueue_CommitTransaction(DeviceQueueManager *mgr, DeviceTransactionHand
     
     CmtGetLock(mgr->transactionLock);
     DeviceTransaction *txn = FindTransaction(mgr, txnId);
-    if (!txn || txn->committed || txn->executing || txn->commandCount == 0) {
+    if (!txn || txn->committed || txn->commandCount == 0) {
         CmtReleaseLock(mgr->transactionLock);
         return ERR_INVALID_STATE;
     }
     
-    // Allocate results array
-    txn->results = calloc(txn->commandCount, sizeof(TransactionCommandResult));
-    if (!txn->results) {
-        CmtReleaseLock(mgr->transactionLock);
-        return ERR_OUT_OF_MEMORY;
+    // Select queue based on transaction priority
+    CmtTSQHandle queue;
+    switch (txn->priority) {
+        case DEVICE_PRIORITY_HIGH:   queue = mgr->highPriorityQueue; break;
+        case DEVICE_PRIORITY_NORMAL: queue = mgr->normalPriorityQueue; break;
+        case DEVICE_PRIORITY_LOW:    queue = mgr->lowPriorityQueue; break;
+        default: queue = mgr->normalPriorityQueue; break;
     }
     
-    // Initialize results
-    for (int i = 0; i < txn->commandCount; i++) {
-        txn->results[i].commandType = txn->commands[i]->commandType;
-        txn->results[i].errorCode = ERR_OPERATION_FAILED;
-        txn->results[i].result = mgr->adapter->createCommandResult(txn->commands[i]->commandType);
-    }
-    
+    // Store transaction info for later use
     txn->callback = callback;
     txn->userData = userData;
-    txn->committed = true;
     
+    // Store transaction info in each command
+    for (int i = 0; i < txn->commandCount; i++) {
+        txn->commands[i]->transactionId = txnId;
+        txn->commands[i]->priority = txn->priority;
+        
+        // Store transaction pointer in first command for later retrieval
+        if (i == 0) {
+            txn->commands[i]->blockingContext = (void*)txn;
+        }
+        
+        // Add reference for the queue
+        Command_AddRef(txn->commands[i]);
+    }
+    
+    // Queue all commands at once
+    int itemsWritten = CmtWriteTSQData(queue, txn->commands, txn->commandCount, 
+                                       TSQ_INFINITE_TIMEOUT, NULL);
+    
+    if (itemsWritten != txn->commandCount) {
+        // Failed to queue all commands - clean up
+        for (int i = 0; i < txn->commandCount; i++) {
+            Command_Release(mgr, txn->commands[i]);
+        }
+        CmtReleaseLock(mgr->transactionLock);
+        LogError("Failed to queue transaction %u commands", txnId);
+        return ERR_QUEUE_FULL;
+    }
+    
+    txn->committed = true;
     CmtReleaseLock(mgr->transactionLock);
     
-    LogMessageEx(mgr->logDevice, "Committed transaction %u with %d commands", 
-               txnId, txn->commandCount);
+    LogMessage("Committed transaction %u with %d commands to %s priority queue", 
+               txnId, txn->commandCount,
+               txn->priority == DEVICE_PRIORITY_HIGH ? "high" :
+               txn->priority == DEVICE_PRIORITY_NORMAL ? "normal" : "low");
+    
     return SUCCESS;
 }
 
@@ -1012,6 +1090,16 @@ static int CVICALLBACK ProcessingThreadFunction(void *functionData) {
     DeviceQueueManager *mgr = (DeviceQueueManager*)functionData;
     
     LogMessageEx(mgr->logDevice, "%s queue processing thread started", mgr->adapter->deviceName);
+    
+    // Transaction execution state
+    DeviceTransaction *currentTransaction = NULL;
+    TransactionCommandResult *transactionResults = NULL;
+    int transactionCommandIndex = 0;
+    int expectedTransactionCommands = 0;
+    
+    // Command that was dequeued but belongs to different transaction
+    QueuedCommand *deferredCommand = NULL;
+    CmtTSQHandle deferredCommandQueue = 0;
     
     while (1) {
         // Check if we should exit - but ONLY if all queues are empty
@@ -1037,79 +1125,241 @@ static int CVICALLBACK ProcessingThreadFunction(void *functionData) {
             continue;
         }
         
-        // Check for ready transactions first (skip during shutdown)
-        if (!mgr->shutdownRequested) {
-            CmtGetLock(mgr->transactionLock);
-            DeviceTransaction *readyTxn = GetNextReadyTransaction(mgr);
-            if (readyTxn && !mgr->inTransactionMode) {
-                mgr->inTransactionMode = 1;
-                mgr->activeTransactionHandle = readyTxn->id;
-                readyTxn->executing = true;
-                CmtReleaseLock(mgr->transactionLock);
+        QueuedCommand *cmd = NULL;
+        CmtTSQHandle cmdQueue = 0;
+        
+        // Check if we have a deferred command from previous iteration
+        if (deferredCommand) {
+            cmd = deferredCommand;
+            cmdQueue = deferredCommandQueue;
+            deferredCommand = NULL;
+            deferredCommandQueue = 0;
+        } else {
+            // Get next command based on current state
+            if (mgr->currentTransactionId != 0 && mgr->currentTransactionQueue != 0) {
+                // In transaction mode - only read from current transaction queue
+                int itemsRead = CmtReadTSQData(mgr->currentTransactionQueue, &cmd, 1, 0, 0);
+                if (itemsRead > 0) {
+                    cmdQueue = mgr->currentTransactionQueue;
+                    
+                    // Check if this command is part of current transaction
+                    if (cmd->transactionId != mgr->currentTransactionId) {
+                        // Different transaction or non-transaction command
+                        // Defer it for next iteration
+                        deferredCommand = cmd;
+                        deferredCommandQueue = cmdQueue;
+                        cmd = NULL;
+                        
+                        // Complete current transaction
+                        mgr->currentTransactionId = 0;
+                        mgr->currentTransactionQueue = 0;
+                    }
+                }
+            } else {
+                // Normal mode - check all queues in priority order
+                CmtGetLock(mgr->queueManipulationLock);
                 
-                LogMessageEx(mgr->logDevice, "Entering transaction mode for transaction %u", readyTxn->id);
-                ProcessTransaction(mgr, readyTxn);
+                int itemsRead = CmtReadTSQData(mgr->highPriorityQueue, &cmd, 1, 0, 0);
+                if (itemsRead > 0) {
+                    cmdQueue = mgr->highPriorityQueue;
+                } else {
+                    itemsRead = CmtReadTSQData(mgr->normalPriorityQueue, &cmd, 1, 0, 0);
+                    if (itemsRead > 0) {
+                        cmdQueue = mgr->normalPriorityQueue;
+                    } else {
+                        itemsRead = CmtReadTSQData(mgr->lowPriorityQueue, &cmd, 1, 0, 0);
+                        if (itemsRead > 0) {
+                            cmdQueue = mgr->lowPriorityQueue;
+                        }
+                    }
+                }
                 
-                CmtGetLock(mgr->transactionLock);
-                mgr->inTransactionMode = 0;
-                mgr->activeTransactionHandle = 0;
-                CmtReleaseLock(mgr->transactionLock);
-                
-                LogMessageEx(mgr->logDevice, "Exited transaction mode");
-                continue;
+                CmtReleaseLock(mgr->queueManipulationLock);
             }
-            CmtReleaseLock(mgr->transactionLock);
         }
         
-        // Process regular commands
-        CmtGetLock(mgr->transactionLock);
-        bool canProcessCommands = !mgr->inTransactionMode || mgr->shutdownRequested;
-        CmtReleaseLock(mgr->transactionLock);
-        
-        if (canProcessCommands) {
-            QueuedCommand *cmd = NULL;
-            int itemsRead = 0;
-            
-            // Acquire manipulation lock before reading from queues
-            CmtGetLock(mgr->queueManipulationLock);
-            
-            // Check queues in priority order
-            itemsRead = CmtReadTSQData(mgr->highPriorityQueue, &cmd, 1, 0, 0);
-            if (itemsRead <= 0) {
-                itemsRead = CmtReadTSQData(mgr->normalPriorityQueue, &cmd, 1, 0, 0);
-                if (itemsRead <= 0) {
-                    itemsRead = CmtReadTSQData(mgr->lowPriorityQueue, &cmd, 1, 0, 0);
-                }
-            }
-            
-            // Release manipulation lock immediately after reading
-            CmtReleaseLock(mgr->queueManipulationLock);
-            
-            if (itemsRead > 0 && cmd) {
-                // During shutdown, just release the command
-                if (mgr->shutdownRequested) {
-                    LogDebugEx(mgr->logDevice, "Releasing command %u during shutdown", cmd->id);
-                    Command_Release(mgr, cmd);
-                    continue;
+        // Process command if we have one
+        if (cmd) {
+            // During shutdown, just release the command
+            if (mgr->shutdownRequested) {
+                LogDebugEx(mgr->logDevice, "Releasing command %u during shutdown", cmd->id);
+                
+                // For blocking commands, signal cancellation
+                BlockingContext *blockingCtx = (BlockingContext*)cmd->blockingContext;
+                if (blockingCtx && cmd->transactionId == 0) {
+                    blockingCtx->errorCode = ERR_CANCELLED;
+                    blockingCtx->completed = 1;
                 }
                 
-                // Process the command
-                CmtGetLock(mgr->currentCommandLock);
-                mgr->currentCommand = cmd;
-                CmtReleaseLock(mgr->currentCommandLock);
-                
-                ProcessCommand(mgr, cmd);
-                
-                CmtGetLock(mgr->currentCommandLock);
-                mgr->currentCommand = NULL;
-                CmtReleaseLock(mgr->currentCommandLock);
-                
-                // Release queue's reference
                 Command_Release(mgr, cmd);
-            } else {
-                Delay(0.01);
+                continue;
             }
+            
+            // Check if this starts a new transaction
+            if (cmd->transactionId != 0 && mgr->currentTransactionId == 0) {
+                mgr->currentTransactionId = cmd->transactionId;
+                mgr->currentTransactionQueue = cmdQueue;
+                
+                // Get transaction info from first command
+                CmtGetLock(mgr->transactionLock);
+                currentTransaction = (DeviceTransaction*)cmd->blockingContext;
+                if (currentTransaction) {
+                    // Allocate results array
+                    transactionResults = calloc(currentTransaction->commandCount, 
+                                              sizeof(TransactionCommandResult));
+                    transactionCommandIndex = 0;
+                    expectedTransactionCommands = currentTransaction->commandCount;
+                    currentTransaction->startTime = Timer();
+                    
+                    LogMessageEx(mgr->logDevice, "Starting transaction %u with %d commands", 
+                               mgr->currentTransactionId, expectedTransactionCommands);
+                }
+                CmtReleaseLock(mgr->transactionLock);
+            }
+            
+            // Store current command for status
+            CmtGetLock(mgr->currentCommandLock);
+            mgr->currentCommand = cmd;
+            CmtReleaseLock(mgr->currentCommandLock);
+            
+            // Process the command
+            void *result = NULL;
+            BlockingContext *blockingCtx = NULL;
+            
+            // For non-transaction blocking commands
+            if (cmd->transactionId == 0 && cmd->blockingContext) {
+                blockingCtx = (BlockingContext*)cmd->blockingContext;
+                result = blockingCtx->result;
+            } else {
+                result = mgr->adapter->createCommandResult(cmd->commandType);
+            }
+            
+            int errorCode = ExecuteDeviceCommand(mgr, cmd, result);
+            
+            // Update statistics
+            CmtGetLock(mgr->statsLock);
+            mgr->totalProcessed++;
+            if (errorCode != SUCCESS) {
+                mgr->totalErrors++;
+            }
+            CmtReleaseLock(mgr->statsLock);
+            
+            // Handle connection loss
+            if (errorCode == ERR_COMM_FAILED || errorCode == ERR_TIMEOUT || errorCode == ERR_NOT_CONNECTED) {
+                mgr->isConnected = 0;
+                mgr->lastReconnectTime = Timer();
+                LogWarningEx(mgr->logDevice, "Lost connection during command execution");
+            }
+            
+            // Handle result based on command type
+            if (cmd->transactionId != 0) {
+                // Part of transaction
+                if (transactionResults && transactionCommandIndex < expectedTransactionCommands) {
+                    transactionResults[transactionCommandIndex].commandType = cmd->commandType;
+                    transactionResults[transactionCommandIndex].errorCode = errorCode;
+                    transactionResults[transactionCommandIndex].result = result;
+                    transactionCommandIndex++;
+                    
+                    // Check for abort on error
+                    if (errorCode != SUCCESS && currentTransaction &&
+                        (currentTransaction->flags & DEVICE_TXN_ABORT_ON_ERROR)) {
+                        
+                        LogWarningEx(mgr->logDevice, "Transaction %u aborted due to error in command %d", 
+                                   mgr->currentTransactionId, transactionCommandIndex);
+                        
+                        // Mark remaining commands as cancelled
+                        for (int i = transactionCommandIndex; i < expectedTransactionCommands; i++) {
+                            transactionResults[i].commandType = 0;
+                            transactionResults[i].errorCode = ERR_CANCELLED;
+                            transactionResults[i].result = NULL;
+                        }
+                        
+                        // Force transaction completion
+                        transactionCommandIndex = expectedTransactionCommands;
+                    }
+                    
+                    // Check if transaction complete
+                    if (transactionCommandIndex >= expectedTransactionCommands) {
+                        // Transaction complete - call callback
+                        if (currentTransaction && currentTransaction->callback) {
+                            int successCount = 0, failureCount = 0;
+                            for (int i = 0; i < expectedTransactionCommands; i++) {
+                                if (transactionResults[i].errorCode == SUCCESS) {
+                                    successCount++;
+                                } else {
+                                    failureCount++;
+                                }
+                            }
+                            
+                            currentTransaction->callback(mgr->currentTransactionId, 
+                                                       successCount, failureCount,
+                                                       transactionResults, expectedTransactionCommands,
+                                                       currentTransaction->userData);
+                        }
+                        
+                        // Clean up transaction
+                        for (int i = 0; i < expectedTransactionCommands; i++) {
+                            if (transactionResults[i].result) {
+                                mgr->adapter->freeCommandResult(transactionResults[i].commandType,
+                                                              transactionResults[i].result);
+                            }
+                        }
+                        free(transactionResults);
+                        transactionResults = NULL;
+                        
+                        // Remove transaction from uncommitted list
+                        CmtGetLock(mgr->transactionLock);
+                        int count = ListNumItems(mgr->uncommittedTransactions);
+                        for (int i = 1; i <= count; i++) {
+                            DeviceTransaction **txnPtr = ListGetPtrToItem(mgr->uncommittedTransactions, i);
+                            if (txnPtr && *txnPtr && (*txnPtr)->id == mgr->currentTransactionId) {
+                                free(*txnPtr);
+                                ListRemoveItem(mgr->uncommittedTransactions, 0, i);
+                                break;
+                            }
+                        }
+                        CmtReleaseLock(mgr->transactionLock);
+                        
+                        LogMessageEx(mgr->logDevice, "Completed transaction %u", mgr->currentTransactionId);
+                        
+                        // Reset transaction state
+                        mgr->currentTransactionId = 0;
+                        mgr->currentTransactionQueue = 0;
+                        currentTransaction = NULL;
+                        transactionCommandIndex = 0;
+                        expectedTransactionCommands = 0;
+                    }
+                }
+            } else if (blockingCtx) {
+                // Blocking non-transaction command
+                blockingCtx->errorCode = errorCode;
+                blockingCtx->completed = 1;
+                // Don't free result - blocking thread owns it
+            } else {
+                // Async non-transaction command
+                if (cmd->callback) {
+                    cmd->callback(cmd->id, cmd->commandType, result, cmd->userData);
+                }
+                mgr->adapter->freeCommandResult(cmd->commandType, result);
+            }
+            
+            // Clear current command
+            CmtGetLock(mgr->currentCommandLock);
+            mgr->currentCommand = NULL;
+            CmtReleaseLock(mgr->currentCommandLock);
+            
+            // Apply command delay
+            if (mgr->adapter->getCommandDelay) {
+                int delayMs = mgr->adapter->getCommandDelay(cmd->commandType);
+                if (delayMs > 0) {
+                    Delay(delayMs / 1000.0);
+                }
+            }
+            
+            // Release queue's reference
+            Command_Release(mgr, cmd);
         } else {
+            // No command available
             Delay(0.01);
         }
     }
@@ -1155,7 +1405,7 @@ static int ProcessCommand(DeviceQueueManager *mgr, QueuedCommand *cmd) {
     CmtReleaseLock(mgr->statsLock);
     
     // Handle connection loss
-    if (errorCode == ERR_COMM_FAILED || errorCode == ERR_TIMEOUT) {
+    if (errorCode == ERR_COMM_FAILED || errorCode == ERR_TIMEOUT || errorCode == ERR_NOT_CONNECTED) {
         mgr->isConnected = 0;
         mgr->lastReconnectTime = Timer();
         LogWarningEx(mgr->logDevice, "Lost connection during command execution");
@@ -1193,24 +1443,6 @@ static int ProcessCommand(DeviceQueueManager *mgr, QueuedCommand *cmd) {
 /******************************************************************************
  * Internal Processing Functions
  ******************************************************************************/
-
-static DeviceTransaction* GetNextReadyTransaction(DeviceQueueManager *mgr) {
-    // Must be called with transaction lock held
-    int count = ListNumItems(mgr->activeTransactions);
-    
-    for (int i = 1; i <= count; i++) {
-        DeviceTransaction **txnPtr = ListGetPtrToItem(mgr->activeTransactions, i);
-        if (txnPtr && *txnPtr) {
-            DeviceTransaction *txn = *txnPtr;
-            if (txn->committed && !txn->executing) {
-                return txn;
-            }
-        }
-    }
-    
-    return NULL;
-}
-
 static int ProcessTransaction(DeviceQueueManager *mgr, DeviceTransaction *txn) {
     LogMessageEx(mgr->logDevice, "Processing transaction %u with %d commands", 
                txn->id, txn->commandCount);
@@ -1304,17 +1536,18 @@ static int ProcessTransaction(DeviceQueueManager *mgr, DeviceTransaction *txn) {
                      txn->results, txn->commandCount, txn->userData);
     }
     
-    // Remove from active list and clean up
-    CmtGetLock(mgr->transactionLock);
-    int count = ListNumItems(mgr->activeTransactions);
-    for (int i = 1; i <= count; i++) {
-        DeviceTransaction **txnPtr = ListGetPtrToItem(mgr->activeTransactions, i);
-        if (txnPtr && *txnPtr == txn) {
-            ListRemoveItem(mgr->activeTransactions, 0, i);
-            break;
-        }
-    }
-    CmtReleaseLock(mgr->transactionLock);
+    // Remove transaction from uncommitted list
+	CmtGetLock(mgr->transactionLock);
+	int count = ListNumItems(mgr->uncommittedTransactions);
+	for (int i = 1; i <= count; i++) {
+	    DeviceTransaction **txnPtr = ListGetPtrToItem(mgr->uncommittedTransactions, i);
+	    if (txnPtr && *txnPtr && (*txnPtr)->id == mgr->currentTransactionId) {
+	        free(*txnPtr);
+	        ListRemoveItem(mgr->uncommittedTransactions, 0, i);
+	        break;
+	    }
+	}
+	CmtReleaseLock(mgr->transactionLock);
     
     // Free commands and results
     for (int i = 0; i < txn->commandCount; i++) {
@@ -1323,25 +1556,9 @@ static int ProcessTransaction(DeviceQueueManager *mgr, DeviceTransaction *txn) {
         }
     }
     
-    CleanupTransactionResults(mgr, txn);
     free(txn);
     
     return SUCCESS;
-}
-
-static void CleanupTransactionResults(DeviceQueueManager *mgr, DeviceTransaction *txn) {
-    if (!txn->results) return;
-    
-    for (int i = 0; i < txn->commandCount; i++) {
-        if (txn->results[i].result && mgr->adapter->freeCommandResult) {
-            // Use stored commandType from results instead of accessing commands
-            mgr->adapter->freeCommandResult(txn->results[i].commandType, 
-                                          txn->results[i].result);
-        }
-    }
-    
-    free(txn->results);
-    txn->results = NULL;
 }
 
 static int ExecuteDeviceCommand(DeviceQueueManager *mgr, QueuedCommand *cmd, void *result) {
@@ -1445,9 +1662,9 @@ static void Command_Release(DeviceQueueManager *mgr, QueuedCommand *cmd) {
 
 static DeviceTransaction* FindTransaction(DeviceQueueManager *mgr, DeviceTransactionHandle id) {
     // Must be called with transaction lock held
-    int count = ListNumItems(mgr->activeTransactions);
+    int count = ListNumItems(mgr->uncommittedTransactions);
     for (int i = 1; i <= count; i++) {
-        DeviceTransaction **txnPtr = ListGetPtrToItem(mgr->activeTransactions, i);
+        DeviceTransaction **txnPtr = ListGetPtrToItem(mgr->uncommittedTransactions, i);
         if (txnPtr && *txnPtr && (*txnPtr)->id == id) {
             return *txnPtr;
         }

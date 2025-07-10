@@ -184,6 +184,17 @@ int Test_ConcurrentCancellation(DeviceQueueTestContext *ctx, char *errorMsg, int
 int Test_Statistics(DeviceQueueTestContext *ctx, char *errorMsg, int errorMsgSize);
 int Test_ReconnectionLogic(DeviceQueueTestContext *ctx, char *errorMsg, int errorMsgSize);
 int Test_EdgeCases(DeviceQueueTestContext *ctx, char *errorMsg, int errorMsgSize);
+int Test_EmptyTransaction(DeviceQueueTestContext *ctx, char *errorMsg, int errorMsgSize);
+int Test_GetDeviceContext(DeviceQueueTestContext *ctx, char *errorMsg, int errorMsgSize);
+int Test_ShutdownWithBlockingCommand(DeviceQueueTestContext *ctx, char *errorMsg, int errorMsgSize);
+int Test_TransactionPriorityOrdering(DeviceQueueTestContext *ctx, char *errorMsg, int errorMsgSize);
+int Test_ThreadPoolExhaustion(DeviceQueueTestContext *ctx, char *errorMsg, int errorMsgSize);
+int Test_SetLogDevice(DeviceQueueTestContext *ctx, char *errorMsg, int errorMsgSize);
+int Test_IsInTransaction(DeviceQueueTestContext *ctx, char *errorMsg, int errorMsgSize);
+int Test_LargeTransactions(DeviceQueueTestContext *ctx, char *errorMsg, int errorMsgSize);
+int Test_NullCallbacks(DeviceQueueTestContext *ctx, char *errorMsg, int errorMsgSize);
+int Test_MixedCommandsAndTransactions(DeviceQueueTestContext *ctx, char *errorMsg, int errorMsgSize);
+int Test_TransactionTimeout(DeviceQueueTestContext *ctx, char *errorMsg, int errorMsgSize);
 
 // Mock device helper functions
 MockDeviceContext* Mock_CreateContext(void);
