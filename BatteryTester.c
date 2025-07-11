@@ -9,6 +9,7 @@
 #include "BatteryTester.h"  
 #include "biologic_dll.h"
 #include "biologic_queue.h"
+#include "biologic_test.h"
 #include "psb10000_dll.h"
 #include "psb10000_queue.h"
 #include "psb10000_test.h"
@@ -40,12 +41,6 @@ int g_systemBusy = 0;
 // Queue managers
 PSBQueueManager *g_psbQueueMgr = NULL;
 BioQueueManager *g_bioQueueMgr = NULL;
-
-/******************************************************************************
- * Module-Specific Global Variables
- ******************************************************************************/
-// Test suite contexts for different devices
-static TestSuiteContext g_bioTestContext = {0};
 
 /******************************************************************************
  * Main Function
@@ -238,74 +233,6 @@ int CVICALLBACK RemoteModeToggle (int panel, int control, int event,
             }
             break;
     }
-    return 0;
-}
-
-/******************************************************************************
- * Test BioLogic Button Callback
- ******************************************************************************/
-int CVICALLBACK TestBiologicCallback(int panel, int control, int event,
-                                     void *callbackData, int eventData1, int eventData2) {
-    if (event != EVENT_COMMIT) {
-        return 0;
-    }
-    
-    int result;
-    char message[LARGE_BUFFER_SIZE];
-    
-    // Check if BioLogic is connected through queue manager
-    BioQueueManager *bioQueueMgr = BIO_GetGlobalQueueManager();
-    if (!bioQueueMgr) {
-        SetCtrlVal(panel, PANEL_STR_BIOLOGIC_STATUS, "BioLogic queue manager not initialized");
-        LogErrorEx(LOG_DEVICE_BIO, "BioLogic queue manager not initialized");
-        return 0;
-    }
-    
-    BioQueueStats stats;
-    BIO_QueueGetStats(bioQueueMgr, &stats);
-    
-    if (!stats.isConnected) {
-        SetCtrlVal(panel, PANEL_STR_BIOLOGIC_STATUS, "BioLogic not connected");
-        LogErrorEx(LOG_DEVICE_BIO, "BioLogic not connected");
-        return 0;
-    }
-    
-    // Disable the button to prevent multiple clicks
-    SetCtrlAttribute(panel, control, ATTR_DIMMED, 1);
-    
-    // Update UI
-    SetCtrlVal(panel, PANEL_STR_BIOLOGIC_STATUS, "Testing BioLogic connection...");
-    ProcessDrawEvents();
-    
-    // Test the connection using queued command
-    BioCommandParams params = {0};
-    BioCommandResult cmdResult;
-    
-    result = BIO_QueueCommandBlocking(bioQueueMgr, BIO_CMD_TEST_CONNECTION,
-                                    &params, BIO_PRIORITY_HIGH, &cmdResult,
-                                    BIO_QUEUE_COMMAND_TIMEOUT_MS);
-    
-    if (result == SUCCESS) {
-        SetCtrlVal(panel, PANEL_STR_BIOLOGIC_STATUS, "Connection test passed!");
-        LogMessageEx(LOG_DEVICE_BIO, "BioLogic connection test PASSED!");
-        
-        // Update LED to show success
-        SetCtrlAttribute(panel, PANEL_LED_BIOLOGIC_STATUS, ATTR_ON_COLOR, VAL_GREEN);
-        SetCtrlVal(panel, PANEL_LED_BIOLOGIC_STATUS, 1);
-    } else {
-        SAFE_SPRINTF(message, sizeof(message), 
-                    "Connection test failed: %s", GetErrorString(result));
-        SetCtrlVal(panel, PANEL_STR_BIOLOGIC_STATUS, message);
-        LogErrorEx(LOG_DEVICE_BIO, "Test Failed: %s", message);
-        
-        // Update LED to show error
-        SetCtrlAttribute(panel, PANEL_LED_BIOLOGIC_STATUS, ATTR_ON_COLOR, VAL_RED);
-        SetCtrlVal(panel, PANEL_LED_BIOLOGIC_STATUS, 1);
-    }
-    
-    // Re-enable the button
-    SetCtrlAttribute(panel, control, ATTR_DIMMED, 0);
-    
     return 0;
 }
 
