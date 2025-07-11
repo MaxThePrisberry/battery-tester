@@ -136,6 +136,7 @@ static int BIO_AdapterConnect(void *deviceContext, void *connectionParams) {
         
         LogMessageEx(LOG_DEVICE_BIO, "Successfully connected to BioLogic %s (ID: %d)", 
                    deviceTypeName, ctx->deviceID);
+        LogMessageEx(LOG_DEVICE_BIO, "  Device Code: %d", deviceInfo.DeviceCode);
         LogMessageEx(LOG_DEVICE_BIO, "  Firmware Version: %d", deviceInfo.FirmwareVersion);
         LogMessageEx(LOG_DEVICE_BIO, "  Channels: %d", deviceInfo.NumberOfChannels);
         
@@ -146,10 +147,79 @@ static int BIO_AdapterConnect(void *deviceContext, void *connectionParams) {
             BL_Disconnect(ctx->deviceID);
             ctx->deviceID = -1;
             ctx->isConnected = false;
+            return result;
         }
+        
+        // Small delay to let device stabilize
+        Delay(0.5);
+        
+        // Get plugged channels - returns array of 0s and 1s
+        LogMessageEx(LOG_DEVICE_BIO, "Scanning for plugged channels...");
+        uint8_t channelsPlugged[16] = {0};
+        result = BL_GetChannelsPlugged(ctx->deviceID, channelsPlugged, 16);
+        
+        if (result == SUCCESS) {
+            // Log which channels are plugged
+            for (int i = 0; i < 16; i++) {
+                if (channelsPlugged[i]) {
+                    LogMessageEx(LOG_DEVICE_BIO, "  Channel %d: PLUGGED", i);
+                }
+            }
+        } else {
+            LogWarningEx(LOG_DEVICE_BIO, "Failed to get plugged channels: %s - assuming channel 0", 
+                       BL_GetErrorString(result));
+            channelsPlugged[0] = 1;  // Assume channel 0 is plugged
+        }
+        
+        // Load firmware using the plugged channels array directly
+        LogMessageEx(LOG_DEVICE_BIO, "Loading firmware...");
+        
+        int loadResults[16] = {0};
+        
+        // Pass the plugged array [1,0,0,0,...] directly as channels parameter
+        result = BL_LoadFirmware(ctx->deviceID,      // Device ID
+                               channelsPlugged,       // Plugged channels array [1,0,0,...]
+                               loadResults,           // Results array
+                               16,                    // Always 16
+                               true,                  // ShowGauge = true
+                               false,                 // ForceReload = false
+                               NULL,                  // NULL kernel path (use internal)
+                               NULL);                 // NULL XLX path (use internal)
+        
+        if (result == SUCCESS) {
+            LogMessageEx(LOG_DEVICE_BIO, "Firmware loaded successfully");
+            
+            // Verify channel status
+            TChannelInfos_t channelInfo;
+            if (BL_GetChannelInfos(ctx->deviceID, 0, &channelInfo) == SUCCESS) {
+                LogMessageEx(LOG_DEVICE_BIO, "Channel 0 status:");
+                LogMessageEx(LOG_DEVICE_BIO, "  Firmware Code: %d%s", channelInfo.FirmwareCode,
+                           channelInfo.FirmwareCode == KIBIO_FIRM_KERNEL ? " (Kernel)" : "");
+                LogMessageEx(LOG_DEVICE_BIO, "  State: %d%s", channelInfo.State,
+                           channelInfo.State == KBIO_STATE_STOP ? " (Stopped)" : "");
+            }
+            
+        } else if (result == ERR_FIRM_FIRMWARENOTLOADED) {
+            LogMessageEx(LOG_DEVICE_BIO, "Firmware already loaded");
+        } else {
+            LogWarningEx(LOG_DEVICE_BIO, "Firmware load failed: %s - continuing anyway", 
+                       BL_GetErrorString(result));
+        }
+        
+        // Final connection test
+        result = BL_TestConnection(ctx->deviceID);
+        if (result != SUCCESS) {
+            LogWarningEx(LOG_DEVICE_BIO, "Connection test failed: %s", BL_GetErrorString(result));
+        } else {
+            LogMessageEx(LOG_DEVICE_BIO, "Connection test passed");
+        }
+        
+        // Always return success to allow operation
+        return SUCCESS;
+        
     } else {
         LogWarningEx(LOG_DEVICE_BIO, "Failed to connect to BioLogic at %s: %s", 
-                   params->address, GetErrorString(result));
+                   params->address, BL_GetErrorString(result));
         ctx->isConnected = false;
     }
     
