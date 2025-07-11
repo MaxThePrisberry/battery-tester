@@ -197,7 +197,7 @@ static int InitializeLogging(void) {
         printf("Log file path: %s\n", logPath);
         #endif
         
-        // Check if log file is too large
+        /*// Check if log file is too large
         if (FileExists(logPath)) {
             FILE *checkFile = fopen(logPath, "r");
             if (checkFile) {
@@ -213,7 +213,7 @@ static int InitializeLogging(void) {
                     rename(logPath, backupPath);
                 }
             }
-        }
+        }*/
         
         // Try to open/create the log file
         g_logFile = fopen(logPath, "w");
