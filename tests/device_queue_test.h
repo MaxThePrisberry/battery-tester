@@ -159,6 +159,7 @@ typedef struct {
 int CVICALLBACK TestDeviceQueueCallback(int panel, int control, int event,
                                        void *callbackData, int eventData1, 
                                        int eventData2);
+int CVICALLBACK TestDeviceQueueWorkerThread(void *functionData);
 
 // Test suite control functions
 int DeviceQueueTest_Initialize(DeviceQueueTestContext *ctx, int panel, int buttonControl);

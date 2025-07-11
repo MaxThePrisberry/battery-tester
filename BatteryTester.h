@@ -23,7 +23,7 @@
 #define  PANEL_NUM_CURRENT                8       /* control type: numeric, callback function: (none) */
 #define  PANEL_NUM_VOLTAGE                9       /* control type: numeric, callback function: (none) */
 #define  PANEL_TOGGLE_REMOTE_MODE         10      /* control type: binary, callback function: RemoteModeToggle */
-#define  PANEL_BTN_TEST_DEVICE_Q          11      /* control type: command, callback function: TestDeviceQueueCallback */
+#define  PANEL_BTN_TEST_QUEUE             11      /* control type: command, callback function: TestDeviceQueueCallback */
 #define  PANEL_BTN_TEST_PSB               12      /* control type: command, callback function: TestPSBCallback */
 #define  PANEL_STR_PSB_STATUS             13      /* control type: string, callback function: (none) */
 #define  PANEL_BTN_TEST_BIOLOGIC          14      /* control type: command, callback function: TestBiologicCallback */

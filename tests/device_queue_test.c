@@ -17,8 +17,8 @@
  * Static Variables
  ******************************************************************************/
 
-static DeviceQueueTestContext g_testContext = {0};
-static CmtThreadFunctionID g_testThreadId = 0;
+static DeviceQueueTestContext *g_deviceQueueTestSuiteContext = NULL;
+static CmtThreadFunctionID g_deviceQueueTestThreadId = 0;
 
 static const char* g_mockCommandNames[] = {
     "NONE",
@@ -744,7 +744,7 @@ static int CVICALLBACK TestThreadFunction(void *functionData) {
     SetCtrlAttribute(ctx->panelHandle, ctx->buttonControl, ATTR_DIMMED, 0);
     
     // Clear thread ID
-    g_testThreadId = 0;
+    g_deviceQueueTestThreadId = 0;
     
     return 0;
 }
@@ -768,37 +768,131 @@ static void UpdateTestProgress(DeviceQueueTestContext *context, const char *mess
 int CVICALLBACK TestDeviceQueueCallback(int panel, int control, int event,
                                        void *callbackData, int eventData1, 
                                        int eventData2) {
-    if (event != EVENT_COMMIT) return 0;
+    switch (event) {
+        case EVENT_COMMIT:
+            // Check if this is a cancel request (test is running)
+            if (g_deviceQueueTestSuiteContext != NULL) {
+                LogMessage("User requested to cancel Device Queue test suite");
+                DeviceQueueTest_Cancel(g_deviceQueueTestSuiteContext);
+                
+                // Update button text to show cancelling
+                SetCtrlAttribute(panel, control, ATTR_LABEL_TEXT, "Cancelling...");
+                SetCtrlAttribute(panel, control, ATTR_DIMMED, 1);
+                
+                return 0;
+            }
+            
+            // Otherwise, this is a start request
+            // Check if system is busy with another operation
+            CmtGetLock(g_busyLock);
+            if (g_systemBusy) {
+                CmtReleaseLock(g_busyLock);
+                LogWarning("Cannot start test - system is busy");
+                MessagePopup("System Busy", 
+                           "Another operation is in progress.\n"
+                           "Please wait for it to complete before starting a test.");
+                return 0;
+            }
+            g_systemBusy = 1;
+            CmtReleaseLock(g_busyLock);
+            
+            // Dim EXPERIMENTS tab control
+            SetCtrlAttribute(panel, PANEL_EXPERIMENTS, ATTR_DIMMED, 1);
+            
+            // Change Test Queue button text to "Cancel"
+            SetCtrlAttribute(panel, control, ATTR_LABEL_TEXT, "Cancel");
+            
+            // Create test context
+            DeviceQueueTestContext *context = calloc(1, sizeof(DeviceQueueTestContext));
+            if (context) {
+                // Initialize the test context
+                int result = DeviceQueueTest_Initialize(context, panel, control);
+                if (result != SUCCESS) {
+                    LogError("Failed to initialize device queue test context");
+                    MessagePopup("Test Error", "Failed to initialize test suite");
+                    
+                    // Clean up and restore UI
+                    free(context);
+                    SetCtrlAttribute(panel, PANEL_EXPERIMENTS, ATTR_DIMMED, 0);
+                    SetCtrlAttribute(panel, control, ATTR_LABEL_TEXT, "Test Queue");
+                    
+                    CmtGetLock(g_busyLock);
+                    g_systemBusy = 0;
+                    CmtReleaseLock(g_busyLock);
+                    return 0;
+                }
+                
+                context->state = TEST_STATE_PREPARING;
+                
+                // Store pointer to running context
+                g_deviceQueueTestSuiteContext = context;
+                
+                // Start test in worker thread
+                CmtScheduleThreadPoolFunction(g_threadPool, 
+                    TestDeviceQueueWorkerThread, context, &g_deviceQueueTestThreadId);
+            } else {
+                // Failed to allocate - restore UI
+                LogError("Failed to allocate memory for test context");
+                SetCtrlAttribute(panel, PANEL_EXPERIMENTS, ATTR_DIMMED, 0);
+                SetCtrlAttribute(panel, control, ATTR_LABEL_TEXT, "Test Queue");
+                
+                CmtGetLock(g_busyLock);
+                g_systemBusy = 0;
+                CmtReleaseLock(g_busyLock);
+            }
+            break;
+    }
+    return 0;
+}
+
+int CVICALLBACK TestDeviceQueueWorkerThread(void *functionData) {
+    DeviceQueueTestContext *context = (DeviceQueueTestContext*)functionData;
     
-    // Check if test is running
-    if (DeviceQueueTest_IsRunning()) {
-        // Cancel request
-        DeviceQueueTest_Cancel(&g_testContext);
-        SetCtrlAttribute(panel, control, ATTR_LABEL_TEXT, "Cancelling...");
-        SetCtrlAttribute(panel, control, ATTR_DIMMED, 1);
-        return 0;
+    // Run the test suite
+    int result = DeviceQueueTest_Run(context);
+    
+    // Log results
+    if (result > 0) {
+        LogMessage("Device Queue test suite completed successfully (%d tests passed)", result);
+    } else if (result == -2) {
+        LogMessage("Device Queue test suite cancelled by user");
+    } else if (result == 0) {
+        LogWarning("Device Queue test suite completed with failures");
+    } else {
+        LogError("Device Queue test suite failed with error: %d", result);
     }
     
-    // Initialize test context
-    int result = DeviceQueueTest_Initialize(&g_testContext, panel, control);
-    if (result != SUCCESS) {
-        LogError("Failed to initialize test context");
-        return 0;
+    // Clean up
+    DeviceQueueTest_Cleanup(context);
+    
+    // Clear the running context pointer
+    g_deviceQueueTestSuiteContext = NULL;
+    
+    // Free the context
+    free(context);
+    
+    // Restore UI controls
+    // Re-enable EXPERIMENTS tab control
+    SetCtrlAttribute(g_mainPanelHandle, PANEL_EXPERIMENTS, ATTR_DIMMED, 0);
+    
+    // Re-enable all tabs
+    int numTabs;
+    GetNumTabPages(g_mainPanelHandle, PANEL_EXPERIMENTS, &numTabs);
+    for (int i = 0; i < numTabs; i++) {
+        SetTabPageAttribute(g_mainPanelHandle, PANEL_EXPERIMENTS, i, ATTR_DIMMED, 0);
     }
     
-    // Change button to show Cancel
-    SetCtrlAttribute(panel, control, ATTR_LABEL_TEXT, "Cancel");
+    // Restore Test Queue button
+    SetCtrlAttribute(g_mainPanelHandle, PANEL_BTN_TEST_QUEUE, ATTR_LABEL_TEXT, "Test Queue");
+    SetCtrlAttribute(g_mainPanelHandle, PANEL_BTN_TEST_QUEUE, ATTR_DIMMED, 0);
     
-    // Start test thread using the test thread pool
-    int error = CmtScheduleThreadPoolFunction(g_testContext.testThreadPool, TestThreadFunction, 
-                                            &g_testContext, &g_testThreadId);
-    if (error != 0) {
-        LogError("Failed to start test thread");
-        SetCtrlAttribute(panel, control, ATTR_LABEL_TEXT, "Test Queue");
-        g_testContext.state = TEST_STATE_ERROR;
-        DeviceQueueTest_Cleanup(&g_testContext);
-        return 0;
-    }
+    // Clear thread ID
+    g_deviceQueueTestThreadId = 0;
+    
+    // Clear busy flag
+    CmtGetLock(g_busyLock);
+    g_systemBusy = 0;
+    CmtReleaseLock(g_busyLock);
     
     return 0;
 }
@@ -863,9 +957,103 @@ int DeviceQueueTest_Initialize(DeviceQueueTestContext *ctx, int panel, int butto
 }
 
 int DeviceQueueTest_Run(DeviceQueueTestContext *ctx) {
-    // The actual test execution is handled by TestThreadFunction
-    // This function is here for API consistency
-    return SUCCESS;
+    if (!ctx) return -1;
+    
+    ctx->state = TEST_STATE_RUNNING;
+    ctx->cancelRequested = 0;
+    
+    LogMessage("=== Starting Device Queue Test Suite ===");
+    
+    ctx->suiteStartTime = Timer();
+    
+    // Reset test results
+    ctx->totalTests = 0;
+    ctx->passedTests = 0;
+    ctx->failedTests = 0;
+    
+    // Get test cases array (these are already defined in device_queue_test.c)
+    extern TestCase g_testCases[];
+    extern int g_numTestCases;
+    
+    // Run each test
+    for (int i = 0; i < g_numTestCases; i++) {
+        // Check for cancellation before starting each test
+        if (ctx->cancelRequested) {
+            LogMessage("Test suite cancelled before test %d/%d", i + 1, g_numTestCases);
+            break;
+        }
+        
+        TestCase *test = &g_testCases[i];
+        
+        LogMessage("Running test %d/%d: %s", i + 1, g_numTestCases, test->testName);
+        
+        strcpy(ctx->currentTestName, test->testName);
+        ctx->testStartTime = Timer();
+        
+        // Reset mock device statistics before each test
+        if (ctx->mockContext) {
+            Mock_ResetStatistics(ctx->mockContext);
+        }
+        
+        // Run the test
+        test->result = test->testFunction(ctx, test->errorMessage, sizeof(test->errorMessage));
+        test->executionTime = Timer() - ctx->testStartTime;
+        
+        if (test->result > 0) {
+            LogMessage("  ? PASSED (%.2f seconds)", test->executionTime);
+            ctx->passedTests++;
+        } else {
+            LogError("  ? FAILED: %s", test->errorMessage);
+            ctx->failedTests++;
+        }
+        
+        ctx->totalTests++;
+        
+        // Brief delay between tests
+        if (i < g_numTestCases - 1 && !ctx->cancelRequested) {
+            ProcessSystemEvents();
+            Delay(TEST_DELAY_SHORT);
+        }
+    }
+    
+    // Generate summary
+    double totalTime = Timer() - ctx->suiteStartTime;
+    
+    // Set final state
+    if (ctx->cancelRequested) {
+        ctx->state = TEST_STATE_ABORTED;
+    } else if (ctx->failedTests == 0) {
+        ctx->state = TEST_STATE_COMPLETED;
+    } else {
+        ctx->state = TEST_STATE_ERROR;
+    }
+    
+    // Log summary
+    LogMessage("========================================");
+    LogMessage("Device Queue Test Suite Summary:");
+    LogMessage("Total Tests: %d", ctx->totalTests);
+    LogMessage("Passed: %d", ctx->passedTests);
+    LogMessage("Failed: %d", ctx->failedTests);
+    LogMessage("Total Time: %.2f seconds", totalTime);
+    LogMessage("========================================");
+    
+    if (ctx->failedTests > 0) {
+        LogMessage("Failed Tests:");
+        for (int i = 0; i < g_numTestCases; i++) {
+            if (g_testCases[i].result < 0) {
+                LogMessage("  - %s: %s", g_testCases[i].testName, g_testCases[i].errorMessage);
+            }
+        }
+    }
+    
+    // Return value based on state
+    if (ctx->state == TEST_STATE_ABORTED) {
+        return -2; // Special value to indicate cancellation
+    } else if (ctx->state == TEST_STATE_COMPLETED) {
+        return ctx->totalTests; // All passed
+    } else {
+        return 0; // Some failed
+    }
 }
 
 void DeviceQueueTest_Cancel(DeviceQueueTestContext *ctx) {
@@ -932,7 +1120,7 @@ void DeviceQueueTest_Cleanup(DeviceQueueTestContext *ctx) {
 }
 
 int DeviceQueueTest_IsRunning(void) {
-    return (g_testThreadId != 0);
+    return (g_deviceQueueTestThreadId != 0);
 }
 
 /******************************************************************************

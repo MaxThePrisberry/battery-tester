@@ -5,6 +5,7 @@
  * Implementation file for comprehensive testing of PSB10000 functions
  ******************************************************************************/
 
+#include "BatteryTester.h"
 #include "psb10000_test.h"
 #include "psb10000_queue.h"
 #include "common.h"
@@ -19,6 +20,12 @@
  ******************************************************************************/
 #define TEST_DELAY_VERY_SHORT   0.1     // seconds
 #define TEST_DELAY_BETWEEN_TESTS 0.2    // seconds
+
+/******************************************************************************
+ * Global variables
+ ******************************************************************************/
+extern PSBQueueManager *g_psbQueueMgr;
+static TestSuiteContext *g_psbTestSuiteContext = NULL;
 
 /******************************************************************************
  * Test Cases Array
@@ -45,6 +52,164 @@ static TestCase testCases[] = {
 };
 
 static int numTestCases = sizeof(testCases) / sizeof(testCases[0]);
+
+/******************************************************************************
+ * Test button Callback and Thread
+ ******************************************************************************/
+
+int CVICALLBACK TestPSBCallback (int panel, int control, int event,
+                                void *callbackData, int eventData1, int eventData2) {
+    switch (event) {
+        case EVENT_COMMIT:
+            // Check if this is a cancel request (test is running)
+            if (g_psbTestSuiteContext != NULL) {
+                LogMessage("User requested to cancel PSB test suite");
+                PSB_TestSuite_Cancel(g_psbTestSuiteContext);
+                
+                // Update button text to show cancelling
+                SetCtrlAttribute(panel, control, ATTR_LABEL_TEXT, "Cancelling...");
+                SetCtrlAttribute(panel, control, ATTR_DIMMED, 1);
+                
+                return 0;
+            }
+            
+            // Otherwise, this is a start request
+            // Check if system is busy with another operation
+            CmtGetLock(g_busyLock);
+            if (g_systemBusy) {
+                CmtReleaseLock(g_busyLock);
+                LogWarning("Cannot start test - system is busy");
+                MessagePopup("System Busy", 
+                           "Another operation is in progress.\n"
+                           "Please wait for it to complete before starting a test.");
+                return 0;
+            }
+            g_systemBusy = 1;
+            CmtReleaseLock(g_busyLock);
+            
+            PSB_Handle *psbHandle = PSB_QueueGetHandle(g_psbQueueMgr);
+            if (!psbHandle || !psbHandle->isConnected) {
+                LogError("PSB not connected - cannot run test suite");
+                MessagePopup("PSB Not Connected", 
+                           "The PSB 10000 is not connected.\n"
+                           "Please ensure it is connected before running tests.");
+                
+                CmtGetLock(g_busyLock);
+                g_systemBusy = 0;
+                CmtReleaseLock(g_busyLock);
+                return 0;
+            }
+            
+            // Dim EXPERIMENTS tab control
+            SetCtrlAttribute(panel, PANEL_EXPERIMENTS, ATTR_DIMMED, 1);
+            
+            // Dim manual PSB control
+            SetCtrlAttribute(panel, PANEL_TOGGLE_REMOTE_MODE, ATTR_DIMMED, 1);
+            
+            // Change Test PSB button text to "Cancel"
+            SetCtrlAttribute(panel, control, ATTR_LABEL_TEXT, "Cancel");
+            
+            // Create test context
+            TestSuiteContext *context = calloc(1, sizeof(TestSuiteContext));
+            if (context) {
+                PSB_TestSuite_Initialize(context, psbHandle, panel, PANEL_STR_PSB_STATUS);
+                context->state = TEST_STATE_PREPARING;
+                
+                // Store pointer to running context
+                g_psbTestSuiteContext = context;
+                
+                // Start test in worker thread
+                CmtThreadFunctionID threadID;
+                CmtScheduleThreadPoolFunction(g_threadPool, 
+                    TestPSBWorkerThread, context, &threadID);
+            } else {
+                // Failed to allocate - restore UI
+                SetCtrlAttribute(panel, PANEL_EXPERIMENTS, ATTR_DIMMED, 0);
+                
+                SetCtrlAttribute(panel, PANEL_TOGGLE_REMOTE_MODE, ATTR_DIMMED, 0);
+                SetCtrlAttribute(panel, control, ATTR_LABEL_TEXT, "Test PSB");
+                
+                CmtGetLock(g_busyLock);
+                g_systemBusy = 0;
+                CmtReleaseLock(g_busyLock);
+            }
+            break;
+    }
+    return 0;
+}
+
+int CVICALLBACK TestPSBWorkerThread(void *functionData) {
+    TestSuiteContext *context = (TestSuiteContext*)functionData;
+    
+    // Run the test suite
+    int result = PSB_TestSuite_Run(context);
+    
+    // Create one-line summary for status control
+    char statusMsg[MEDIUM_BUFFER_SIZE];
+    if (context->state == TEST_STATE_ABORTED) {
+        SAFE_SPRINTF(statusMsg, sizeof(statusMsg), 
+                    "Test cancelled: %d/%d passed", 
+                    context->summary.passedTests, 
+                    context->summary.totalTests);
+    } else if (context->state == TEST_STATE_COMPLETED) {
+        SAFE_SPRINTF(statusMsg, sizeof(statusMsg), 
+                    "All tests passed (%d/%d)", 
+                    context->summary.passedTests,
+                    context->summary.totalTests);
+    } else {
+        SAFE_SPRINTF(statusMsg, sizeof(statusMsg), 
+                    "Tests failed: %d/%d passed", 
+                    context->summary.passedTests,
+                    context->summary.totalTests);
+    }
+    
+    // Update status control with summary
+    SetCtrlVal(g_mainPanelHandle, PANEL_STR_PSB_STATUS, statusMsg);
+    
+    // Log detailed results
+    if (result > 0) {
+        LogMessageEx(LOG_DEVICE_PSB, "PSB test suite completed successfully (%d tests passed)", result);
+    } else if (result == -2) {
+        LogMessageEx(LOG_DEVICE_PSB, "PSB test suite cancelled by user");
+    } else if (result == 0) {
+        LogWarningEx(LOG_DEVICE_PSB, "PSB test suite completed with failures");
+    } else {
+        LogErrorEx(LOG_DEVICE_PSB, "PSB test suite failed with error: %d", result);
+    }
+    
+    // Clean up
+    PSB_TestSuite_Cleanup(context);
+    
+    // Clear the running context pointer
+    g_psbTestSuiteContext = NULL;
+    
+    free(context);
+    
+    // Restore UI controls
+    // Re-enable EXPERIMENTS tab control
+    SetCtrlAttribute(g_mainPanelHandle, PANEL_EXPERIMENTS, ATTR_DIMMED, 0);
+    
+    // Re-enable all tabs
+    int numTabs;
+    GetNumTabPages(g_mainPanelHandle, PANEL_EXPERIMENTS, &numTabs);
+    for (int i = 0; i < numTabs; i++) {
+        SetTabPageAttribute(g_mainPanelHandle, PANEL_EXPERIMENTS, i, ATTR_DIMMED, 0);
+    }
+    
+    // Re-enable manual controls
+    SetCtrlAttribute(g_mainPanelHandle, PANEL_TOGGLE_REMOTE_MODE, ATTR_DIMMED, 0);
+    
+    // Restore Test PSB button
+    SetCtrlAttribute(g_mainPanelHandle, PANEL_BTN_TEST_PSB, ATTR_LABEL_TEXT, "Test PSB");
+    SetCtrlAttribute(g_mainPanelHandle, PANEL_BTN_TEST_PSB, ATTR_DIMMED, 0);
+    
+    // Clear busy flag
+    CmtGetLock(g_busyLock);
+    g_systemBusy = 0;
+    CmtReleaseLock(g_busyLock);
+    
+    return 0;
+}
 
 /******************************************************************************
  * Internal Helper Functions

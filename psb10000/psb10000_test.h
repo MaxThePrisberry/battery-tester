@@ -117,6 +117,7 @@ typedef struct {
 /******************************************************************************
  * Function Prototypes
  ******************************************************************************/
+int CVICALLBACK TestPSBWorkerThread(void *functionData);
 
 // Main test suite functions
 int PSB_TestSuite_Initialize(TestSuiteContext *context, PSB_Handle *handle, 
