@@ -2,9 +2,7 @@
  * biologic_test.c
  * 
  * BioLogic Test Suite Implementation
- * Comprehensive testing of BioLogic functions with queue system integration
- * 
- * Currently implements basic connection testing - full suite to be added later
+ * Updated to use high-level technique functions
  ******************************************************************************/
 
 #include "BatteryTester.h"
@@ -33,9 +31,10 @@ static BioTestSuiteContext *g_biologicTestSuiteContext = NULL;
  ******************************************************************************/
 
 static BioTestCase testCases[] = {
-    {"Connection Test", Test_BIO_Connection, 0, "", 0.0}
+    {"Connection Test", Test_BIO_Connection, 0, "", 0.0},
+    {"OCV Test", Test_BIO_OCV, 0, "", 0.0},
+    {"PEIS Test", Test_BIO_PEIS, 0, "", 0.0}
 };
-
 static int numTestCases = sizeof(testCases) / sizeof(testCases[0]);
 
 /******************************************************************************
@@ -55,6 +54,17 @@ void BIO_UpdateTestProgress(BioTestSuiteContext *context, const char *message) {
         SetCtrlVal(context->panelHandle, context->statusStringControl, message);
         ProcessDrawEvents();
     }
+}
+
+void Test_BIO_TechniqueProgress(double elapsedTime, int memFilled, void *userData) {
+    BioTestSuiteContext *context = (BioTestSuiteContext*)userData;
+    if (!context) return;
+    
+    char progressMsg[256];
+    snprintf(progressMsg, sizeof(progressMsg), 
+             "Technique running: %.1f s elapsed, %d bytes collected", 
+             elapsedTime, memFilled);
+    BIO_UpdateTestProgress(context, progressMsg);
 }
 
 static void GenerateBioTestSummary(BioTestSummary *summary, BioTestCase *tests, int numTests) {
@@ -246,7 +256,6 @@ int CVICALLBACK TestBiologicWorkerThread(void *functionData) {
     free(context);
     
     // Restore UI controls
-    // Re-enable EXPERIMENTS tab control
     SetCtrlAttribute(g_mainPanelHandle, PANEL_EXPERIMENTS, ATTR_DIMMED, 0);
     
     // Re-enable all tabs
@@ -375,7 +384,6 @@ void BIO_TestSuite_Cancel(BioTestSuiteContext *context) {
 void BIO_TestSuite_Cleanup(BioTestSuiteContext *context) {
     if (context) {
         // No specific cleanup needed for BioLogic tests currently
-        // This function exists for future expansion
         LogMessageEx(LOG_DEVICE_BIO, "BioLogic test suite cleanup complete");
     }
 }
@@ -418,5 +426,125 @@ int Test_BIO_Connection(BioQueueManager *bioQueueMgr, char *errorMsg, int errorM
     }
     
     LogDebugEx(LOG_DEVICE_BIO, "BioLogic connection test passed successfully");
+    return 1;
+}
+
+int Test_BIO_OCV(BioQueueManager *bioQueueMgr, char *errorMsg, int errorMsgSize) {
+    LogDebugEx(LOG_DEVICE_BIO, "Testing BioLogic OCV functionality...");
+    
+    const uint8_t TEST_CHANNEL = 0;
+    
+    // Get device ID from queue manager
+    int deviceID = BIO_QueueGetDeviceID(bioQueueMgr);
+    if (deviceID < 0) {
+        snprintf(errorMsg, errorMsgSize, "No device connected");
+        return -1;
+    }
+    
+    LogDebugEx(LOG_DEVICE_BIO, "Running OCV measurement for %.1f seconds...", BIO_TEST_OCV_DURATION);
+    
+    // Run OCV measurement using high-level function
+    BL_RawDataBuffer *ocvData = NULL;
+    int result = BL_RunOCVQueued(
+        deviceID,
+        TEST_CHANNEL,
+        BIO_TEST_OCV_DURATION,  // duration_s
+        0.1,                    // sample_interval_s (100ms)
+        10.0,                   // record_every_dE (10mV)
+        0.1,                    // record_every_dT (100ms)
+        2,                      // e_range (10V range)
+        &ocvData,
+        0,                      // Use default timeout
+        Test_BIO_TechniqueProgress,  // Progress callback
+        g_biologicTestSuiteContext   // Pass test context
+    );
+    
+    if (result == BL_ERR_PARTIAL_DATA) {
+        LogWarningEx(LOG_DEVICE_BIO, "OCV measurement stopped with error, but partial data retrieved");
+    } else if (result != SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "OCV measurement failed: %s", BL_GetErrorString(result));
+        return -1;
+    }
+    
+    // Verify we got data
+    if (!ocvData || ocvData->numPoints == 0) {
+        snprintf(errorMsg, errorMsgSize, "No data received from OCV measurement");
+        if (ocvData) BL_FreeTechniqueResult(ocvData);
+        return -1;
+    }
+    
+    LogMessageEx(LOG_DEVICE_BIO, "========================================");
+    LogMessageEx(LOG_DEVICE_BIO, "OCV Test Results:");
+    LogMessageEx(LOG_DEVICE_BIO, "  Data Points: %d", ocvData->numPoints);
+    LogMessageEx(LOG_DEVICE_BIO, "  Variables per Point: %d", ocvData->numVariables);
+    LogMessageEx(LOG_DEVICE_BIO, "  Technique ID: %d", ocvData->techniqueID);
+    LogMessageEx(LOG_DEVICE_BIO, "========================================");
+    
+    // Clean up
+    BL_FreeTechniqueResult(ocvData);
+    
+    LogDebugEx(LOG_DEVICE_BIO, "OCV test completed successfully");
+    return 1;  // Test passed
+}
+
+int Test_BIO_PEIS(BioQueueManager *bioQueueMgr, char *errorMsg, int errorMsgSize) {
+    LogDebugEx(LOG_DEVICE_BIO, "Testing BioLogic PEIS functionality...");
+    
+    const uint8_t TEST_CHANNEL = 0;
+    
+    // Get device ID from queue manager
+    int deviceID = BIO_QueueGetDeviceID(bioQueueMgr);
+    if (deviceID < 0) {
+        snprintf(errorMsg, errorMsgSize, "No device connected");
+        return -1;
+    }
+    
+    LogDebugEx(LOG_DEVICE_BIO, "Running PEIS measurement from %.0fHz to %.0fHz...", 
+               BIO_TEST_PEIS_START_FREQ, BIO_TEST_PEIS_END_FREQ);
+    
+    // Run PEIS measurement using high-level function
+    BL_RawDataBuffer *peisData = NULL;
+    int result = BL_RunPEISQueued(
+        deviceID,
+        TEST_CHANNEL,
+        0.0,                    // e_dc (0V vs OCV)
+        0.010,                  // amplitude (10mV)
+        BIO_TEST_PEIS_START_FREQ, // initial_freq (100kHz)
+        BIO_TEST_PEIS_END_FREQ,   // final_freq (10Hz)
+        10,                     // points_per_decade
+        12,                     // i_range (auto)
+        3,                      // e_range (auto)
+        7,                      // bandwidth (7)
+        &peisData,
+        0,                      // Use default timeout
+        Test_BIO_TechniqueProgress,  // Progress callback
+        g_biologicTestSuiteContext   // Pass test context
+    );
+    
+    if (result == BL_ERR_PARTIAL_DATA) {
+        LogWarningEx(LOG_DEVICE_BIO, "PEIS measurement stopped with error, but partial data retrieved");
+    } else if (result != SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "PEIS measurement failed: %s", BL_GetErrorString(result));
+        return -1;
+    }
+    
+    // Verify we got data
+    if (!peisData || peisData->numPoints == 0) {
+        snprintf(errorMsg, errorMsgSize, "No data received from PEIS measurement");
+        if (peisData) BL_FreeTechniqueResult(peisData);
+        return -1;
+    }
+    
+    LogMessageEx(LOG_DEVICE_BIO, "========================================");
+    LogMessageEx(LOG_DEVICE_BIO, "PEIS Test Results:");
+    LogMessageEx(LOG_DEVICE_BIO, "  Data Points: %d", peisData->numPoints);
+    LogMessageEx(LOG_DEVICE_BIO, "  Variables per Point: %d", peisData->numVariables);
+    LogMessageEx(LOG_DEVICE_BIO, "  Technique ID: %d", peisData->techniqueID);
+    LogMessageEx(LOG_DEVICE_BIO, "========================================");
+    
+    // Clean up
+    BL_FreeTechniqueResult(peisData);
+    
+    LogDebugEx(LOG_DEVICE_BIO, "PEIS test completed successfully");
     return 1;
 }

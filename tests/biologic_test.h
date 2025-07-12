@@ -2,9 +2,7 @@
  * biologic_test.h
  * 
  * BioLogic Test Suite
- * Header file for comprehensive testing of BioLogic functions
- * 
- * Currently implements basic connection testing - full suite to be added later
+ * Updated to use high-level technique functions
  ******************************************************************************/
 
 #ifndef BIOLOGIC_TEST_H
@@ -26,6 +24,11 @@
 
 // Test timeout
 #define BIO_TEST_TIMEOUT_MS         5000    // 5 seconds
+
+// Test parameters
+#define BIO_TEST_OCV_DURATION       10.0    // 10 seconds
+#define BIO_TEST_PEIS_START_FREQ    100000.0 // 100kHz
+#define BIO_TEST_PEIS_END_FREQ      10.0    // 10Hz
 
 /******************************************************************************
  * Test Result Structure
@@ -80,8 +83,13 @@ void BIO_TestSuite_Cleanup(BioTestSuiteContext *context);
 
 // Individual test functions
 int Test_BIO_Connection(BioQueueManager *bioQueueMgr, char *errorMsg, int errorMsgSize);
+int Test_BIO_OCV(BioQueueManager *bioQueueMgr, char *errorMsg, int errorMsgSize);
+int Test_BIO_PEIS(BioQueueManager *bioQueueMgr, char *errorMsg, int errorMsgSize);
 
 // Utility functions
 void BIO_UpdateTestProgress(BioTestSuiteContext *context, const char *message);
+
+// Progress callback for techniques
+void Test_BIO_TechniqueProgress(double elapsedTime, int memFilled, void *userData);
 
 #endif // BIOLOGIC_TEST_H

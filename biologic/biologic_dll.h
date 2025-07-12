@@ -15,6 +15,97 @@
 #define TIMEOUT  5       // Connection timeout in seconds
 
 // ============================================================================
+// High-Level Technique Types and Structures
+// ============================================================================
+
+// Technique types
+typedef enum {
+    BIO_TECHNIQUE_NONE = 0,
+    BIO_TECHNIQUE_OCV,
+    BIO_TECHNIQUE_CA,
+    BIO_TECHNIQUE_CP,
+    BIO_TECHNIQUE_CV,
+    BIO_TECHNIQUE_PEIS,
+    BIO_TECHNIQUE_GEIS,
+    // Add more as needed
+} BioTechniqueType;
+
+// Technique state
+typedef enum {
+    BIO_TECH_STATE_IDLE = 0,
+    BIO_TECH_STATE_LOADING,
+    BIO_TECH_STATE_RUNNING,
+    BIO_TECH_STATE_COMPLETED,
+    BIO_TECH_STATE_ERROR,
+    BIO_TECH_STATE_CANCELLED
+} BioTechniqueState;
+
+// Raw data storage
+typedef struct {
+    unsigned int *rawData;      // Copy of device buffer
+    int bufferSize;             // Size in integers
+    int numPoints;              // Number of data points (rows)
+    int numVariables;           // Variables per point (columns)
+    int techniqueID;            // From TDataInfos
+    int processIndex;           // From TDataInfos
+} BL_RawDataBuffer;
+
+// Technique configuration
+typedef struct {
+    // Original parameters for reference
+    TEccParams_t originalParams;
+    TEccParam_t *paramsCopy;    // Deep copy of params array
+    
+    // Parsed key parameters for state machine
+    struct {
+        double duration_s;      // For timeout (OCV, CA, CP)
+        int cycles;            // For completion (CV)
+        double freqStart;      // For progress (PEIS)
+        double freqEnd;
+        double sampleInterval_s;
+        double recordEvery_dE;
+        double recordEvery_dT;
+        int eRange;
+        // Add more as techniques are implemented
+    } key;
+    
+    // Technique info
+    BioTechniqueType type;
+    char eccFile[MAX_PATH_LENGTH];
+} BL_TechniqueConfig;
+
+// Technique context for state machine
+typedef struct {
+    // Device info
+    int deviceID;
+    uint8_t channel;
+    
+    // State machine
+    BioTechniqueState state;
+    double startTime;
+    double lastUpdateTime;
+    int updateCount;
+    
+    // Configuration
+    BL_TechniqueConfig config;
+    
+    // Data collection
+    BL_RawDataBuffer rawData;
+    TCurrentValues_t lastCurrentValues;
+    int memFilledAtStart;
+    
+    // Error info
+    int lastError;
+    char errorMessage[256];
+    
+    // Callbacks (optional)
+    void (*progressCallback)(double elapsed, int memFilled, void *userData);
+    void (*dataCallback)(TDataInfos_t *info, void *userData);
+    void *userData;
+    
+} BL_TechniqueContext;
+
+// ============================================================================
 // Main BioLogic Library Management Functions
 // ============================================================================
 int InitializeBioLogic(void);
@@ -157,6 +248,41 @@ int BL_SendMsgToRcvt_g(int ID, uint8_t ch, void* pBuf, unsigned int* pLen);
 int BL_SendEcalMsg(int ID, uint8_t ch, void* pBuf, unsigned int* pLen);
 int BL_SendEcalMsgGroup(int ID, uint8_t* pChannels, uint8_t length, void* pBuf, unsigned int* pLen);
 int BL_GetOptErr(int ID, uint8_t channel, int* pOptErr, int* pOptPos);
+
+// ============================================================================
+// High-Level Technique Functions
+// ============================================================================
+
+// Context management
+BL_TechniqueContext* BL_CreateTechniqueContext(int ID, uint8_t channel, BioTechniqueType type);
+void BL_FreeTechniqueContext(BL_TechniqueContext *context);
+
+// Generic technique lifecycle
+int BL_UpdateTechnique(BL_TechniqueContext *context);
+bool BL_IsTechniqueComplete(BL_TechniqueContext *context);
+int BL_StopTechnique(BL_TechniqueContext *context);
+int BL_GetTechniqueRawData(BL_TechniqueContext *context, BL_RawDataBuffer **data);
+
+// OCV (Open Circuit Voltage)
+int BL_StartOCV(int ID, uint8_t channel,
+                double duration_s,
+                double sample_interval_s,
+                double record_every_dE,     // mV
+                double record_every_dT,     // seconds
+                int e_range,                // 0=2.5V, 1=5V, 2=10V, 3=Auto
+                BL_TechniqueContext **context);
+
+// PEIS (Potentio Electrochemical Impedance Spectroscopy)
+int BL_StartPEIS(int ID, uint8_t channel,
+                 double e_dc,               // DC potential (V)
+                 double amplitude,          // AC amplitude (V)
+                 double initial_freq,       // Start frequency (Hz)
+                 double final_freq,         // End frequency (Hz)
+                 int points_per_decade,
+                 double i_range,            // Current range
+                 double e_range,            // Voltage range
+                 double bandwidth,          // Bandwidth setting
+                 BL_TechniqueContext **context);
 
 // ============================================================================
 // Error Codes (for reference)

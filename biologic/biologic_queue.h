@@ -2,7 +2,7 @@
  * biologic_queue.h
  * 
  * Thread-safe command queue implementation for BioLogic SP-150e
- * Built on top of the generic device queue system
+ * Updated to use high-level technique functions with state machine approach
  ******************************************************************************/
 
 #ifndef BIOLOGIC_QUEUE_H
@@ -21,12 +21,13 @@
 
 // Command delays (milliseconds)
 #define BIO_DELAY_AFTER_CONNECT         500   // After connection
-#define BIO_DELAY_AFTER_LOAD_TECHNIQUE  200   // After loading technique
-#define BIO_DELAY_AFTER_START           200   // After starting channel
-#define BIO_DELAY_AFTER_STOP            200   // After stopping channel
-#define BIO_DELAY_AFTER_PARAMETER       100   // After parameter update
-#define BIO_DELAY_AFTER_DATA_READ       50    // After reading data
+#define BIO_DELAY_AFTER_TECHNIQUE       200   // After technique completion
+#define BIO_DELAY_AFTER_CONFIG          100   // After configuration change
 #define BIO_DELAY_RECOVERY              50    // General recovery between commands
+
+// Default technique timeouts (milliseconds)
+#define BIO_DEFAULT_OCV_TIMEOUT_MS      300000  // 5 minutes default
+#define BIO_DEFAULT_PEIS_TIMEOUT_MS     600000  // 10 minutes default
 
 /******************************************************************************
  * Type Definitions
@@ -50,7 +51,13 @@ typedef DeviceQueueStats BioQueueStats;
 #define BIO_MAX_TRANSACTION_COMMANDS  DEVICE_MAX_TRANSACTION_COMMANDS
 #define BIO_QUEUE_COMMAND_TIMEOUT_MS  DEVICE_QUEUE_COMMAND_TIMEOUT_MS
 
-// Command types
+// Error codes specific to partial data
+#define BL_ERR_PARTIAL_DATA        -500  // Technique stopped with error but partial data available
+
+// Progress callback for techniques
+typedef void (*BioTechniqueProgressCallback)(double elapsedTime, int memFilled, void *userData);
+
+// Command types - only high-level commands
 typedef enum {
     BIO_CMD_NONE = 0,
     
@@ -59,18 +66,9 @@ typedef enum {
     BIO_CMD_DISCONNECT,
     BIO_CMD_TEST_CONNECTION,
     
-    // Channel commands
-    BIO_CMD_START_CHANNEL,
-    BIO_CMD_STOP_CHANNEL,
-    BIO_CMD_GET_CHANNEL_INFO,
-    
-    // Technique commands
-    BIO_CMD_LOAD_TECHNIQUE,
-    BIO_CMD_UPDATE_PARAMETERS,
-    
-    // Data commands
-    BIO_CMD_GET_CURRENT_VALUES,
-    BIO_CMD_GET_DATA,
+    // High-level technique commands
+    BIO_CMD_RUN_OCV,
+    BIO_CMD_RUN_PEIS,
     
     // Configuration commands
     BIO_CMD_SET_HARDWARE_CONFIG,
@@ -81,35 +79,50 @@ typedef enum {
 
 // Command parameters union
 typedef union {
+    // Connection parameters
     struct { 
         char address[64]; 
         uint8_t timeout; 
     } connect;
     
-    struct { 
-        uint8_t channel; 
-    } channel;
-    
+    // OCV parameters
     struct {
         uint8_t channel;
-        char techniquePath[MAX_PATH_LENGTH];
-        TEccParams_t params;
-        bool firstTechnique;
-        bool lastTechnique;
-        bool displayParams;
-    } loadTechnique;
+        double duration_s;
+        double sample_interval_s;
+        double record_every_dE;     // mV
+        double record_every_dT;     // seconds
+        int e_range;                // 0=2.5V, 1=5V, 2=10V, 3=Auto
+        int timeout_ms;             // Command timeout
+        BioTechniqueProgressCallback progressCallback;
+        void *userData;
+    } runOCV;
     
+    // PEIS parameters
     struct {
         uint8_t channel;
-        int techniqueIndex;
-        TEccParams_t params;
-        char eccFileName[MAX_PATH_LENGTH];
-    } updateParams;
+        double e_dc;                // DC potential (V)
+        double amplitude;           // AC amplitude (V)
+        double initial_freq;        // Start frequency (Hz)
+        double final_freq;          // End frequency (Hz)
+        int points_per_decade;
+        double i_range;             // Current range
+        double e_range;             // Voltage range
+        double bandwidth;           // Bandwidth setting
+        int timeout_ms;             // Command timeout
+        BioTechniqueProgressCallback progressCallback;
+        void *userData;
+    } runPEIS;
     
+    // Hardware configuration
     struct {
         uint8_t channel;
         THardwareConf_t config;
     } hardwareConfig;
+    
+    struct {
+        uint8_t channel;
+    } channel;
     
 } BioCommandParams;
 
@@ -118,13 +131,15 @@ typedef struct {
     int errorCode;
     union {
         TDeviceInfos_t deviceInfo;
-        TChannelInfos_t channelInfo;
-        TCurrentValues_t currentValues;
         THardwareConf_t hardwareConfig;
+        
+        // Technique results
         struct {
-            TDataBuffer_t buffer;
-            TDataInfos_t info;
-        } data;
+            BL_RawDataBuffer *rawData;  // Caller must free rawData->rawData and rawData
+            double elapsedTime;         // Total measurement time
+            int finalState;             // Final state of technique
+            bool partialData;           // True if data is partial due to error
+        } techniqueResult;
     } data;
 } BioCommandResult;
 
@@ -186,30 +201,71 @@ int BIO_QueueCommitTransaction(BioQueueManager *mgr, BioTransactionHandle txn,
 int BIO_QueueCancelTransaction(BioQueueManager *mgr, BioTransactionHandle txn);
 
 /******************************************************************************
- * Wrapper Functions (Direct replacements for existing BioLogic functions)
+ * High-Level Technique Functions (Blocking)
+ ******************************************************************************/
+
+// OCV measurement (blocking)
+int BL_RunOCVQueued(int ID, uint8_t channel,
+                    double duration_s,
+                    double sample_interval_s,
+                    double record_every_dE,
+                    double record_every_dT,
+                    int e_range,
+                    BL_RawDataBuffer **data,
+                    int timeout_ms,
+                    BioTechniqueProgressCallback progressCallback,
+                    void *userData);
+
+// PEIS measurement (blocking)
+int BL_RunPEISQueued(int ID, uint8_t channel,
+                     double e_dc,
+                     double amplitude,
+                     double initial_freq,
+                     double final_freq,
+                     int points_per_decade,
+                     double i_range,
+                     double e_range,
+                     double bandwidth,
+                     BL_RawDataBuffer **data,
+                     int timeout_ms,
+                     BioTechniqueProgressCallback progressCallback,
+                     void *userData);
+
+/******************************************************************************
+ * High-Level Technique Functions (Async)
+ ******************************************************************************/
+
+// OCV measurement (async)
+BioCommandID BL_RunOCVAsync(int ID, uint8_t channel,
+                            double duration_s,
+                            double sample_interval_s,
+                            double record_every_dE,
+                            double record_every_dT,
+                            int e_range,
+                            BioCommandCallback callback,
+                            void *userData);
+
+// PEIS measurement (async)
+BioCommandID BL_RunPEISAsync(int ID, uint8_t channel,
+                             double e_dc,
+                             double amplitude,
+                             double initial_freq,
+                             double final_freq,
+                             int points_per_decade,
+                             double i_range,
+                             double e_range,
+                             double bandwidth,
+                             BioCommandCallback callback,
+                             void *userData);
+
+/******************************************************************************
+ * Connection and Configuration Functions
  ******************************************************************************/
 
 // Connection wrappers
 int BL_ConnectQueued(const char* address, uint8_t timeout, int* pID, TDeviceInfos_t* pInfos);
 int BL_DisconnectQueued(int ID);
 int BL_TestConnectionQueued(int ID);
-
-// Channel control wrappers
-int BL_StartChannelQueued(int ID, uint8_t channel);
-int BL_StopChannelQueued(int ID, uint8_t channel);
-int BL_GetChannelInfosQueued(int ID, uint8_t ch, TChannelInfos_t* pInfos);
-
-// Technique wrappers
-int BL_LoadTechniqueQueued(int ID, uint8_t channel, const char* pFName, 
-                         TEccParams_t Params, bool FirstTechnique, 
-                         bool LastTechnique, bool DisplayParams);
-int BL_UpdateParametersQueued(int ID, uint8_t channel, int TechIndx, 
-                            TEccParams_t Params, const char* EccFileName);
-
-// Data acquisition wrappers
-int BL_GetCurrentValuesQueued(int ID, uint8_t channel, TCurrentValues_t* pValues);
-int BL_GetDataQueued(int ID, uint8_t channel, TDataBuffer_t* pBuf, 
-                   TDataInfos_t* pInfos, TCurrentValues_t* pValues);
 
 // Configuration wrappers
 int BL_GetHardConfQueued(int ID, uint8_t ch, THardwareConf_t* pHardConf);
@@ -228,5 +284,11 @@ int BIO_QueueGetCommandDelay(BioCommandType type);
 // Set/Get global queue manager
 void BIO_SetGlobalQueueManager(BioQueueManager *mgr);
 BioQueueManager* BIO_GetGlobalQueueManager(void);
+
+// Get device ID from queue manager
+int BIO_QueueGetDeviceID(BioQueueManager *mgr);
+
+// Free technique result data
+void BL_FreeTechniqueResult(BL_RawDataBuffer *data);
 
 #endif // BIOLOGIC_QUEUE_H
