@@ -26,23 +26,26 @@
 #define  PANEL_BTN_TEST_QUEUE             11      /* control type: command, callback function: TestDeviceQueueCallback */
 #define  PANEL_BTN_TEST_PSB               12      /* control type: command, callback function: TestPSBCallback */
 #define  PANEL_STR_PSB_STATUS             13      /* control type: string, callback function: (none) */
-#define  PANEL_BTN_TEST_BIOLOGIC          14      /* control type: command, callback function: TestBiologicCallback */
-#define  PANEL_STR_BIOLOGIC_STATUS        15      /* control type: string, callback function: (none) */
-#define  PANEL_DEC_BAT_CONSTS             16      /* control type: deco, callback function: (none) */
-#define  PANEL_BAT_CONSTS_LABEL_2         17      /* control type: textMsg, callback function: (none) */
-#define  PANEL_BAT_CONSTS_LABEL_3         18      /* control type: textMsg, callback function: (none) */
-#define  PANEL_LED_BIOLOGIC_STATUS        19      /* control type: LED, callback function: (none) */
-#define  PANEL_LED_PSB_STATUS             20      /* control type: LED, callback function: (none) */
-#define  PANEL_DEC_STATUS                 21      /* control type: deco, callback function: (none) */
-#define  PANEL_CONTROL_LABEL              22      /* control type: textMsg, callback function: (none) */
-#define  PANEL_STATUS_LABEL               23      /* control type: textMsg, callback function: (none) */
-#define  PANEL_OUTPUT_TEXTBOX             24      /* control type: textBox, callback function: (none) */
-#define  PANEL_EXPERIMENTS                25      /* control type: tab, callback function: (none) */
-#define  PANEL_DEC_MANUAL_CONTROL         26      /* control type: deco, callback function: (none) */
-#define  PANEL_GRAPH_2                    27      /* control type: graph, callback function: (none) */
-#define  PANEL_DEC_GRAPHS                 28      /* control type: deco, callback function: (none) */
-#define  PANEL_GRAPH_1                    29      /* control type: graph, callback function: (none) */
-#define  PANEL_BAT_CONSTS_LABEL           30      /* control type: textMsg, callback function: (none) */
+#define  PANEL_BTN_TEST_GEIS              14      /* control type: command, callback function: TestGEISCallback */
+#define  PANEL_BTN_TEST_BIOLOGIC          15      /* control type: command, callback function: TestBiologicCallback */
+#define  PANEL_STR_BIOLOGIC_STATUS        16      /* control type: string, callback function: (none) */
+#define  PANEL_DEC_BAT_CONSTS             17      /* control type: deco, callback function: (none) */
+#define  PANEL_BAT_CONSTS_LABEL_2         18      /* control type: textMsg, callback function: (none) */
+#define  PANEL_BAT_CONSTS_LABEL_3         19      /* control type: textMsg, callback function: (none) */
+#define  PANEL_LED_BIOLOGIC_STATUS        20      /* control type: LED, callback function: (none) */
+#define  PANEL_LED_PSB_STATUS             21      /* control type: LED, callback function: (none) */
+#define  PANEL_DEC_STATUS                 22      /* control type: deco, callback function: (none) */
+#define  PANEL_CONTROL_LABEL              23      /* control type: textMsg, callback function: (none) */
+#define  PANEL_STATUS_LABEL               24      /* control type: textMsg, callback function: (none) */
+#define  PANEL_OUTPUT_TEXTBOX             25      /* control type: textBox, callback function: (none) */
+#define  PANEL_EXPERIMENTS                26      /* control type: tab, callback function: (none) */
+#define  PANEL_DEC_MANUAL_CONTROL         27      /* control type: deco, callback function: (none) */
+#define  PANEL_GRAPH_2                    28      /* control type: graph, callback function: (none) */
+#define  PANEL_DEC_GRAPHS                 29      /* control type: deco, callback function: (none) */
+#define  PANEL_GRAPH_1                    30      /* control type: graph, callback function: (none) */
+#define  PANEL_GRAPH_BIOLOGIC             31      /* control type: graph, callback function: (none) */
+#define  PANEL_BAT_CONSTS_LABEL           32      /* control type: textMsg, callback function: (none) */
+#define  PANEL_DECORATION                 33      /* control type: deco, callback function: (none) */
 
      /* tab page panel controls */
 #define  CAPACITY_BTN_EXP_CAPACITY        2       /* control type: command, callback function: StartCapacityExperimentCallback */
@@ -74,6 +77,7 @@ int  CVICALLBACK RemoteModeToggle(int panel, int control, int event, void *callb
 int  CVICALLBACK StartCapacityExperimentCallback(int panel, int control, int event, void *callbackData, int eventData1, int eventData2);
 int  CVICALLBACK TestBiologicCallback(int panel, int control, int event, void *callbackData, int eventData1, int eventData2);
 int  CVICALLBACK TestDeviceQueueCallback(int panel, int control, int event, void *callbackData, int eventData1, int eventData2);
+int  CVICALLBACK TestGEISCallback(int panel, int control, int event, void *callbackData, int eventData1, int eventData2);
 int  CVICALLBACK TestPSBCallback(int panel, int control, int event, void *callbackData, int eventData1, int eventData2);
 
 
