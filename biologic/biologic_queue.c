@@ -20,6 +20,9 @@ static const char* g_commandTypeNames[] = {
     "TEST_CONNECTION",
     "RUN_OCV",
     "RUN_PEIS",
+	"RUN_SPEIS",
+	"RUN_GEIS",
+	"RUN_SGEIS",
     "SET_HARDWARE_CONFIG",
     "GET_HARDWARE_CONFIG"
 };
@@ -122,7 +125,7 @@ static BL_RawDataBuffer* CopyRawDataBuffer(BL_RawDataBuffer *src) {
 
 static int BIO_AdapterConnect(void *deviceContext, void *connectionParams) {
     BioLogicDeviceContext *ctx = (BioLogicDeviceContext*)deviceContext;
-    BioLogicConnectionParams *params = (BioLogicConnectionParams*)connectionParams;
+    BioConnectCommand *params = (BioConnectCommand*)connectionParams;
     
     // Initialize BioLogic DLL if needed
     if (!IsBioLogicInitialized()) {
@@ -245,7 +248,6 @@ static bool BIO_AdapterIsConnected(void *deviceContext) {
 
 static int BIO_AdapterExecuteCommand(void *deviceContext, int commandType, void *params, void *result) {
     BioLogicDeviceContext *ctx = (BioLogicDeviceContext*)deviceContext;
-    BioCommandParams *cmdParams = (BioCommandParams*)params;
     BioCommandResult *cmdResult = (BioCommandResult*)result;
     
     // Check connection for most commands
@@ -255,45 +257,49 @@ static int BIO_AdapterExecuteCommand(void *deviceContext, int commandType, void 
     }
     
     switch ((BioCommandType)commandType) {
-        case BIO_CMD_CONNECT:
-            // Connection is handled by the adapter connect function
-            cmdResult->errorCode = SUCCESS;
-            break;
-            
-        case BIO_CMD_DISCONNECT:
+        case BIO_CMD_CONNECT: {
+		    // Connection is handled by the adapter connect function
+		    cmdResult->errorCode = SUCCESS;
+		    break;
+		}   
+		
+        case BIO_CMD_DISCONNECT: {
             cmdResult->errorCode = BL_Disconnect(ctx->deviceID);
             if (cmdResult->errorCode == SUCCESS) {
                 ctx->isConnected = false;
                 ctx->deviceID = -1;
             }
             break;
+        }
             
-        case BIO_CMD_TEST_CONNECTION:
+        case BIO_CMD_TEST_CONNECTION: {
             cmdResult->errorCode = BL_TestConnection(ctx->deviceID);
             break;
+        }
             
         case BIO_CMD_RUN_OCV: {
+            BioOCVCommand *cmd = (BioOCVCommand*)params;
             BL_TechniqueContext *techContext = NULL;
             double startTime = Timer();
             
             // Start OCV
             cmdResult->errorCode = BL_StartOCV(
                 ctx->deviceID,
-                cmdParams->runOCV.channel,
-                cmdParams->runOCV.duration_s,
-                cmdParams->runOCV.sample_interval_s,
-                cmdParams->runOCV.record_every_dE,
-                cmdParams->runOCV.record_every_dT,
-                cmdParams->runOCV.e_range,
+                cmd->base.channel,
+                cmd->duration_s,
+                cmd->sample_interval_s,
+                cmd->record_every_dE,
+                cmd->record_every_dT,
+                cmd->e_range,
                 &techContext
             );
             
             if (cmdResult->errorCode != SUCCESS) break;
             
             // Set up progress callback if provided
-            if (cmdParams->runOCV.progressCallback) {
-                techContext->progressCallback = cmdParams->runOCV.progressCallback;
-                techContext->userData = cmdParams->runOCV.userData;
+            if (cmd->base.progressCallback) {
+                techContext->progressCallback = cmd->base.progressCallback;
+                techContext->userData = cmd->base.userData;
             }
             
             // Poll until complete
@@ -336,30 +342,36 @@ static int BIO_AdapterExecuteCommand(void *deviceContext, int commandType, void 
         }
         
         case BIO_CMD_RUN_PEIS: {
+            BioPEISCommand *cmd = (BioPEISCommand*)params;
             BL_TechniqueContext *techContext = NULL;
             double startTime = Timer();
             
             // Start PEIS
             cmdResult->errorCode = BL_StartPEIS(
                 ctx->deviceID,
-                cmdParams->runPEIS.channel,
-                cmdParams->runPEIS.e_dc,
-                cmdParams->runPEIS.amplitude,
-                cmdParams->runPEIS.initial_freq,
-                cmdParams->runPEIS.final_freq,
-                cmdParams->runPEIS.points_per_decade,
-                cmdParams->runPEIS.i_range,
-                cmdParams->runPEIS.e_range,
-                cmdParams->runPEIS.bandwidth,
+                cmd->base.channel,
+                cmd->vs_initial,
+                cmd->initial_voltage_step,
+                cmd->duration_step,
+                cmd->record_every_dT,
+                cmd->record_every_dI,
+                cmd->initial_freq,
+                cmd->final_freq,
+                cmd->sweep_linear,
+                cmd->amplitude_voltage,
+                cmd->frequency_number,
+                cmd->average_n_times,
+                cmd->correction,
+                cmd->wait_for_steady,
                 &techContext
             );
             
             if (cmdResult->errorCode != SUCCESS) break;
             
             // Set up progress callback if provided
-            if (cmdParams->runPEIS.progressCallback) {
-                techContext->progressCallback = cmdParams->runPEIS.progressCallback;
-                techContext->userData = cmdParams->runPEIS.userData;
+            if (cmd->base.progressCallback) {
+                techContext->progressCallback = cmd->base.progressCallback;
+                techContext->userData = cmd->base.userData;
             }
             
             // Poll until complete
@@ -399,18 +411,96 @@ static int BIO_AdapterExecuteCommand(void *deviceContext, int commandType, void 
             BL_FreeTechniqueContext(techContext);
             break;
         }
+		
+		case BIO_CMD_RUN_SPEIS: {
+		    BioSPEISCommand *cmd = (BioSPEISCommand*)params;
+		    BL_TechniqueContext *techContext = NULL;
+		    double startTime = Timer();
+		    
+		    // Start SPEIS
+		    cmdResult->errorCode = BL_StartSPEIS(
+		        ctx->deviceID,
+		        cmd->base.channel,
+		        cmd->vs_initial,
+		        cmd->vs_final,
+		        cmd->initial_voltage_step,
+		        cmd->final_voltage_step,
+		        cmd->duration_step,
+		        cmd->step_number,
+		        cmd->record_every_dT,
+		        cmd->record_every_dI,
+		        cmd->initial_freq,
+		        cmd->final_freq,
+		        cmd->sweep_linear,
+		        cmd->amplitude_voltage,
+		        cmd->frequency_number,
+		        cmd->average_n_times,
+		        cmd->correction,
+		        cmd->wait_for_steady,
+		        &techContext
+		    );
+		    
+		    if (cmdResult->errorCode != SUCCESS) break;
+		    
+		    // Set up progress callback if provided
+		    if (cmd->base.progressCallback) {
+		        techContext->progressCallback = cmd->base.progressCallback;
+		        techContext->userData = cmd->base.userData;
+		    }
+		    
+		    // Poll until complete
+		    while (!BL_IsTechniqueComplete(techContext)) {
+		        BL_UpdateTechnique(techContext);
+		        Delay(0.1);
+		    }
+		    
+		    // Get results (same as OCV/PEIS)
+		    BL_RawDataBuffer *rawData = NULL;
+		    bool partialData = false;
+		    
+		    if (techContext->state == BIO_TECH_STATE_ERROR) {
+		        if (BL_GetTechniqueRawData(techContext, &rawData) == SUCCESS && rawData) {
+		            partialData = true;
+		            cmdResult->errorCode = BL_ERR_PARTIAL_DATA;
+		        } else {
+		            cmdResult->errorCode = techContext->lastError;
+		        }
+		    } else if (techContext->state == BIO_TECH_STATE_COMPLETED) {
+		        if (BL_GetTechniqueRawData(techContext, &rawData) == SUCCESS) {
+		            cmdResult->errorCode = SUCCESS;
+		        } else {
+		            cmdResult->errorCode = BL_ERR_FUNCTIONFAILED;
+		        }
+		    }
+		    
+		    // Copy raw data to result
+		    if (rawData) {
+		        cmdResult->data.techniqueResult.rawData = CopyRawDataBuffer(rawData);
+		        cmdResult->data.techniqueResult.elapsedTime = Timer() - startTime;
+		        cmdResult->data.techniqueResult.finalState = techContext->state;
+		        cmdResult->data.techniqueResult.partialData = partialData;
+		    }
+		    
+		    // Clean up
+		    BL_FreeTechniqueContext(techContext);
+		    break;
+		}
         
-        case BIO_CMD_GET_HARDWARE_CONFIG:
+        case BIO_CMD_GET_HARDWARE_CONFIG: {
+            BioChannelCommand *cmd = (BioChannelCommand*)params;
             cmdResult->errorCode = BL_GetHardConf(ctx->deviceID,
-                                                cmdParams->channel.channel,
+                                                cmd->base.channel,
                                                 &cmdResult->data.hardwareConfig);
             break;
+        }
             
-        case BIO_CMD_SET_HARDWARE_CONFIG:
+        case BIO_CMD_SET_HARDWARE_CONFIG: {
+            BioHardwareConfigCommand *cmd = (BioHardwareConfigCommand*)params;
             cmdResult->errorCode = BL_SetHardConf(ctx->deviceID,
-                                                cmdParams->hardwareConfig.channel,
-                                                cmdParams->hardwareConfig.config);
+                                                cmd->base.channel,
+                                                cmd->config);
             break;
+        }
             
         default:
             cmdResult->errorCode = ERR_INVALID_PARAMETER;
@@ -423,14 +513,53 @@ static int BIO_AdapterExecuteCommand(void *deviceContext, int commandType, void 
 static void* BIO_AdapterCreateCommandParams(int commandType, void *sourceParams) {
     if (!sourceParams) return NULL;
     
-    BioCommandParams *params = malloc(sizeof(BioCommandParams));
-    if (!params) return NULL;
-    
-    *params = *(BioCommandParams*)sourceParams;
-    
-    // No deep copies needed for current parameter types
-    
-    return params;
+    switch (commandType) {
+        case BIO_CMD_CONNECT: {
+            BioConnectCommand *cmd = malloc(sizeof(BioConnectCommand));
+            if (cmd) *cmd = *(BioConnectCommand*)sourceParams;
+            return cmd;
+        }
+        
+        case BIO_CMD_DISCONNECT:
+        case BIO_CMD_TEST_CONNECTION: {
+            BioChannelCommand *cmd = malloc(sizeof(BioChannelCommand));
+            if (cmd) *cmd = *(BioChannelCommand*)sourceParams;
+            return cmd;
+        }
+        
+        case BIO_CMD_RUN_OCV: {
+            BioOCVCommand *cmd = malloc(sizeof(BioOCVCommand));
+            if (cmd) *cmd = *(BioOCVCommand*)sourceParams;
+            return cmd;
+        }
+        
+        case BIO_CMD_RUN_PEIS: {
+            BioPEISCommand *cmd = malloc(sizeof(BioPEISCommand));
+            if (cmd) *cmd = *(BioPEISCommand*)sourceParams;
+            return cmd;
+        }
+		
+		case BIO_CMD_RUN_SPEIS: {
+		    BioSPEISCommand *cmd = malloc(sizeof(BioSPEISCommand));
+		    if (cmd) *cmd = *(BioSPEISCommand*)sourceParams;
+		    return cmd;
+		}
+        
+        case BIO_CMD_GET_HARDWARE_CONFIG: {
+            BioChannelCommand *cmd = malloc(sizeof(BioChannelCommand));
+            if (cmd) *cmd = *(BioChannelCommand*)sourceParams;
+            return cmd;
+        }
+        
+        case BIO_CMD_SET_HARDWARE_CONFIG: {
+            BioHardwareConfigCommand *cmd = malloc(sizeof(BioHardwareConfigCommand));
+            if (cmd) *cmd = *(BioHardwareConfigCommand*)sourceParams;
+            return cmd;
+        }
+        
+        default:
+            return NULL;
+    }
 }
 
 static void BIO_AdapterFreeCommandParams(int commandType, void *params) {
@@ -494,13 +623,21 @@ BioQueueManager* BIO_QueueInit(const char *address) {
     context->isConnected = false;
     
     // Create connection parameters
-    BioLogicConnectionParams *connParams = calloc(1, sizeof(BioLogicConnectionParams));
+    BioConnectCommand *connParams = calloc(1, sizeof(BioConnectCommand));
     if (!connParams) {
         free(context);
         LogErrorEx(LOG_DEVICE_BIO, "BIO_QueueInit: Failed to allocate connection params");
         return NULL;
     }
     
+    // Initialize base parameters
+    connParams->base.type = BIO_CMD_CONNECT;
+    connParams->base.channel = 0;
+    connParams->base.timeout_ms = TIMEOUT * 1000;
+    connParams->base.progressCallback = NULL;
+    connParams->base.userData = NULL;
+    
+    // Set connection-specific parameters
     SAFE_STRCPY(connParams->address, address, sizeof(connParams->address));
     connParams->timeout = TIMEOUT;
     
@@ -621,25 +758,25 @@ int BL_RunOCVQueued(int ID, uint8_t channel,
         return result;
     }
     
-    BioCommandParams params = {
-        .runOCV = {
+    BioOCVCommand cmd = {
+        .base = {
+            .type = BIO_CMD_RUN_OCV,
             .channel = channel,
-            .duration_s = duration_s,
-            .sample_interval_s = sample_interval_s,
-            .record_every_dE = record_every_dE,
-            .record_every_dT = record_every_dT,
-            .e_range = e_range,
-            .timeout_ms = timeout_ms > 0 ? timeout_ms : 
-                         (int)((duration_s + 5) * 1000),
+            .timeout_ms = timeout_ms > 0 ? timeout_ms : (int)((duration_s + 5) * 1000),
             .progressCallback = progressCallback,
             .userData = userData
-        }
+        },
+        .duration_s = duration_s,
+        .sample_interval_s = sample_interval_s,
+        .record_every_dE = record_every_dE,
+        .record_every_dT = record_every_dT,
+        .e_range = e_range
     };
     
     BioCommandResult result;
     int error = BIO_QueueCommandBlocking(mgr, BIO_CMD_RUN_OCV,
-                                       &params, BIO_PRIORITY_HIGH, &result,
-                                       params.runOCV.timeout_ms);
+                                       (BioCommandParams*)&cmd, BIO_PRIORITY_HIGH, &result,
+                                       cmd.base.timeout_ms);
     
     if ((error == SUCCESS || error == BL_ERR_PARTIAL_DATA) && data) {
         *data = result.data.techniqueResult.rawData;
@@ -649,14 +786,19 @@ int BL_RunOCVQueued(int ID, uint8_t channel,
 }
 
 int BL_RunPEISQueued(int ID, uint8_t channel,
-                     double e_dc,
-                     double amplitude,
+                     bool vs_initial,
+                     double initial_voltage_step,
+                     double duration_step,
+                     double record_every_dT,
+                     double record_every_dI,
                      double initial_freq,
                      double final_freq,
-                     int points_per_decade,
-                     double i_range,
-                     double e_range,
-                     double bandwidth,
+                     bool sweep_linear,
+                     double amplitude_voltage,
+                     int frequency_number,
+                     int average_n_times,
+                     bool correction,
+                     double wait_for_steady,
                      BL_RawDataBuffer **data,
                      int timeout_ms,
                      BioTechniqueProgressCallback progressCallback,
@@ -666,9 +808,11 @@ int BL_RunPEISQueued(int ID, uint8_t channel,
     if (!mgr) {
         // Direct call without queue
         BL_TechniqueContext *context;
-        int result = BL_StartPEIS(ID, channel, e_dc, amplitude, initial_freq,
-                                final_freq, points_per_decade, i_range, e_range,
-                                bandwidth, &context);
+        int result = BL_StartPEIS(ID, channel, vs_initial, initial_voltage_step,
+                                duration_step, record_every_dT, record_every_dI,
+                                initial_freq, final_freq, sweep_linear,
+                                amplitude_voltage, frequency_number, average_n_times,
+                                correction, wait_for_steady, &context);
         if (result != SUCCESS) return result;
         
         if (progressCallback) {
@@ -686,27 +830,122 @@ int BL_RunPEISQueued(int ID, uint8_t channel,
         return result;
     }
     
-    BioCommandParams params = {
-        .runPEIS = {
+    BioPEISCommand cmd = {
+        .base = {
+            .type = BIO_CMD_RUN_PEIS,
             .channel = channel,
-            .e_dc = e_dc,
-            .amplitude = amplitude,
-            .initial_freq = initial_freq,
-            .final_freq = final_freq,
-            .points_per_decade = points_per_decade,
-            .i_range = i_range,
-            .e_range = e_range,
-            .bandwidth = bandwidth,
             .timeout_ms = timeout_ms > 0 ? timeout_ms : BIO_DEFAULT_PEIS_TIMEOUT_MS,
             .progressCallback = progressCallback,
             .userData = userData
-        }
+        },
+        .vs_initial = vs_initial,
+        .initial_voltage_step = initial_voltage_step,
+        .duration_step = duration_step,
+        .record_every_dT = record_every_dT,
+        .record_every_dI = record_every_dI,
+        .initial_freq = initial_freq,
+        .final_freq = final_freq,
+        .sweep_linear = sweep_linear,
+        .amplitude_voltage = amplitude_voltage,
+        .frequency_number = frequency_number,
+        .average_n_times = average_n_times,
+        .correction = correction,
+        .wait_for_steady = wait_for_steady
     };
     
     BioCommandResult result;
     int error = BIO_QueueCommandBlocking(mgr, BIO_CMD_RUN_PEIS,
-                                       &params, BIO_PRIORITY_HIGH, &result,
-                                       params.runPEIS.timeout_ms);
+                                       (BioCommandParams*)&cmd, BIO_PRIORITY_HIGH, &result,
+                                       cmd.base.timeout_ms);
+    
+    if ((error == SUCCESS || error == BL_ERR_PARTIAL_DATA) && data) {
+        *data = result.data.techniqueResult.rawData;
+    }
+    
+    return error;
+}
+
+int BL_RunSPEISQueued(int ID, uint8_t channel,
+                      bool vs_initial,
+                      bool vs_final,
+                      double initial_voltage_step,
+                      double final_voltage_step,
+                      double duration_step,
+                      int step_number,
+                      double record_every_dT,
+                      double record_every_dI,
+                      double initial_freq,
+                      double final_freq,
+                      bool sweep_linear,
+                      double amplitude_voltage,
+                      int frequency_number,
+                      int average_n_times,
+                      bool correction,
+                      double wait_for_steady,
+                      BL_RawDataBuffer **data,
+                      int timeout_ms,
+                      BioTechniqueProgressCallback progressCallback,
+                      void *userData) {
+    
+    BioQueueManager *mgr = BIO_GetGlobalQueueManager();
+    if (!mgr) {
+        // Direct call without queue
+        BL_TechniqueContext *context;
+        int result = BL_StartSPEIS(ID, channel, vs_initial, vs_final,
+                                  initial_voltage_step, final_voltage_step,
+                                  duration_step, step_number,
+                                  record_every_dT, record_every_dI,
+                                  initial_freq, final_freq, sweep_linear,
+                                  amplitude_voltage, frequency_number, average_n_times,
+                                  correction, wait_for_steady, &context);
+        if (result != SUCCESS) return result;
+        
+        if (progressCallback) {
+            context->progressCallback = progressCallback;
+            context->userData = userData;
+        }
+        
+        while (!BL_IsTechniqueComplete(context)) {
+            BL_UpdateTechnique(context);
+            Delay(0.1);
+        }
+        
+        result = BL_GetTechniqueRawData(context, data);
+        BL_FreeTechniqueContext(context);
+        return result;
+    }
+    
+    BioSPEISCommand cmd = {
+        .base = {
+            .type = BIO_CMD_RUN_SPEIS,
+            .channel = channel,
+            .timeout_ms = timeout_ms > 0 ? timeout_ms : 
+                         (int)((duration_step * step_number + 60) * 1000),
+            .progressCallback = progressCallback,
+            .userData = userData
+        },
+        .vs_initial = vs_initial,
+        .vs_final = vs_final,
+        .initial_voltage_step = initial_voltage_step,
+        .final_voltage_step = final_voltage_step,
+        .duration_step = duration_step,
+        .step_number = step_number,
+        .record_every_dT = record_every_dT,
+        .record_every_dI = record_every_dI,
+        .initial_freq = initial_freq,
+        .final_freq = final_freq,
+        .sweep_linear = sweep_linear,
+        .amplitude_voltage = amplitude_voltage,
+        .frequency_number = frequency_number,
+        .average_n_times = average_n_times,
+        .correction = correction,
+        .wait_for_steady = wait_for_steady
+    };
+    
+    BioCommandResult result;
+    int error = BIO_QueueCommandBlocking(mgr, BIO_CMD_RUN_SPEIS,
+                                       (BioCommandParams*)&cmd, BIO_PRIORITY_HIGH, &result,
+                                       cmd.base.timeout_ms);
     
     if ((error == SUCCESS || error == BL_ERR_PARTIAL_DATA) && data) {
         *data = result.data.techniqueResult.rawData;
@@ -731,57 +970,124 @@ BioCommandID BL_RunOCVAsync(int ID, uint8_t channel,
     BioQueueManager *mgr = BIO_GetGlobalQueueManager();
     if (!mgr) return -1;
     
-    BioCommandParams params = {
-        .runOCV = {
+    BioOCVCommand cmd = {
+        .base = {
+            .type = BIO_CMD_RUN_OCV,
             .channel = channel,
-            .duration_s = duration_s,
-            .sample_interval_s = sample_interval_s,
-            .record_every_dE = record_every_dE,
-            .record_every_dT = record_every_dT,
-            .e_range = e_range,
             .timeout_ms = (int)((duration_s + 5) * 1000),
             .progressCallback = NULL,  // Progress callbacks not supported in async mode
             .userData = NULL
-        }
+        },
+        .duration_s = duration_s,
+        .sample_interval_s = sample_interval_s,
+        .record_every_dE = record_every_dE,
+        .record_every_dT = record_every_dT,
+        .e_range = e_range
     };
     
-    return BIO_QueueCommandAsync(mgr, BIO_CMD_RUN_OCV, &params,
+    return BIO_QueueCommandAsync(mgr, BIO_CMD_RUN_OCV, (BioCommandParams*)&cmd,
                                 BIO_PRIORITY_HIGH, callback, userData);
 }
 
 BioCommandID BL_RunPEISAsync(int ID, uint8_t channel,
-                             double e_dc,
-                             double amplitude,
+                             bool vs_initial,
+                             double initial_voltage_step,
+                             double duration_step,
+                             double record_every_dT,
+                             double record_every_dI,
                              double initial_freq,
                              double final_freq,
-                             int points_per_decade,
-                             double i_range,
-                             double e_range,
-                             double bandwidth,
+                             bool sweep_linear,
+                             double amplitude_voltage,
+                             int frequency_number,
+                             int average_n_times,
+                             bool correction,
+                             double wait_for_steady,
                              BioCommandCallback callback,
                              void *userData) {
     
     BioQueueManager *mgr = BIO_GetGlobalQueueManager();
     if (!mgr) return -1;
     
-    BioCommandParams params = {
-        .runPEIS = {
+    BioPEISCommand cmd = {
+        .base = {
+            .type = BIO_CMD_RUN_PEIS,
             .channel = channel,
-            .e_dc = e_dc,
-            .amplitude = amplitude,
-            .initial_freq = initial_freq,
-            .final_freq = final_freq,
-            .points_per_decade = points_per_decade,
-            .i_range = i_range,
-            .e_range = e_range,
-            .bandwidth = bandwidth,
             .timeout_ms = BIO_DEFAULT_PEIS_TIMEOUT_MS,
             .progressCallback = NULL,
             .userData = NULL
-        }
+        },
+        .vs_initial = vs_initial,
+        .initial_voltage_step = initial_voltage_step,
+        .duration_step = duration_step,
+        .record_every_dT = record_every_dT,
+        .record_every_dI = record_every_dI,
+        .initial_freq = initial_freq,
+        .final_freq = final_freq,
+        .sweep_linear = sweep_linear,
+        .amplitude_voltage = amplitude_voltage,
+        .frequency_number = frequency_number,
+        .average_n_times = average_n_times,
+        .correction = correction,
+        .wait_for_steady = wait_for_steady
     };
     
-    return BIO_QueueCommandAsync(mgr, BIO_CMD_RUN_PEIS, &params,
+    return BIO_QueueCommandAsync(mgr, BIO_CMD_RUN_PEIS, (BioCommandParams*)&cmd,
+                                BIO_PRIORITY_HIGH, callback, userData);
+}
+
+
+
+BioCommandID BL_RunSPEISAsync(int ID, uint8_t channel,
+                              bool vs_initial,
+                              bool vs_final,
+                              double initial_voltage_step,
+                              double final_voltage_step,
+                              double duration_step,
+                              int step_number,
+                              double record_every_dT,
+                              double record_every_dI,
+                              double initial_freq,
+                              double final_freq,
+                              bool sweep_linear,
+                              double amplitude_voltage,
+                              int frequency_number,
+                              int average_n_times,
+                              bool correction,
+                              double wait_for_steady,
+                              BioCommandCallback callback,
+                              void *userData) {
+    
+    BioQueueManager *mgr = BIO_GetGlobalQueueManager();
+    if (!mgr) return -1;
+    
+    BioSPEISCommand cmd = {
+        .base = {
+            .type = BIO_CMD_RUN_SPEIS,
+            .channel = channel,
+            .timeout_ms = (int)((duration_step * step_number + 60) * 1000),
+            .progressCallback = NULL,
+            .userData = NULL
+        },
+        .vs_initial = vs_initial,
+        .vs_final = vs_final,
+        .initial_voltage_step = initial_voltage_step,
+        .final_voltage_step = final_voltage_step,
+        .duration_step = duration_step,
+        .step_number = step_number,
+        .record_every_dT = record_every_dT,
+        .record_every_dI = record_every_dI,
+        .initial_freq = initial_freq,
+        .final_freq = final_freq,
+        .sweep_linear = sweep_linear,
+        .amplitude_voltage = amplitude_voltage,
+        .frequency_number = frequency_number,
+        .average_n_times = average_n_times,
+        .correction = correction,
+        .wait_for_steady = wait_for_steady
+    };
+    
+    return BIO_QueueCommandAsync(mgr, BIO_CMD_RUN_SPEIS, (BioCommandParams*)&cmd,
                                 BIO_PRIORITY_HIGH, callback, userData);
 }
 
@@ -809,12 +1115,21 @@ int BIO_QueueGetDeviceID(BioQueueManager *mgr) {
 int BL_ConnectQueued(const char* address, uint8_t timeout, int* pID, TDeviceInfos_t* pInfos) {
     if (!g_bioQueueManager) return BL_Connect(address, timeout, pID, pInfos);
     
-    BioCommandParams params = {.connect = {.timeout = timeout}};
-    strncpy(params.connect.address, address, sizeof(params.connect.address) - 1);
+    BioConnectCommand cmd = {
+        .base = {
+            .type = BIO_CMD_CONNECT,
+            .channel = 0,
+            .timeout_ms = timeout * 1000,
+            .progressCallback = NULL,
+            .userData = NULL
+        },
+        .timeout = timeout
+    };
+    strncpy(cmd.address, address, sizeof(cmd.address) - 1);
     
     BioCommandResult result;
     int error = BIO_QueueCommandBlocking(g_bioQueueManager, BIO_CMD_CONNECT,
-                                       &params, BIO_PRIORITY_HIGH, &result,
+                                       (BioCommandParams*)&cmd, BIO_PRIORITY_HIGH, &result,
                                        BIO_QUEUE_COMMAND_TIMEOUT_MS);
     
     if (error == SUCCESS) {
@@ -839,22 +1154,38 @@ int BL_DisconnectQueued(int ID) {
 int BL_TestConnectionQueued(int ID) {
     if (!g_bioQueueManager) return BL_TestConnection(ID);
     
-    BioCommandParams params = {0};
-    BioCommandResult result;
+    BioChannelCommand cmd = {
+        .base = {
+            .type = BIO_CMD_TEST_CONNECTION,
+            .channel = 0,
+            .timeout_ms = BIO_QUEUE_COMMAND_TIMEOUT_MS,
+            .progressCallback = NULL,
+            .userData = NULL
+        }
+    };
     
+    BioCommandResult result;
     return BIO_QueueCommandBlocking(g_bioQueueManager, BIO_CMD_TEST_CONNECTION,
-                                  &params, BIO_PRIORITY_NORMAL, &result,
+                                  (BioCommandParams*)&cmd, BIO_PRIORITY_NORMAL, &result,
                                   BIO_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
 int BL_GetHardConfQueued(int ID, uint8_t ch, THardwareConf_t* pHardConf) {
     if (!g_bioQueueManager || !pHardConf) return BL_GetHardConf(ID, ch, pHardConf);
     
-    BioCommandParams params = {.channel = {ch}};
-    BioCommandResult result;
+    BioChannelCommand cmd = {
+        .base = {
+            .type = BIO_CMD_GET_HARDWARE_CONFIG,
+            .channel = ch,
+            .timeout_ms = BIO_QUEUE_COMMAND_TIMEOUT_MS,
+            .progressCallback = NULL,
+            .userData = NULL
+        }
+    };
     
+    BioCommandResult result;
     int error = BIO_QueueCommandBlocking(g_bioQueueManager, BIO_CMD_GET_HARDWARE_CONFIG,
-                                       &params, BIO_PRIORITY_NORMAL, &result,
+                                       (BioCommandParams*)&cmd, BIO_PRIORITY_NORMAL, &result,
                                        BIO_QUEUE_COMMAND_TIMEOUT_MS);
     
     if (error == SUCCESS) {
@@ -866,16 +1197,20 @@ int BL_GetHardConfQueued(int ID, uint8_t ch, THardwareConf_t* pHardConf) {
 int BL_SetHardConfQueued(int ID, uint8_t ch, THardwareConf_t HardConf) {
     if (!g_bioQueueManager) return BL_SetHardConf(ID, ch, HardConf);
     
-    BioCommandParams params = {
-        .hardwareConfig = {
+    BioHardwareConfigCommand cmd = {
+        .base = {
+            .type = BIO_CMD_SET_HARDWARE_CONFIG,
             .channel = ch,
-            .config = HardConf
-        }
+            .timeout_ms = BIO_QUEUE_COMMAND_TIMEOUT_MS,
+            .progressCallback = NULL,
+            .userData = NULL
+        },
+        .config = HardConf
     };
-    BioCommandResult result;
     
+    BioCommandResult result;
     return BIO_QueueCommandBlocking(g_bioQueueManager, BIO_CMD_SET_HARDWARE_CONFIG,
-                                  &params, BIO_PRIORITY_HIGH, &result,
+                                  (BioCommandParams*)&cmd, BIO_PRIORITY_HIGH, &result,
                                   BIO_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
@@ -898,6 +1233,7 @@ int BIO_QueueGetCommandDelay(BioCommandType type) {
             
         case BIO_CMD_RUN_OCV:
         case BIO_CMD_RUN_PEIS:
+		case BIO_CMD_RUN_SPEIS:
             return BIO_DELAY_AFTER_TECHNIQUE;
             
         case BIO_CMD_SET_HARDWARE_CONFIG:

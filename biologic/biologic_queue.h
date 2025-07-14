@@ -69,6 +69,9 @@ typedef enum {
     // High-level technique commands
     BIO_CMD_RUN_OCV,
     BIO_CMD_RUN_PEIS,
+	BIO_CMD_RUN_SPEIS,
+	BIO_CMD_RUN_GEIS,
+	BIO_CMD_RUN_SGEIS,
     
     // Configuration commands
     BIO_CMD_SET_HARDWARE_CONFIG,
@@ -77,54 +80,81 @@ typedef enum {
     BIO_CMD_TYPE_COUNT
 } BioCommandType;
 
-// Command parameters union
-typedef union {
-    // Connection parameters
-    struct { 
-        char address[64]; 
-        uint8_t timeout; 
-    } connect;
-    
-    // OCV parameters
-    struct {
-        uint8_t channel;
-        double duration_s;
-        double sample_interval_s;
-        double record_every_dE;     // mV
-        double record_every_dT;     // seconds
-        int e_range;                // 0=2.5V, 1=5V, 2=10V, 3=Auto
-        int timeout_ms;             // Command timeout
-        BioTechniqueProgressCallback progressCallback;
-        void *userData;
-    } runOCV;
-    
-    // PEIS parameters
-    struct {
-        uint8_t channel;
-        double e_dc;                // DC potential (V)
-        double amplitude;           // AC amplitude (V)
-        double initial_freq;        // Start frequency (Hz)
-        double final_freq;          // End frequency (Hz)
-        int points_per_decade;
-        double i_range;             // Current range
-        double e_range;             // Voltage range
-        double bandwidth;           // Bandwidth setting
-        int timeout_ms;             // Command timeout
-        BioTechniqueProgressCallback progressCallback;
-        void *userData;
-    } runPEIS;
-    
-    // Hardware configuration
-    struct {
-        uint8_t channel;
-        THardwareConf_t config;
-    } hardwareConfig;
-    
-    struct {
-        uint8_t channel;
-    } channel;
-    
+// Base command structure
+typedef struct {
+    BioCommandType type;
+    uint8_t channel;
+    int timeout_ms;
+    BioTechniqueProgressCallback progressCallback;
+    void *userData;
 } BioCommandParams;
+
+// Connection command
+typedef struct {
+    BioCommandParams base;
+    char address[64];
+    uint8_t timeout;
+} BioConnectCommand;
+
+// OCV command
+typedef struct {
+    BioCommandParams base;
+    double duration_s;
+    double sample_interval_s;
+    double record_every_dE;     // mV
+    double record_every_dT;     // seconds
+    int e_range;                // 0=2.5V, 1=5V, 2=10V, 3=Auto
+} BioOCVCommand;
+
+// PEIS command
+typedef struct {
+    BioCommandParams base;
+    bool vs_initial;               // Voltage step vs initial
+    double initial_voltage_step;   // Initial voltage step (V)
+    double duration_step;          // Step duration (s)
+    double record_every_dT;        // Record every dt (s)
+    double record_every_dI;        // Record every dI (A)
+    double initial_freq;           // Initial frequency (Hz)
+    double final_freq;             // Final frequency (Hz)
+    bool sweep_linear;             // TRUE for linear, FALSE for logarithmic
+    double amplitude_voltage;      // Sine amplitude (V)
+    int frequency_number;          // Number of frequencies
+    int average_n_times;           // Number of repeat times
+    bool correction;               // Non-stationary correction
+    double wait_for_steady;        // Number of periods to wait
+} BioPEISCommand;
+
+// SPEIS command
+typedef struct {
+    BioCommandParams base;
+    bool vs_initial;               // Voltage step vs initial
+    bool vs_final;                 // Voltage step vs final
+    double initial_voltage_step;   // Initial voltage step (V)
+    double final_voltage_step;     // Final voltage step (V)
+    double duration_step;          // Step duration (s)
+    int step_number;               // Number of voltage steps [0..98]
+    double record_every_dT;        // Record every dt (s)
+    double record_every_dI;        // Record every dI (A)
+    double initial_freq;           // Initial frequency (Hz)
+    double final_freq;             // Final frequency (Hz)
+    bool sweep_linear;             // TRUE for linear, FALSE for logarithmic
+    double amplitude_voltage;      // Sine amplitude (V)
+    int frequency_number;          // Number of frequencies
+    int average_n_times;           // Number of repeat times
+    bool correction;               // Non-stationary correction
+    double wait_for_steady;        // Number of periods to wait
+} BioSPEISCommand;
+
+// Hardware config command
+typedef struct {
+    BioCommandParams base;
+    THardwareConf_t config;
+} BioHardwareConfigCommand;
+
+// Simple channel command
+typedef struct {
+    BioCommandParams base;
+} BioChannelCommand;
 
 // Command result structure
 typedef struct {
@@ -218,18 +248,46 @@ int BL_RunOCVQueued(int ID, uint8_t channel,
 
 // PEIS measurement (blocking)
 int BL_RunPEISQueued(int ID, uint8_t channel,
-                     double e_dc,
-                     double amplitude,
+                     bool vs_initial,
+                     double initial_voltage_step,
+                     double duration_step,
+                     double record_every_dT,
+                     double record_every_dI,
                      double initial_freq,
                      double final_freq,
-                     int points_per_decade,
-                     double i_range,
-                     double e_range,
-                     double bandwidth,
+                     bool sweep_linear,
+                     double amplitude_voltage,
+                     int frequency_number,
+                     int average_n_times,
+                     bool correction,
+                     double wait_for_steady,
                      BL_RawDataBuffer **data,
                      int timeout_ms,
                      BioTechniqueProgressCallback progressCallback,
                      void *userData);
+
+// SPEIS measurement (blocking)
+int BL_RunSPEISQueued(int ID, uint8_t channel,
+                      bool vs_initial,
+                      bool vs_final,
+                      double initial_voltage_step,
+                      double final_voltage_step,
+                      double duration_step,
+                      int step_number,
+                      double record_every_dT,
+                      double record_every_dI,
+                      double initial_freq,
+                      double final_freq,
+                      bool sweep_linear,
+                      double amplitude_voltage,
+                      int frequency_number,
+                      int average_n_times,
+                      bool correction,
+                      double wait_for_steady,
+                      BL_RawDataBuffer **data,
+                      int timeout_ms,
+                      BioTechniqueProgressCallback progressCallback,
+                      void *userData);
 
 /******************************************************************************
  * High-Level Technique Functions (Async)
@@ -247,16 +305,42 @@ BioCommandID BL_RunOCVAsync(int ID, uint8_t channel,
 
 // PEIS measurement (async)
 BioCommandID BL_RunPEISAsync(int ID, uint8_t channel,
-                             double e_dc,
-                             double amplitude,
+                             bool vs_initial,
+                             double initial_voltage_step,
+                             double duration_step,
+                             double record_every_dT,
+                             double record_every_dI,
                              double initial_freq,
                              double final_freq,
-                             int points_per_decade,
-                             double i_range,
-                             double e_range,
-                             double bandwidth,
+                             bool sweep_linear,
+                             double amplitude_voltage,
+                             int frequency_number,
+                             int average_n_times,
+                             bool correction,
+                             double wait_for_steady,
                              BioCommandCallback callback,
                              void *userData);
+
+// SPEIS measurement (async)
+BioCommandID BL_RunSPEISAsync(int ID, uint8_t channel,
+                              bool vs_initial,
+                              bool vs_final,
+                              double initial_voltage_step,
+                              double final_voltage_step,
+                              double duration_step,
+                              int step_number,
+                              double record_every_dT,
+                              double record_every_dI,
+                              double initial_freq,
+                              double final_freq,
+                              bool sweep_linear,
+                              double amplitude_voltage,
+                              int frequency_number,
+                              int average_n_times,
+                              bool correction,
+                              double wait_for_steady,
+                              BioCommandCallback callback,
+                              void *userData);
 
 /******************************************************************************
  * Connection and Configuration Functions

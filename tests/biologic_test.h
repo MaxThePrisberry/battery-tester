@@ -29,6 +29,9 @@
 #define BIO_TEST_OCV_DURATION       10.0    // 10 seconds
 #define BIO_TEST_PEIS_START_FREQ    100000.0 // 100kHz
 #define BIO_TEST_PEIS_END_FREQ      10.0    // 10Hz
+#define BIO_TEST_SPEIS_INIT_V       -0.5    // Initial voltage -0.5V
+#define BIO_TEST_SPEIS_FINAL_V      0.5     // Final voltage +0.5V
+#define BIO_TEST_SPEIS_STEPS        10      // 10 steps
 
 /******************************************************************************
  * Test Result Structure
@@ -85,6 +88,7 @@ void BIO_TestSuite_Cleanup(BioTestSuiteContext *context);
 int Test_BIO_Connection(BioQueueManager *bioQueueMgr, char *errorMsg, int errorMsgSize);
 int Test_BIO_OCV(BioQueueManager *bioQueueMgr, char *errorMsg, int errorMsgSize);
 int Test_BIO_PEIS(BioQueueManager *bioQueueMgr, char *errorMsg, int errorMsgSize);
+int Test_BIO_SPEIS(BioQueueManager *bioQueueMgr, char *errorMsg, int errorMsgSize);
 
 // Utility functions
 void BIO_UpdateTestProgress(BioTestSuiteContext *context, const char *message);

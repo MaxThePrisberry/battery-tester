@@ -33,7 +33,8 @@ static BioTestSuiteContext *g_biologicTestSuiteContext = NULL;
 static BioTestCase testCases[] = {
     {"Connection Test", Test_BIO_Connection, 0, "", 0.0},
     {"OCV Test", Test_BIO_OCV, 0, "", 0.0},
-    {"PEIS Test", Test_BIO_PEIS, 0, "", 0.0}
+    {"PEIS Test", Test_BIO_PEIS, 0, "", 0.0},
+	{"SPEIS Test", Test_BIO_SPEIS, 0, "", 0.0}
 };
 static int numTestCases = sizeof(testCases) / sizeof(testCases[0]);
 
@@ -502,23 +503,28 @@ int Test_BIO_PEIS(BioQueueManager *bioQueueMgr, char *errorMsg, int errorMsgSize
     LogDebugEx(LOG_DEVICE_BIO, "Running PEIS measurement from %.0fHz to %.0fHz...", 
                BIO_TEST_PEIS_START_FREQ, BIO_TEST_PEIS_END_FREQ);
     
-    // Run PEIS measurement using high-level function
+    // Run PEIS measurement using high-level function with proper parameters
     BL_RawDataBuffer *peisData = NULL;
     int result = BL_RunPEISQueued(
         deviceID,
         TEST_CHANNEL,
-        0.0,                    // e_dc (0V vs OCV)
-        0.010,                  // amplitude (10mV)
-        BIO_TEST_PEIS_START_FREQ, // initial_freq (100kHz)
-        BIO_TEST_PEIS_END_FREQ,   // final_freq (10Hz)
-        10,                     // points_per_decade
-        12,                     // i_range (auto)
-        3,                      // e_range (auto)
-        7,                      // bandwidth (7)
+        true,                           // vs_initial (vs OCV)
+        0.0,                           // initial_voltage_step (0V vs OCV)
+        0.0,                           // duration_step (not used for single step)
+        0.1,                           // record_every_dT (100ms)
+        0.0,                           // record_every_dI (not used)
+        BIO_TEST_PEIS_START_FREQ,      // initial_freq (100kHz)
+        BIO_TEST_PEIS_END_FREQ,        // final_freq (10Hz)
+        false,                         // sweep_linear (FALSE = logarithmic)
+        0.010,                         // amplitude_voltage (10mV)
+        10,                            // frequency_number (10 points per decade)
+        1,                             // average_n_times (1 repeat)
+        false,                         // correction (no non-stationary correction)
+        0.0,                           // wait_for_steady (0 periods)
         &peisData,
-        0,                      // Use default timeout
-        Test_BIO_TechniqueProgress,  // Progress callback
-        g_biologicTestSuiteContext   // Pass test context
+        0,                             // Use default timeout
+        Test_BIO_TechniqueProgress,    // Progress callback
+        g_biologicTestSuiteContext     // Pass test context
     );
     
     if (result == BL_ERR_PARTIAL_DATA) {
@@ -546,5 +552,75 @@ int Test_BIO_PEIS(BioQueueManager *bioQueueMgr, char *errorMsg, int errorMsgSize
     BL_FreeTechniqueResult(peisData);
     
     LogDebugEx(LOG_DEVICE_BIO, "PEIS test completed successfully");
+    return 1;
+}
+
+int Test_BIO_SPEIS(BioQueueManager *bioQueueMgr, char *errorMsg, int errorMsgSize) {
+    LogDebugEx(LOG_DEVICE_BIO, "Testing BioLogic SPEIS functionality...");
+    
+    const uint8_t TEST_CHANNEL = 0;
+    
+    // Get device ID from queue manager
+    int deviceID = BIO_QueueGetDeviceID(bioQueueMgr);
+    if (deviceID < 0) {
+        snprintf(errorMsg, errorMsgSize, "No device connected");
+        return -1;
+    }
+    
+    LogDebugEx(LOG_DEVICE_BIO, "Running SPEIS measurement from %.1fV to %.1fV in %d steps...", 
+               BIO_TEST_SPEIS_INIT_V, BIO_TEST_SPEIS_FINAL_V, BIO_TEST_SPEIS_STEPS);
+    
+    // Run SPEIS measurement using high-level function
+    BL_RawDataBuffer *speisData = NULL;
+    int result = BL_RunSPEISQueued(
+        deviceID,
+        TEST_CHANNEL,
+        true,                          // vs_initial (vs OCV)
+        false,                         // vs_final (not vs OCV)
+        BIO_TEST_SPEIS_INIT_V,        // initial_voltage_step (-0.5V)
+        BIO_TEST_SPEIS_FINAL_V,       // final_voltage_step (+0.5V)
+        1.0,                          // duration_step (1s per step)
+        BIO_TEST_SPEIS_STEPS,         // step_number (10 steps)
+        0.1,                          // record_every_dT (100ms)
+        0.0,                          // record_every_dI (not used)
+        1000.0,                       // initial_freq (1kHz)
+        100.0,                        // final_freq (100Hz)
+        false,                        // sweep_linear (FALSE = logarithmic)
+        0.010,                        // amplitude_voltage (10mV)
+        3,                            // frequency_number (3 frequencies per step)
+        1,                            // average_n_times (1 repeat)
+        false,                        // correction (no non-stationary correction)
+        0.0,                          // wait_for_steady (0 periods)
+        &speisData,
+        0,                            // Use default timeout
+        Test_BIO_TechniqueProgress,   // Progress callback
+        g_biologicTestSuiteContext    // Pass test context
+    );
+    
+    if (result == BL_ERR_PARTIAL_DATA) {
+        LogWarningEx(LOG_DEVICE_BIO, "SPEIS measurement stopped with error, but partial data retrieved");
+    } else if (result != SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "SPEIS measurement failed: %s", BL_GetErrorString(result));
+        return -1;
+    }
+    
+    // Verify we got data
+    if (!speisData || speisData->numPoints == 0) {
+        snprintf(errorMsg, errorMsgSize, "No data received from SPEIS measurement");
+        if (speisData) BL_FreeTechniqueResult(speisData);
+        return -1;
+    }
+    
+    LogMessageEx(LOG_DEVICE_BIO, "========================================");
+    LogMessageEx(LOG_DEVICE_BIO, "SPEIS Test Results:");
+    LogMessageEx(LOG_DEVICE_BIO, "  Data Points: %d", speisData->numPoints);
+    LogMessageEx(LOG_DEVICE_BIO, "  Variables per Point: %d", speisData->numVariables);
+    LogMessageEx(LOG_DEVICE_BIO, "  Technique ID: %d", speisData->techniqueID);
+    LogMessageEx(LOG_DEVICE_BIO, "========================================");
+    
+    // Clean up
+    BL_FreeTechniqueResult(speisData);
+    
+    LogDebugEx(LOG_DEVICE_BIO, "SPEIS test completed successfully");
     return 1;
 }

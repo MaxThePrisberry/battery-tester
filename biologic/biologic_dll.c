@@ -1471,14 +1471,19 @@ error:
 
 // Start PEIS measurement
 int BL_StartPEIS(int ID, uint8_t channel,
-                 double e_dc,               // DC potential (V)
-                 double amplitude,          // AC amplitude (V)
-                 double initial_freq,       // Start frequency (Hz)
-                 double final_freq,         // End frequency (Hz)
-                 int points_per_decade,
-                 double i_range,            // Current range
-                 double e_range,            // Voltage range
-                 double bandwidth,          // Bandwidth setting
+                 bool vs_initial,               // Voltage step vs initial
+                 double initial_voltage_step,   // Initial voltage step (V)
+                 double duration_step,          // Step duration (s)
+                 double record_every_dT,        // Record every dt (s)
+                 double record_every_dI,        // Record every dI (A)
+                 double initial_freq,           // Initial frequency (Hz)
+                 double final_freq,             // Final frequency (Hz)
+                 bool sweep_linear,             // TRUE for linear, FALSE for logarithmic
+                 double amplitude_voltage,      // Sine amplitude (V)
+                 int frequency_number,          // Number of frequencies
+                 int average_n_times,           // Number of repeat times
+                 bool correction,               // Non-stationary correction
+                 double wait_for_steady,        // Number of periods to wait
                  BL_TechniqueContext **context) {
     
     if (!context) return BL_ERR_INVALIDPARAMETERS;
@@ -1493,41 +1498,63 @@ int BL_StartPEIS(int ID, uint8_t channel,
     ctx->config.key.freqStart = initial_freq;
     ctx->config.key.freqEnd = final_freq;
     
-    // Build PEIS parameters (simplified - full PEIS has many more)
-    TEccParam_t params[10];
-    ctx->config.originalParams.len = 10;
+    // Build PEIS parameters according to documentation
+    TEccParam_t params[13];
+    ctx->config.originalParams.len = 13;
     ctx->config.originalParams.pParams = params;
     
     int idx = 0;
-    result = BL_DefineSglParameter("E_dc", (float)e_dc, 0, &params[idx++]);
+    
+    // vs_initial
+    result = BL_DefineBoolParameter("vs_initial", vs_initial, 0, &params[idx++]);
     if (result != SUCCESS) goto error;
     
-    result = BL_DefineSglParameter("Amplitude", (float)amplitude, 0, &params[idx++]);
+    // Initial_Voltage_step
+    result = BL_DefineSglParameter("Initial_Voltage_step", (float)initial_voltage_step, 0, &params[idx++]);
     if (result != SUCCESS) goto error;
     
-    result = BL_DefineSglParameter("Initial_freq", (float)initial_freq, 0, &params[idx++]);
+    // Duration_step
+    result = BL_DefineSglParameter("Duration_step", (float)duration_step, 0, &params[idx++]);
     if (result != SUCCESS) goto error;
     
-    result = BL_DefineSglParameter("Final_freq", (float)final_freq, 0, &params[idx++]);
+    // Record_every_dT
+    result = BL_DefineSglParameter("Record_every_dT", (float)record_every_dT, 0, &params[idx++]);
     if (result != SUCCESS) goto error;
     
-    result = BL_DefineIntParameter("Points_per_decade", points_per_decade, 0, &params[idx++]);
+    // Record_every_dI
+    result = BL_DefineSglParameter("Record_every_dI", (float)record_every_dI, 0, &params[idx++]);
     if (result != SUCCESS) goto error;
     
-    result = BL_DefineIntParameter("I_Range", (int)i_range, 0, &params[idx++]);
+    // Final_frequency
+    result = BL_DefineSglParameter("Final_frequency", (float)final_freq, 0, &params[idx++]);
     if (result != SUCCESS) goto error;
     
-    result = BL_DefineIntParameter("E_Range", (int)e_range, 0, &params[idx++]);
+    // Initial_frequency
+    result = BL_DefineSglParameter("Initial_frequency", (float)initial_freq, 0, &params[idx++]);
     if (result != SUCCESS) goto error;
     
-    result = BL_DefineIntParameter("Bandwidth", (int)bandwidth, 0, &params[idx++]);
+    // sweep
+    result = BL_DefineBoolParameter("sweep", sweep_linear, 0, &params[idx++]);
     if (result != SUCCESS) goto error;
     
-    // Averaging parameters
-    result = BL_DefineIntParameter("Nb_cycles", 1, 0, &params[idx++]);
+    // Amplitude_Voltage
+    result = BL_DefineSglParameter("Amplitude_Voltage", (float)amplitude_voltage, 0, &params[idx++]);
     if (result != SUCCESS) goto error;
     
-    result = BL_DefineBoolParameter("Wait_for_steady", false, 0, &params[idx++]);
+    // Frequency_number
+    result = BL_DefineIntParameter("Frequency_number", frequency_number, 0, &params[idx++]);
+    if (result != SUCCESS) goto error;
+    
+    // Average_N_times
+    result = BL_DefineIntParameter("Average_N_times", average_n_times, 0, &params[idx++]);
+    if (result != SUCCESS) goto error;
+    
+    // Correction
+    result = BL_DefineBoolParameter("Correction", correction, 0, &params[idx++]);
+    if (result != SUCCESS) goto error;
+    
+    // Wait_for_steady
+    result = BL_DefineSglParameter("Wait_for_steady", (float)wait_for_steady, 0, &params[idx++]);
     if (result != SUCCESS) goto error;
     
     // Make a copy of parameters
@@ -1556,6 +1583,155 @@ int BL_StartPEIS(int ID, uint8_t channel,
     
     if (result != SUCCESS) {
         LogErrorEx(LOG_DEVICE_BIO, "Failed to load PEIS technique: %s", BL_GetErrorString(result));
+        goto error;
+    }
+    
+    // Start channel
+    result = BL_StartChannel(ID, channel);
+    if (result != SUCCESS) {
+        LogErrorEx(LOG_DEVICE_BIO, "Failed to start channel: %s", BL_GetErrorString(result));
+        goto error;
+    }
+    
+    *context = ctx;
+    return SUCCESS;
+    
+error:
+    ctx->lastError = result;
+    ctx->state = BIO_TECH_STATE_ERROR;
+    BL_FreeTechniqueContext(ctx);
+    return result;
+}
+
+// Start SPEIS measurement
+int BL_StartSPEIS(int ID, uint8_t channel,
+                  bool vs_initial,
+                  bool vs_final,
+                  double initial_voltage_step,
+                  double final_voltage_step,
+                  double duration_step,
+                  int step_number,
+                  double record_every_dT,
+                  double record_every_dI,
+                  double initial_freq,
+                  double final_freq,
+                  bool sweep_linear,
+                  double amplitude_voltage,
+                  int frequency_number,
+                  int average_n_times,
+                  bool correction,
+                  double wait_for_steady,
+                  BL_TechniqueContext **context) {
+    
+    if (!context) return BL_ERR_INVALIDPARAMETERS;
+    
+    int result;
+    
+    // Create context
+    BL_TechniqueContext *ctx = BL_CreateTechniqueContext(ID, channel, BIO_TECHNIQUE_SPEIS);
+    if (!ctx) return BL_ERR_FUNCTIONFAILED;
+    
+    // Store key parameters
+    ctx->config.key.freqStart = initial_freq;
+    ctx->config.key.freqEnd = final_freq;
+    
+    // Build SPEIS parameters according to documentation
+    TEccParam_t params[16];
+    ctx->config.originalParams.len = 16;
+    ctx->config.originalParams.pParams = params;
+    
+    int idx = 0;
+    
+    // vs_initial
+    result = BL_DefineBoolParameter("vs_initial", vs_initial, 0, &params[idx++]);
+    if (result != SUCCESS) goto error;
+    
+    // vs_final
+    result = BL_DefineBoolParameter("vs_final", vs_final, 0, &params[idx++]);
+    if (result != SUCCESS) goto error;
+    
+    // Initial_Voltage_step
+    result = BL_DefineSglParameter("Initial_Voltage_step", (float)initial_voltage_step, 0, &params[idx++]);
+    if (result != SUCCESS) goto error;
+    
+    // Final_Voltage_step
+    result = BL_DefineSglParameter("Final_Voltage_step", (float)final_voltage_step, 0, &params[idx++]);
+    if (result != SUCCESS) goto error;
+    
+    // Duration_step
+    result = BL_DefineSglParameter("Duration_step", (float)duration_step, 0, &params[idx++]);
+    if (result != SUCCESS) goto error;
+    
+    // Step_number
+    result = BL_DefineIntParameter("Step_number", step_number, 0, &params[idx++]);
+    if (result != SUCCESS) goto error;
+    
+    // Record_every_dT
+    result = BL_DefineSglParameter("Record_every_dT", (float)record_every_dT, 0, &params[idx++]);
+    if (result != SUCCESS) goto error;
+    
+    // Record_every_dI
+    result = BL_DefineSglParameter("Record_every_dI", (float)record_every_dI, 0, &params[idx++]);
+    if (result != SUCCESS) goto error;
+    
+    // Final_frequency
+    result = BL_DefineSglParameter("Final_frequency", (float)final_freq, 0, &params[idx++]);
+    if (result != SUCCESS) goto error;
+    
+    // Initial_frequency
+    result = BL_DefineSglParameter("Initial_frequency", (float)initial_freq, 0, &params[idx++]);
+    if (result != SUCCESS) goto error;
+    
+    // sweep
+    result = BL_DefineBoolParameter("sweep", sweep_linear, 0, &params[idx++]);
+    if (result != SUCCESS) goto error;
+    
+    // Amplitude_Voltage
+    result = BL_DefineSglParameter("Amplitude_Voltage", (float)amplitude_voltage, 0, &params[idx++]);
+    if (result != SUCCESS) goto error;
+    
+    // Frequency_number
+    result = BL_DefineIntParameter("Frequency_number", frequency_number, 0, &params[idx++]);
+    if (result != SUCCESS) goto error;
+    
+    // Average_N_times
+    result = BL_DefineIntParameter("Average_N_times", average_n_times, 0, &params[idx++]);
+    if (result != SUCCESS) goto error;
+    
+    // Correction
+    result = BL_DefineBoolParameter("Correction", correction, 0, &params[idx++]);
+    if (result != SUCCESS) goto error;
+    
+    // Wait_for_steady
+    result = BL_DefineSglParameter("Wait_for_steady", (float)wait_for_steady, 0, &params[idx++]);
+    if (result != SUCCESS) goto error;
+    
+    // Make a copy of parameters
+    ctx->config.paramsCopy = malloc(idx * sizeof(TEccParam_t));
+    if (ctx->config.paramsCopy) {
+        memcpy(ctx->config.paramsCopy, params, idx * sizeof(TEccParam_t));
+        ctx->config.originalParams.pParams = ctx->config.paramsCopy;
+    }
+    
+    // Store technique file
+    strcpy(ctx->config.eccFile, "lib\\seisp.ecc");
+    
+    // Stop channel if running
+    result = BL_StopChannel(ID, channel);
+    if (result != SUCCESS && result != BL_ERR_CHANNELNOTPLUGGED) {
+        LogWarningEx(LOG_DEVICE_BIO, "Failed to stop channel: %s", BL_GetErrorString(result));
+    }
+    
+    // Small delay after stop
+    Delay(0.2);
+    
+    // Load technique
+    ctx->state = BIO_TECH_STATE_LOADING;
+    result = BL_LoadTechnique(ID, channel, ctx->config.eccFile, 
+                            ctx->config.originalParams, true, true, false);
+    
+    if (result != SUCCESS) {
+        LogErrorEx(LOG_DEVICE_BIO, "Failed to load SPEIS technique: %s", BL_GetErrorString(result));
         goto error;
     }
     

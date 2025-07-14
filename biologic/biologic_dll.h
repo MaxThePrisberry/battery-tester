@@ -22,12 +22,10 @@
 typedef enum {
     BIO_TECHNIQUE_NONE = 0,
     BIO_TECHNIQUE_OCV,
-    BIO_TECHNIQUE_CA,
-    BIO_TECHNIQUE_CP,
-    BIO_TECHNIQUE_CV,
     BIO_TECHNIQUE_PEIS,
-    BIO_TECHNIQUE_GEIS,
-    // Add more as needed
+	BIO_TECHNIQUE_SPEIS,
+	BIO_TECHNIQUE_GEIS,
+	BIO_TECHNIQUE_SGEIS,
 } BioTechniqueType;
 
 // Technique state
@@ -274,15 +272,40 @@ int BL_StartOCV(int ID, uint8_t channel,
 
 // PEIS (Potentio Electrochemical Impedance Spectroscopy)
 int BL_StartPEIS(int ID, uint8_t channel,
-                 double e_dc,               // DC potential (V)
-                 double amplitude,          // AC amplitude (V)
-                 double initial_freq,       // Start frequency (Hz)
-                 double final_freq,         // End frequency (Hz)
-                 int points_per_decade,
-                 double i_range,            // Current range
-                 double e_range,            // Voltage range
-                 double bandwidth,          // Bandwidth setting
+                 bool vs_initial,               // Voltage step vs initial
+                 double initial_voltage_step,   // Initial voltage step (V)
+                 double duration_step,          // Step duration (s)
+                 double record_every_dT,        // Record every dt (s)
+                 double record_every_dI,        // Record every dI (A)
+                 double initial_freq,           // Initial frequency (Hz)
+                 double final_freq,             // Final frequency (Hz)
+                 bool sweep_linear,             // TRUE for linear, FALSE for logarithmic
+                 double amplitude_voltage,      // Sine amplitude (V)
+                 int frequency_number,          // Number of frequencies
+                 int average_n_times,           // Number of repeat times
+                 bool correction,               // Non-stationary correction
+                 double wait_for_steady,        // Number of periods to wait
                  BL_TechniqueContext **context);
+
+// SPEIS (Staircase Potentio Electrochemical Impedance Spectroscopy)
+int BL_StartSPEIS(int ID, uint8_t channel,
+                  bool vs_initial,              // Voltage step vs initial
+                  bool vs_final,                // Voltage step vs final
+                  double initial_voltage_step,  // Initial voltage step (V)
+                  double final_voltage_step,    // Final voltage step (V)
+                  double duration_step,         // Step duration (s)
+                  int step_number,              // Number of voltage steps [0..98]
+                  double record_every_dT,       // Record every dt (s)
+                  double record_every_dI,       // Record every dI (A)
+                  double initial_freq,          // Initial frequency (Hz)
+                  double final_freq,            // Final frequency (Hz)
+                  bool sweep_linear,            // TRUE for linear, FALSE for logarithmic
+                  double amplitude_voltage,     // Sine amplitude (V)
+                  int frequency_number,         // Number of frequencies
+                  int average_n_times,          // Number of repeat times
+                  bool correction,              // Non-stationary correction
+                  double wait_for_steady,       // Number of periods to wait
+                  BL_TechniqueContext **context);
 
 // ============================================================================
 // Error Codes (for reference)
