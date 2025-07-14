@@ -145,6 +145,47 @@ typedef struct {
     double wait_for_steady;        // Number of periods to wait
 } BioSPEISCommand;
 
+// GEIS command
+typedef struct {
+    BioCommandParams base;
+    bool vs_initial;               // Current step vs initial
+    double initial_current_step;   // Initial current step (A)
+    double duration_step;          // Step duration (s)
+    double record_every_dT;        // Record every dt (s)
+    double record_every_dE;        // Record every dE (V)
+    double initial_freq;           // Initial frequency (Hz)
+    double final_freq;             // Final frequency (Hz)
+    bool sweep_linear;             // TRUE for linear, FALSE for logarithmic
+    double amplitude_current;      // Sine amplitude (A)
+    int frequency_number;          // Number of frequencies
+    int average_n_times;           // Number of repeat times
+    bool correction;               // Non-stationary correction
+    double wait_for_steady;        // Number of periods to wait
+    int i_range;                   // Current range (cannot be auto)
+} BioGEISCommand;
+
+// SGEIS command
+typedef struct {
+    BioCommandParams base;
+    bool vs_initial;               // Current step vs initial
+    bool vs_final;                 // Current step vs final
+    double initial_current_step;   // Initial current step (A)
+    double final_current_step;     // Final current step (A)
+    double duration_step;          // Step duration (s)
+    int step_number;               // Number of current steps [0..98]
+    double record_every_dT;        // Record every dt (s)
+    double record_every_dE;        // Record every dE (V)
+    double initial_freq;           // Initial frequency (Hz)
+    double final_freq;             // Final frequency (Hz)
+    bool sweep_linear;             // TRUE for linear, FALSE for logarithmic
+    double amplitude_current;      // Sine amplitude (A)
+    int frequency_number;          // Number of frequencies
+    int average_n_times;           // Number of repeat times
+    bool correction;               // Non-stationary correction
+    double wait_for_steady;        // Number of periods to wait
+    int i_range;                   // Current range (cannot be auto)
+} BioSGEISCommand;
+
 // Hardware config command
 typedef struct {
     BioCommandParams base;
@@ -289,6 +330,51 @@ int BL_RunSPEISQueued(int ID, uint8_t channel,
                       BioTechniqueProgressCallback progressCallback,
                       void *userData);
 
+// GEIS measurement (blocking)
+int BL_RunGEISQueued(int ID, uint8_t channel,
+                     bool vs_initial,
+                     double initial_current_step,
+                     double duration_step,
+                     double record_every_dT,
+                     double record_every_dE,
+                     double initial_freq,
+                     double final_freq,
+                     bool sweep_linear,
+                     double amplitude_current,
+                     int frequency_number,
+                     int average_n_times,
+                     bool correction,
+                     double wait_for_steady,
+                     int i_range,
+                     BL_RawDataBuffer **data,
+                     int timeout_ms,
+                     BioTechniqueProgressCallback progressCallback,
+                     void *userData);
+
+// SGEIS measurement (blocking)
+int BL_RunSGEISQueued(int ID, uint8_t channel,
+                      bool vs_initial,
+                      bool vs_final,
+                      double initial_current_step,
+                      double final_current_step,
+                      double duration_step,
+                      int step_number,
+                      double record_every_dT,
+                      double record_every_dE,
+                      double initial_freq,
+                      double final_freq,
+                      bool sweep_linear,
+                      double amplitude_current,
+                      int frequency_number,
+                      int average_n_times,
+                      bool correction,
+                      double wait_for_steady,
+                      int i_range,
+                      BL_RawDataBuffer **data,
+                      int timeout_ms,
+                      BioTechniqueProgressCallback progressCallback,
+                      void *userData);
+
 /******************************************************************************
  * High-Level Technique Functions (Async)
  ******************************************************************************/
@@ -339,6 +425,47 @@ BioCommandID BL_RunSPEISAsync(int ID, uint8_t channel,
                               int average_n_times,
                               bool correction,
                               double wait_for_steady,
+                              BioCommandCallback callback,
+                              void *userData);
+
+// GEIS measurement (async)
+BioCommandID BL_RunGEISAsync(int ID, uint8_t channel,
+                             bool vs_initial,
+                             double initial_current_step,
+                             double duration_step,
+                             double record_every_dT,
+                             double record_every_dE,
+                             double initial_freq,
+                             double final_freq,
+                             bool sweep_linear,
+                             double amplitude_current,
+                             int frequency_number,
+                             int average_n_times,
+                             bool correction,
+                             double wait_for_steady,
+                             int i_range,
+                             BioCommandCallback callback,
+                             void *userData);
+
+// SGEIS measurement (async)
+BioCommandID BL_RunSGEISAsync(int ID, uint8_t channel,
+                              bool vs_initial,
+                              bool vs_final,
+                              double initial_current_step,
+                              double final_current_step,
+                              double duration_step,
+                              int step_number,
+                              double record_every_dT,
+                              double record_every_dE,
+                              double initial_freq,
+                              double final_freq,
+                              bool sweep_linear,
+                              double amplitude_current,
+                              int frequency_number,
+                              int average_n_times,
+                              bool correction,
+                              double wait_for_steady,
+                              int i_range,
                               BioCommandCallback callback,
                               void *userData);
 

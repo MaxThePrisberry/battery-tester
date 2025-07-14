@@ -34,7 +34,9 @@ static BioTestCase testCases[] = {
     {"Connection Test", Test_BIO_Connection, 0, "", 0.0},
     {"OCV Test", Test_BIO_OCV, 0, "", 0.0},
     {"PEIS Test", Test_BIO_PEIS, 0, "", 0.0},
-	{"SPEIS Test", Test_BIO_SPEIS, 0, "", 0.0}
+    {"SPEIS Test", Test_BIO_SPEIS, 0, "", 0.0},
+    {"GEIS Test", Test_BIO_GEIS, 0, "", 0.0},
+    {"SGEIS Test", Test_BIO_SGEIS, 0, "", 0.0}
 };
 static int numTestCases = sizeof(testCases) / sizeof(testCases[0]);
 
@@ -622,5 +624,144 @@ int Test_BIO_SPEIS(BioQueueManager *bioQueueMgr, char *errorMsg, int errorMsgSiz
     BL_FreeTechniqueResult(speisData);
     
     LogDebugEx(LOG_DEVICE_BIO, "SPEIS test completed successfully");
+    return 1;
+}
+
+int Test_BIO_GEIS(BioQueueManager *bioQueueMgr, char *errorMsg, int errorMsgSize) {
+    LogDebugEx(LOG_DEVICE_BIO, "Testing BioLogic GEIS functionality...");
+    
+    const uint8_t TEST_CHANNEL = 0;
+    
+    // Get device ID from queue manager
+    int deviceID = BIO_QueueGetDeviceID(bioQueueMgr);
+    if (deviceID < 0) {
+        snprintf(errorMsg, errorMsgSize, "No device connected");
+        return -1;
+    }
+    
+    LogDebugEx(LOG_DEVICE_BIO, "Running GEIS measurement at %.1fmA from %.0fHz to %.0fHz...", 
+               BIO_TEST_GEIS_INIT_I * 1000, BIO_TEST_GEIS_START_FREQ, BIO_TEST_GEIS_END_FREQ);
+    
+    // Run GEIS measurement using high-level function
+    BL_RawDataBuffer *geisData = NULL;
+    int result = BL_RunGEISQueued(
+        deviceID,
+        TEST_CHANNEL,
+        true,                          // vs_initial (vs initial current)
+        BIO_TEST_GEIS_INIT_I,         // initial_current_step (0A)
+        0.0,                          // duration_step (not used for single step)
+        0.1,                          // record_every_dT (100ms)
+        0.010,                        // record_every_dE (10mV)
+        BIO_TEST_GEIS_START_FREQ,     // initial_freq (1kHz)
+        BIO_TEST_GEIS_END_FREQ,       // final_freq (100Hz)
+        false,                        // sweep_linear (FALSE = logarithmic)
+        BIO_TEST_GEIS_AMPLITUDE_I,    // amplitude_current (10mA)
+        5,                            // frequency_number (5 frequencies per decade)
+        1,                            // average_n_times (1 repeat)
+        false,                        // correction (no non-stationary correction)
+        0.0,                          // wait_for_steady (0 periods)
+        KBIO_IRANGE_100mA,           // i_range (100mA range)
+        &geisData,
+        0,                            // Use default timeout
+        Test_BIO_TechniqueProgress,   // Progress callback
+        g_biologicTestSuiteContext    // Pass test context
+    );
+    
+    if (result == BL_ERR_PARTIAL_DATA) {
+        LogWarningEx(LOG_DEVICE_BIO, "GEIS measurement stopped with error, but partial data retrieved");
+    } else if (result != SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "GEIS measurement failed: %s", BL_GetErrorString(result));
+        return -1;
+    }
+    
+    // Verify we got data
+    if (!geisData || geisData->numPoints == 0) {
+        snprintf(errorMsg, errorMsgSize, "No data received from GEIS measurement");
+        if (geisData) BL_FreeTechniqueResult(geisData);
+        return -1;
+    }
+    
+    LogMessageEx(LOG_DEVICE_BIO, "========================================");
+    LogMessageEx(LOG_DEVICE_BIO, "GEIS Test Results:");
+    LogMessageEx(LOG_DEVICE_BIO, "  Data Points: %d", geisData->numPoints);
+    LogMessageEx(LOG_DEVICE_BIO, "  Variables per Point: %d", geisData->numVariables);
+    LogMessageEx(LOG_DEVICE_BIO, "  Technique ID: %d", geisData->techniqueID);
+    LogMessageEx(LOG_DEVICE_BIO, "========================================");
+    
+    // Clean up
+    BL_FreeTechniqueResult(geisData);
+    
+    LogDebugEx(LOG_DEVICE_BIO, "GEIS test completed successfully");
+    return 1;
+}
+
+int Test_BIO_SGEIS(BioQueueManager *bioQueueMgr, char *errorMsg, int errorMsgSize) {
+    LogDebugEx(LOG_DEVICE_BIO, "Testing BioLogic SGEIS functionality...");
+    
+    const uint8_t TEST_CHANNEL = 0;
+    
+    // Get device ID from queue manager
+    int deviceID = BIO_QueueGetDeviceID(bioQueueMgr);
+    if (deviceID < 0) {
+        snprintf(errorMsg, errorMsgSize, "No device connected");
+        return -1;
+    }
+    
+    LogDebugEx(LOG_DEVICE_BIO, "Running SGEIS measurement from %.1fmA to %.1fmA in %d steps...", 
+               BIO_TEST_SGEIS_INIT_I * 1000, BIO_TEST_SGEIS_FINAL_I * 1000, BIO_TEST_SGEIS_STEPS);
+    
+    // Run SGEIS measurement using high-level function
+    BL_RawDataBuffer *sgeisData = NULL;
+    int result = BL_RunSGEISQueued(
+        deviceID,
+        TEST_CHANNEL,
+        true,                         // vs_initial (vs initial current)
+        false,                        // vs_final (not vs initial)
+        BIO_TEST_SGEIS_INIT_I,       // initial_current_step (0A)
+        BIO_TEST_SGEIS_FINAL_I,      // final_current_step (100mA)
+        1.0,                         // duration_step (1s per step)
+        BIO_TEST_SGEIS_STEPS,        // step_number (10 steps)
+        0.1,                         // record_every_dT (100ms)
+        0.010,                       // record_every_dE (10mV)
+        1000.0,                      // initial_freq (1kHz)
+        100.0,                       // final_freq (100Hz)
+        false,                       // sweep_linear (FALSE = logarithmic)
+        BIO_TEST_SGEIS_AMPLITUDE_I,  // amplitude_current (10mA)
+        3,                           // frequency_number (3 frequencies per step)
+        1,                           // average_n_times (1 repeat)
+        false,                       // correction (no non-stationary correction)
+        0.0,                         // wait_for_steady (0 periods)
+        KBIO_IRANGE_100mA,          // i_range (100mA range)
+        &sgeisData,
+        0,                           // Use default timeout
+        Test_BIO_TechniqueProgress,  // Progress callback
+        g_biologicTestSuiteContext   // Pass test context
+    );
+    
+    if (result == BL_ERR_PARTIAL_DATA) {
+        LogWarningEx(LOG_DEVICE_BIO, "SGEIS measurement stopped with error, but partial data retrieved");
+    } else if (result != SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "SGEIS measurement failed: %s", BL_GetErrorString(result));
+        return -1;
+    }
+    
+    // Verify we got data
+    if (!sgeisData || sgeisData->numPoints == 0) {
+        snprintf(errorMsg, errorMsgSize, "No data received from SGEIS measurement");
+        if (sgeisData) BL_FreeTechniqueResult(sgeisData);
+        return -1;
+    }
+    
+    LogMessageEx(LOG_DEVICE_BIO, "========================================");
+    LogMessageEx(LOG_DEVICE_BIO, "SGEIS Test Results:");
+    LogMessageEx(LOG_DEVICE_BIO, "  Data Points: %d", sgeisData->numPoints);
+    LogMessageEx(LOG_DEVICE_BIO, "  Variables per Point: %d", sgeisData->numVariables);
+    LogMessageEx(LOG_DEVICE_BIO, "  Technique ID: %d", sgeisData->techniqueID);
+    LogMessageEx(LOG_DEVICE_BIO, "========================================");
+    
+    // Clean up
+    BL_FreeTechniqueResult(sgeisData);
+    
+    LogDebugEx(LOG_DEVICE_BIO, "SGEIS test completed successfully");
     return 1;
 }

@@ -307,6 +307,45 @@ int BL_StartSPEIS(int ID, uint8_t channel,
                   double wait_for_steady,       // Number of periods to wait
                   BL_TechniqueContext **context);
 
+// GEIS (Galvano Electrochemical Impedance Spectroscopy)
+int BL_StartGEIS(int ID, uint8_t channel,
+                 bool vs_initial,               // Current step vs initial
+                 double initial_current_step,   // Initial current step (A)
+                 double duration_step,          // Step duration (s)
+                 double record_every_dT,        // Record every dt (s)
+                 double record_every_dE,        // Record every dE (V)
+                 double initial_freq,           // Initial frequency (Hz)
+                 double final_freq,             // Final frequency (Hz)
+                 bool sweep_linear,             // TRUE for linear, FALSE for logarithmic
+                 double amplitude_current,      // Sine amplitude (A)
+                 int frequency_number,          // Number of frequencies
+                 int average_n_times,           // Number of repeat times
+                 bool correction,               // Non-stationary correction
+                 double wait_for_steady,        // Number of periods to wait
+                 int i_range,                   // Current range (cannot be auto)
+                 BL_TechniqueContext **context);
+
+// SGEIS (Staircase Galvano Electrochemical Impedance Spectroscopy)
+int BL_StartSGEIS(int ID, uint8_t channel,
+                  bool vs_initial,              // Current step vs initial
+                  bool vs_final,                // Current step vs final
+                  double initial_current_step,  // Initial current step (A)
+                  double final_current_step,    // Final current step (A)
+                  double duration_step,         // Step duration (s)
+                  int step_number,              // Number of current steps [0..98]
+                  double record_every_dT,       // Record every dt (s)
+                  double record_every_dE,       // Record every dE (V)
+                  double initial_freq,          // Initial frequency (Hz)
+                  double final_freq,            // Final frequency (Hz)
+                  bool sweep_linear,            // TRUE for linear, FALSE for logarithmic
+                  double amplitude_current,     // Sine amplitude (A)
+                  int frequency_number,         // Number of frequencies
+                  int average_n_times,          // Number of repeat times
+                  bool correction,              // Non-stationary correction
+                  double wait_for_steady,       // Number of periods to wait
+                  int i_range,                  // Current range (cannot be auto)
+                  BL_TechniqueContext **context);
+
 // ============================================================================
 // Error Codes (for reference)
 // ============================================================================

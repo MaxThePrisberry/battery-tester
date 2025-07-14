@@ -25,13 +25,29 @@
 // Test timeout
 #define BIO_TEST_TIMEOUT_MS         5000    // 5 seconds
 
-// Test parameters
+// OCV test parameters
 #define BIO_TEST_OCV_DURATION       10.0    // 10 seconds
+
+// PEIS test parameters
 #define BIO_TEST_PEIS_START_FREQ    100000.0 // 100kHz
 #define BIO_TEST_PEIS_END_FREQ      10.0    // 10Hz
+
+// SPEIS test parameters
 #define BIO_TEST_SPEIS_INIT_V       -0.5    // Initial voltage -0.5V
 #define BIO_TEST_SPEIS_FINAL_V      0.5     // Final voltage +0.5V
-#define BIO_TEST_SPEIS_STEPS        10      // 10 steps
+#define BIO_TEST_SPEIS_STEPS        10      // 10 
+
+// GEIS test parameters
+#define BIO_TEST_GEIS_INIT_I        0.0     // Initial current 0A
+#define BIO_TEST_GEIS_AMPLITUDE_I   0.010   // 10mA amplitude
+#define BIO_TEST_GEIS_START_FREQ    1000.0  // 1kHz
+#define BIO_TEST_GEIS_END_FREQ      100.0   // 100Hz
+
+// SGEIS test parameters  
+#define BIO_TEST_SGEIS_INIT_I       0.0     // Initial current 0A
+#define BIO_TEST_SGEIS_FINAL_I      0.100   // Final current 100mA
+#define BIO_TEST_SGEIS_AMPLITUDE_I  0.010   // 10mA amplitude
+#define BIO_TEST_SGEIS_STEPS        10      // 10 steps
 
 /******************************************************************************
  * Test Result Structure
@@ -89,6 +105,8 @@ int Test_BIO_Connection(BioQueueManager *bioQueueMgr, char *errorMsg, int errorM
 int Test_BIO_OCV(BioQueueManager *bioQueueMgr, char *errorMsg, int errorMsgSize);
 int Test_BIO_PEIS(BioQueueManager *bioQueueMgr, char *errorMsg, int errorMsgSize);
 int Test_BIO_SPEIS(BioQueueManager *bioQueueMgr, char *errorMsg, int errorMsgSize);
+int Test_BIO_GEIS(BioQueueManager *bioQueueMgr, char *errorMsg, int errorMsgSize);
+int Test_BIO_SGEIS(BioQueueManager *bioQueueMgr, char *errorMsg, int errorMsgSize);
 
 // Utility functions
 void BIO_UpdateTestProgress(BioTestSuiteContext *context, const char *message);
