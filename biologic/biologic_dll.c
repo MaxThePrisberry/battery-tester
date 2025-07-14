@@ -1,8 +1,14 @@
 #include "common.h"
 #include "biologic_dll.h"
+#include "biologic_queue.h"
 #include "logging.h"
 #include <stdio.h>
 #include <string.h>
+
+// Define M_PI if not already defined
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 
 // ============================================================================
 // EClib.dll Function Pointers - ALL 58 functions
@@ -1304,18 +1310,43 @@ int BL_UpdateTechnique(BL_TechniqueContext *context) {
                     int dataSize = dataInfo.NbRows * dataInfo.NbCols;
                     context->rawData.rawData = malloc(dataSize * sizeof(unsigned int));
                     
-                    if (context->rawData.rawData) {
-                        memcpy(context->rawData.rawData, dataBuffer.data, 
-                               dataSize * sizeof(unsigned int));
-                        context->rawData.bufferSize = dataSize;
-                        context->rawData.numPoints = dataInfo.NbRows;
-                        context->rawData.numVariables = dataInfo.NbCols;
-                        context->rawData.techniqueID = dataInfo.TechniqueID;
-                        context->rawData.processIndex = dataInfo.ProcessIndex;
-                        
-                        LogDebugEx(LOG_DEVICE_BIO, "Retrieved %d data points with %d variables each",
-                                 dataInfo.NbRows, dataInfo.NbCols);
-                    }
+                    // In BL_UpdateTechnique, after storing raw data:
+					if (context->rawData.rawData) {
+					    memcpy(context->rawData.rawData, dataBuffer.data, 
+					           dataSize * sizeof(unsigned int));
+					    context->rawData.bufferSize = dataSize;
+					    context->rawData.numPoints = dataInfo.NbRows;
+					    context->rawData.numVariables = dataInfo.NbCols;
+					    context->rawData.techniqueID = dataInfo.TechniqueID;
+					    context->rawData.processIndex = dataInfo.ProcessIndex;
+					    
+					    LogDebugEx(LOG_DEVICE_BIO, "Retrieved %d data points with %d variables each",
+					             dataInfo.NbRows, dataInfo.NbCols);
+					    
+					    // Process data if requested
+					    if (context->processData) {
+					        // Get channel type for conversion
+					        uint32_t channelType;
+					        result = BL_GetChannelBoardType(context->deviceID, context->channel, &channelType);
+					        
+					        if (result == SUCCESS) {
+					            float timebase = currentValues.TimeBase;
+					            result = BL_ProcessTechniqueData(&context->rawData, 
+					                                           dataInfo.TechniqueID,
+					                                           dataInfo.ProcessIndex,
+					                                           channelType,
+					                                           timebase,
+					                                           &context->convertedData);
+					            
+					            if (result == SUCCESS) {
+					                LogDebugEx(LOG_DEVICE_BIO, "Data processed: %d variables converted",
+					                         context->convertedData->numVariables);
+					            } else {
+					                LogWarningEx(LOG_DEVICE_BIO, "Failed to process data: %d", result);
+					            }
+					        }
+					    }
+					}
                     
                     // Call data callback if set
                     if (context->dataCallback) {
@@ -1382,6 +1413,369 @@ int BL_GetTechniqueRawData(BL_TechniqueContext *context, BL_RawDataBuffer **data
     return BL_ERR_FUNCTIONFAILED;
 }
 
+int BL_ProcessTechniqueData(BL_RawDataBuffer *rawData, int techniqueID, int processIndex,
+                           uint32_t channelType, float timebase,
+                           BL_ConvertedData **convertedData) {
+    if (!rawData || !convertedData || rawData->numPoints == 0) {
+        return BL_ERR_INVALIDPARAMETERS;
+    }
+    
+    // Allocate converted data structure
+    BL_ConvertedData *converted = calloc(1, sizeof(BL_ConvertedData));
+    if (!converted) return BL_ERR_FUNCTIONFAILED;
+    
+    converted->techniqueID = techniqueID;
+    converted->processIndex = processIndex;
+    converted->numPoints = rawData->numPoints;
+    
+    // Process based on technique type
+    switch (techniqueID) {
+        case KBIO_TECHID_OCV:  // OCV - technique ID 100
+            if (processIndex == 0) {
+                // OCV has: time, Ewe, Ece
+                converted->numVariables = 3;
+                converted->variableNames = malloc(3 * sizeof(char*));
+                converted->variableUnits = malloc(3 * sizeof(char*));
+                converted->data = malloc(3 * sizeof(double*));
+                
+                converted->variableNames[0] = my_strdup("Time");
+                converted->variableNames[1] = my_strdup("Ewe");
+                converted->variableNames[2] = my_strdup("Ece");
+                
+                converted->variableUnits[0] = my_strdup("s");
+                converted->variableUnits[1] = my_strdup("V");
+                converted->variableUnits[2] = my_strdup("V");
+                
+                // Allocate data arrays
+                for (int v = 0; v < 3; v++) {
+                    converted->data[v] = malloc(rawData->numPoints * sizeof(double));
+                }
+                
+                // Convert data
+                for (int i = 0; i < rawData->numPoints; i++) {
+                    unsigned int *row = &rawData->rawData[i * rawData->numVariables];
+                    
+                    // Time (needs special handling - 2 uints)
+                    uint32_t timeData[2] = {row[0], row[1]};
+                    BL_ConvertTimeChannelNumericIntoSeconds(timeData, &converted->data[0][i], 
+                                                           timebase, channelType);
+                    
+                    // Ewe and Ece
+                    float temp;
+                    BL_ConvertChannelNumericIntoSingle(row[2], &temp, channelType);
+                    converted->data[1][i] = temp;
+                    
+                    BL_ConvertChannelNumericIntoSingle(row[3], &temp, channelType);
+                    converted->data[2][i] = temp;
+                }
+            }
+            break;
+            
+        case KBIO_TECHID_PEIS:  // PEIS - technique ID 104
+        case KBIO_TECHID_GEIS:  // GEIS - technique ID 107 (same format as PEIS)
+            if (processIndex == 1) {  // Impedance data
+                // PEIS/GEIS impedance data
+                converted->numVariables = 11;
+                converted->variableNames = malloc(11 * sizeof(char*));
+                converted->variableUnits = malloc(11 * sizeof(char*));
+                converted->data = malloc(11 * sizeof(double*));
+                
+                char *names[] = {"Frequency", "|Ewe|", "|I|", "Phase_Zwe", "Re(Zwe)", "Im(Zwe)", 
+                                "Ewe", "I", "|Ece|", "|Ice|", "Time"};
+                char *units[] = {"Hz", "V", "A", "deg", "Ohm", "Ohm", 
+                                "V", "A", "V", "A", "s"};
+                
+                for (int v = 0; v < 11; v++) {
+                    converted->variableNames[v] = my_strdup(names[v]);
+                    converted->variableUnits[v] = my_strdup(units[v]);
+                    converted->data[v] = malloc(rawData->numPoints * sizeof(double));
+                }
+                
+                // Convert data
+                for (int i = 0; i < rawData->numPoints; i++) {
+                    unsigned int *row = &rawData->rawData[i * rawData->numVariables];
+                    float temp;
+                    
+                    // Basic conversions
+                    BL_ConvertChannelNumericIntoSingle(row[0], &temp, channelType);  // freq
+                    converted->data[0][i] = temp;
+                    
+                    BL_ConvertChannelNumericIntoSingle(row[1], &temp, channelType);  // |Ewe|
+                    converted->data[1][i] = temp;
+                    
+                    BL_ConvertChannelNumericIntoSingle(row[2], &temp, channelType);  // |I|
+                    converted->data[2][i] = temp;
+                    
+                    BL_ConvertChannelNumericIntoSingle(row[3], &temp, channelType);  // Phase
+                    converted->data[3][i] = temp;
+                    
+                    // Calculate Re(Z) and Im(Z) from magnitude and phase
+                    double magnitude = converted->data[1][i] / converted->data[2][i];  // |Ewe|/|I|
+                    double phase_rad = converted->data[3][i] * M_PI / 180.0;
+                    converted->data[4][i] = magnitude * cos(phase_rad);  // Re(Z)
+                    converted->data[5][i] = magnitude * sin(phase_rad);  // Im(Z)
+                    
+                    BL_ConvertChannelNumericIntoSingle(row[4], &temp, channelType);  // Ewe
+                    converted->data[6][i] = temp;
+                    
+                    BL_ConvertChannelNumericIntoSingle(row[5], &temp, channelType);  // I
+                    converted->data[7][i] = temp;
+                    
+                    BL_ConvertChannelNumericIntoSingle(row[7], &temp, channelType);  // |Ece|
+                    converted->data[8][i] = temp;
+                    
+                    BL_ConvertChannelNumericIntoSingle(row[8], &temp, channelType);  // |Ice|
+                    converted->data[9][i] = temp;
+                    
+                    // Time is at different positions for VMP3 vs VMP-300
+                    int timeCol = (rawData->numVariables > 15) ? 13 : 13;  // Adjust if needed
+                    BL_ConvertChannelNumericIntoSingle(row[timeCol], &temp, channelType);
+                    converted->data[10][i] = temp;
+                }
+            } else if (processIndex == 0) {
+                // Process 0: time series data during stabilization
+                converted->numVariables = 3;
+                converted->variableNames = malloc(3 * sizeof(char*));
+                converted->variableUnits = malloc(3 * sizeof(char*));
+                converted->data = malloc(3 * sizeof(double*));
+                
+                converted->variableNames[0] = my_strdup("Time");
+                converted->variableNames[1] = my_strdup("Ewe");
+                converted->variableNames[2] = my_strdup("I");
+                
+                converted->variableUnits[0] = my_strdup("s");
+                converted->variableUnits[1] = my_strdup("V");
+                converted->variableUnits[2] = my_strdup("A");
+                
+                for (int v = 0; v < 3; v++) {
+                    converted->data[v] = malloc(rawData->numPoints * sizeof(double));
+                }
+                
+                for (int i = 0; i < rawData->numPoints; i++) {
+                    unsigned int *row = &rawData->rawData[i * rawData->numVariables];
+                    
+                    // Time
+                    uint32_t timeData[2] = {row[0], row[1]};
+                    BL_ConvertTimeChannelNumericIntoSeconds(timeData, &converted->data[0][i], 
+                                                           timebase, channelType);
+                    
+                    // Ewe and I
+                    float temp;
+                    BL_ConvertChannelNumericIntoSingle(row[2], &temp, channelType);
+                    converted->data[1][i] = temp;
+                    
+                    BL_ConvertChannelNumericIntoSingle(row[3], &temp, channelType);
+                    converted->data[2][i] = temp;
+                }
+            }
+            break;
+            
+        case KBIO_TECHID_SPEIS:  // SPEIS - technique ID 113
+        case KBIO_TECHID_SGEIS:  // SGEIS - technique ID 114 (same format as SPEIS)
+            if (processIndex == 1) {  // Impedance data with step info
+                // Similar to PEIS but with step number
+                converted->numVariables = 12;
+                converted->variableNames = malloc(12 * sizeof(char*));
+                converted->variableUnits = malloc(12 * sizeof(char*));
+                converted->data = malloc(12 * sizeof(double*));
+                
+                char *names[] = {"Frequency", "|Ewe|", "|I|", "Phase_Zwe", "Re(Zwe)", "Im(Zwe)", 
+                                "Ewe", "I", "|Ece|", "|Ice|", "Time", "Step"};
+                char *units[] = {"Hz", "V", "A", "deg", "Ohm", "Ohm", 
+                                "V", "A", "V", "A", "s", ""};
+                
+                for (int v = 0; v < 12; v++) {
+                    converted->variableNames[v] = my_strdup(names[v]);
+                    converted->variableUnits[v] = my_strdup(units[v]);
+                    converted->data[v] = malloc(rawData->numPoints * sizeof(double));
+                }
+                
+                // Convert data (similar to PEIS but with step number)
+                for (int i = 0; i < rawData->numPoints; i++) {
+                    unsigned int *row = &rawData->rawData[i * rawData->numVariables];
+                    float temp;
+                    
+                    // Same conversions as PEIS
+                    BL_ConvertChannelNumericIntoSingle(row[0], &temp, channelType);
+                    converted->data[0][i] = temp;
+                    
+                    BL_ConvertChannelNumericIntoSingle(row[1], &temp, channelType);
+                    converted->data[1][i] = temp;
+                    
+                    BL_ConvertChannelNumericIntoSingle(row[2], &temp, channelType);
+                    converted->data[2][i] = temp;
+                    
+                    BL_ConvertChannelNumericIntoSingle(row[3], &temp, channelType);
+                    converted->data[3][i] = temp;
+                    
+                    // Calculate Re(Z) and Im(Z)
+                    double magnitude = converted->data[1][i] / converted->data[2][i];
+                    double phase_rad = converted->data[3][i] * M_PI / 180.0;
+                    converted->data[4][i] = magnitude * cos(phase_rad);
+                    converted->data[5][i] = magnitude * sin(phase_rad);
+                    
+                    BL_ConvertChannelNumericIntoSingle(row[4], &temp, channelType);
+                    converted->data[6][i] = temp;
+                    
+                    BL_ConvertChannelNumericIntoSingle(row[5], &temp, channelType);
+                    converted->data[7][i] = temp;
+                    
+                    BL_ConvertChannelNumericIntoSingle(row[7], &temp, channelType);
+                    converted->data[8][i] = temp;
+                    
+                    BL_ConvertChannelNumericIntoSingle(row[8], &temp, channelType);
+                    converted->data[9][i] = temp;
+                    
+                    // Time and step
+                    int timeCol = (rawData->numVariables > 16) ? 13 : 13;
+                    int stepCol = (rawData->numVariables > 16) ? 15 : 14;
+                    
+                    BL_ConvertChannelNumericIntoSingle(row[timeCol], &temp, channelType);
+                    converted->data[10][i] = temp;
+                    
+                    converted->data[11][i] = row[stepCol];  // Step number (no conversion needed)
+                }
+            } else if (processIndex == 0) {
+                // Process 0: time series with step
+                converted->numVariables = 4;
+                converted->variableNames = malloc(4 * sizeof(char*));
+                converted->variableUnits = malloc(4 * sizeof(char*));
+                converted->data = malloc(4 * sizeof(double*));
+                
+                converted->variableNames[0] = my_strdup("Time");
+                converted->variableNames[1] = my_strdup("Ewe");
+                converted->variableNames[2] = my_strdup("I");
+                converted->variableNames[3] = my_strdup("Step");
+                
+                converted->variableUnits[0] = my_strdup("s");
+                converted->variableUnits[1] = my_strdup("V");
+                converted->variableUnits[2] = my_strdup("A");
+                converted->variableUnits[3] = my_strdup("");
+                
+                for (int v = 0; v < 4; v++) {
+                    converted->data[v] = malloc(rawData->numPoints * sizeof(double));
+                }
+                
+                for (int i = 0; i < rawData->numPoints; i++) {
+                    unsigned int *row = &rawData->rawData[i * rawData->numVariables];
+                    
+                    uint32_t timeData[2] = {row[0], row[1]};
+                    BL_ConvertTimeChannelNumericIntoSeconds(timeData, &converted->data[0][i], 
+                                                           timebase, channelType);
+                    
+                    float temp;
+                    BL_ConvertChannelNumericIntoSingle(row[2], &temp, channelType);
+                    converted->data[1][i] = temp;
+                    
+                    BL_ConvertChannelNumericIntoSingle(row[3], &temp, channelType);
+                    converted->data[2][i] = temp;
+                    
+                    converted->data[3][i] = row[4];  // Step number
+                }
+            }
+            break;
+            
+        default:
+            // Unknown technique - just copy raw data info
+            converted->numVariables = rawData->numVariables;
+            converted->variableNames = NULL;
+            converted->variableUnits = NULL;
+            converted->data = NULL;
+            break;
+    }
+    
+    *convertedData = converted;
+    return SUCCESS;
+}
+
+// Helper function to copy raw data buffer
+static BL_RawDataBuffer* CopyRawDataBuffer(BL_RawDataBuffer *src) {
+    if (!src || !src->rawData) return NULL;
+    
+    BL_RawDataBuffer *copy = malloc(sizeof(BL_RawDataBuffer));
+    if (!copy) return NULL;
+    
+    *copy = *src;  // Copy all fields
+    
+    // Deep copy the data array
+    int dataSize = src->bufferSize * sizeof(unsigned int);
+    copy->rawData = malloc(dataSize);
+    if (!copy->rawData) {
+        free(copy);
+        return NULL;
+    }
+    
+    memcpy(copy->rawData, src->rawData, dataSize);
+    return copy;
+}
+
+void BL_FreeConvertedData(BL_ConvertedData *data) {
+    if (!data) return;
+    
+    // Free variable names and units
+    if (data->variableNames) {
+        for (int i = 0; i < data->numVariables; i++) {
+            if (data->variableNames[i]) free(data->variableNames[i]);
+        }
+        free(data->variableNames);
+    }
+    
+    if (data->variableUnits) {
+        for (int i = 0; i < data->numVariables; i++) {
+            if (data->variableUnits[i]) free(data->variableUnits[i]);
+        }
+        free(data->variableUnits);
+    }
+    
+    // Free data arrays
+    if (data->data) {
+        for (int i = 0; i < data->numVariables; i++) {
+            if (data->data[i]) free(data->data[i]);
+        }
+        free(data->data);
+    }
+    
+    free(data);
+}
+
+void BL_FreeTechniqueData(BL_TechniqueData *data) {
+    if (!data) return;
+    
+    if (data->rawData) {
+        BL_FreeTechniqueResult(data->rawData);
+    }
+    
+    if (data->convertedData) {
+        BL_FreeConvertedData(data->convertedData);
+    }
+    
+    free(data);
+}
+
+int BL_GetTechniqueData(BL_TechniqueContext *context, BL_TechniqueData **data) {
+    if (!context || !data) return BL_ERR_INVALIDPARAMETERS;
+    
+    if (context->rawData.rawData && context->rawData.numPoints > 0) {
+        BL_TechniqueData *techData = calloc(1, sizeof(BL_TechniqueData));
+        if (!techData) return BL_ERR_FUNCTIONFAILED;
+        
+        // Copy raw data
+        techData->rawData = CopyRawDataBuffer(&context->rawData);
+        
+        // Copy converted data if available
+        if (context->convertedData) {
+            // Would need to implement CopyConvertedData function
+            techData->convertedData = context->convertedData;
+            context->convertedData = NULL;  // Transfer ownership
+        }
+        
+        *data = techData;
+        return SUCCESS;
+    }
+    
+    return BL_ERR_FUNCTIONFAILED;
+}
+
 // Start OCV measurement
 int BL_StartOCV(int ID, uint8_t channel,
                 double duration_s,
@@ -1389,6 +1783,7 @@ int BL_StartOCV(int ID, uint8_t channel,
                 double record_every_dE,     // mV
                 double record_every_dT,     // seconds
                 int e_range,                // 0=2.5V, 1=5V, 2=10V, 3=Auto
+				bool processData,
                 BL_TechniqueContext **context) {
     
     if (!context) return BL_ERR_INVALIDPARAMETERS;
@@ -1405,6 +1800,7 @@ int BL_StartOCV(int ID, uint8_t channel,
     ctx->config.key.recordEvery_dE = record_every_dE;
     ctx->config.key.recordEvery_dT = record_every_dT;
     ctx->config.key.eRange = e_range;
+	ctx->processData = processData;
     
     // Build OCV parameters
     TEccParam_t params[4];
@@ -1484,6 +1880,7 @@ int BL_StartPEIS(int ID, uint8_t channel,
                  int average_n_times,           // Number of repeat times
                  bool correction,               // Non-stationary correction
                  double wait_for_steady,        // Number of periods to wait
+				 bool processData,
                  BL_TechniqueContext **context) {
     
     if (!context) return BL_ERR_INVALIDPARAMETERS;
@@ -1497,6 +1894,7 @@ int BL_StartPEIS(int ID, uint8_t channel,
     // Store key parameters
     ctx->config.key.freqStart = initial_freq;
     ctx->config.key.freqEnd = final_freq;
+	ctx->processData = processData;
     
     // Build PEIS parameters according to documentation
     TEccParam_t params[13];
@@ -1621,6 +2019,7 @@ int BL_StartSPEIS(int ID, uint8_t channel,
                   int average_n_times,
                   bool correction,
                   double wait_for_steady,
+				  bool processData,
                   BL_TechniqueContext **context) {
     
     if (!context) return BL_ERR_INVALIDPARAMETERS;
@@ -1634,6 +2033,7 @@ int BL_StartSPEIS(int ID, uint8_t channel,
     // Store key parameters
     ctx->config.key.freqStart = initial_freq;
     ctx->config.key.freqEnd = final_freq;
+	ctx->processData = processData;
     
     // Build SPEIS parameters according to documentation
     TEccParam_t params[16];
@@ -1768,6 +2168,7 @@ int BL_StartGEIS(int ID, uint8_t channel,
                  bool correction,
                  double wait_for_steady,
                  int i_range,
+				 bool processData,
                  BL_TechniqueContext **context) {
     
     if (!context) return BL_ERR_INVALIDPARAMETERS;
@@ -1787,6 +2188,7 @@ int BL_StartGEIS(int ID, uint8_t channel,
     // Store key parameters
     ctx->config.key.freqStart = initial_freq;
     ctx->config.key.freqEnd = final_freq;
+	ctx->processData = processData;
     
     // Build GEIS parameters according to documentation
     TEccParam_t params[14];
@@ -1916,6 +2318,7 @@ int BL_StartSGEIS(int ID, uint8_t channel,
                   bool correction,
                   double wait_for_steady,
                   int i_range,
+				  bool processData,
                   BL_TechniqueContext **context) {
     
     if (!context) return BL_ERR_INVALIDPARAMETERS;
@@ -1935,6 +2338,7 @@ int BL_StartSGEIS(int ID, uint8_t channel,
     // Store key parameters
     ctx->config.key.freqStart = initial_freq;
     ctx->config.key.freqEnd = final_freq;
+	ctx->processData = processData;
     
     // Build SGEIS parameters according to documentation
     TEccParam_t params[17];

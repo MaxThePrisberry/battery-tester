@@ -456,6 +456,7 @@ int Test_BIO_OCV(BioQueueManager *bioQueueMgr, char *errorMsg, int errorMsgSize)
         10.0,                   // record_every_dE (10mV)
         0.1,                    // record_every_dT (100ms)
         2,                      // e_range (10V range)
+		1,						// Process the data
         &ocvData,
         0,                      // Use default timeout
         Test_BIO_TechniqueProgress,  // Progress callback
@@ -523,6 +524,7 @@ int Test_BIO_PEIS(BioQueueManager *bioQueueMgr, char *errorMsg, int errorMsgSize
         1,                             // average_n_times (1 repeat)
         false,                         // correction (no non-stationary correction)
         0.0,                           // wait_for_steady (0 periods)
+		1,							   // Process the data
         &peisData,
         0,                             // Use default timeout
         Test_BIO_TechniqueProgress,    // Progress callback
@@ -593,6 +595,7 @@ int Test_BIO_SPEIS(BioQueueManager *bioQueueMgr, char *errorMsg, int errorMsgSiz
         1,                            // average_n_times (1 repeat)
         false,                        // correction (no non-stationary correction)
         0.0,                          // wait_for_steady (0 periods)
+		1,							  // Process the data
         &speisData,
         0,                            // Use default timeout
         Test_BIO_TechniqueProgress,   // Progress callback
@@ -661,6 +664,7 @@ int Test_BIO_GEIS(BioQueueManager *bioQueueMgr, char *errorMsg, int errorMsgSize
         false,                        // correction (no non-stationary correction)
         0.0,                          // wait_for_steady (0 periods)
         KBIO_IRANGE_100mA,           // i_range (100mA range)
+		1,							  // Process the data
         &geisData,
         0,                            // Use default timeout
         Test_BIO_TechniqueProgress,   // Progress callback
@@ -731,7 +735,8 @@ int Test_BIO_SGEIS(BioQueueManager *bioQueueMgr, char *errorMsg, int errorMsgSiz
         1,                           // average_n_times (1 repeat)
         false,                       // correction (no non-stationary correction)
         0.0,                         // wait_for_steady (0 periods)
-        KBIO_IRANGE_100mA,          // i_range (100mA range)
+        KBIO_IRANGE_100mA,           // i_range (100mA range)
+		1,							 // Process the data
         &sgeisData,
         0,                           // Use default timeout
         Test_BIO_TechniqueProgress,  // Progress callback

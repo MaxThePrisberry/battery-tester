@@ -291,6 +291,7 @@ static int BIO_AdapterExecuteCommand(void *deviceContext, int commandType, void 
                 cmd->record_every_dE,
                 cmd->record_every_dT,
                 cmd->e_range,
+				cmd->processData,
                 &techContext
             );
             
@@ -363,6 +364,7 @@ static int BIO_AdapterExecuteCommand(void *deviceContext, int commandType, void 
                 cmd->average_n_times,
                 cmd->correction,
                 cmd->wait_for_steady,
+				cmd->processData,
                 &techContext
             );
             
@@ -437,6 +439,7 @@ static int BIO_AdapterExecuteCommand(void *deviceContext, int commandType, void 
 		        cmd->average_n_times,
 		        cmd->correction,
 		        cmd->wait_for_steady,
+				cmd->processData,
 		        &techContext
 		    );
 		    
@@ -509,6 +512,7 @@ static int BIO_AdapterExecuteCommand(void *deviceContext, int commandType, void 
 		        cmd->correction,
 		        cmd->wait_for_steady,
 		        cmd->i_range,
+				cmd->processData,
 		        &techContext
 		    );
 		    
@@ -584,6 +588,7 @@ static int BIO_AdapterExecuteCommand(void *deviceContext, int commandType, void 
 		        cmd->correction,
 		        cmd->wait_for_steady,
 		        cmd->i_range,
+				cmd->processData,
 		        &techContext
 		    );
 		    
@@ -893,6 +898,7 @@ int BL_RunOCVQueued(int ID, uint8_t channel,
                     double record_every_dE,
                     double record_every_dT,
                     int e_range,
+					bool processData,
                     BL_RawDataBuffer **data,
                     int timeout_ms,
                     BioTechniqueProgressCallback progressCallback,
@@ -903,7 +909,7 @@ int BL_RunOCVQueued(int ID, uint8_t channel,
         // Direct call without queue
         BL_TechniqueContext *context;
         int result = BL_StartOCV(ID, channel, duration_s, sample_interval_s,
-                               record_every_dE, record_every_dT, e_range, &context);
+                               record_every_dE, record_every_dT, e_range, processData, &context);
         if (result != SUCCESS) return result;
         
         if (progressCallback) {
@@ -933,7 +939,8 @@ int BL_RunOCVQueued(int ID, uint8_t channel,
         .sample_interval_s = sample_interval_s,
         .record_every_dE = record_every_dE,
         .record_every_dT = record_every_dT,
-        .e_range = e_range
+        .e_range = e_range,
+		.processData = processData
     };
     
     BioCommandResult result;
@@ -962,6 +969,7 @@ int BL_RunPEISQueued(int ID, uint8_t channel,
                      int average_n_times,
                      bool correction,
                      double wait_for_steady,
+					 bool processData,
                      BL_RawDataBuffer **data,
                      int timeout_ms,
                      BioTechniqueProgressCallback progressCallback,
@@ -975,7 +983,7 @@ int BL_RunPEISQueued(int ID, uint8_t channel,
                                 duration_step, record_every_dT, record_every_dI,
                                 initial_freq, final_freq, sweep_linear,
                                 amplitude_voltage, frequency_number, average_n_times,
-                                correction, wait_for_steady, &context);
+                                correction, wait_for_steady, processData, &context);
         if (result != SUCCESS) return result;
         
         if (progressCallback) {
@@ -1013,7 +1021,8 @@ int BL_RunPEISQueued(int ID, uint8_t channel,
         .frequency_number = frequency_number,
         .average_n_times = average_n_times,
         .correction = correction,
-        .wait_for_steady = wait_for_steady
+        .wait_for_steady = wait_for_steady,
+		.processData = processData
     };
     
     BioCommandResult result;
@@ -1045,6 +1054,7 @@ int BL_RunSPEISQueued(int ID, uint8_t channel,
                       int average_n_times,
                       bool correction,
                       double wait_for_steady,
+					  bool processData,
                       BL_RawDataBuffer **data,
                       int timeout_ms,
                       BioTechniqueProgressCallback progressCallback,
@@ -1060,7 +1070,7 @@ int BL_RunSPEISQueued(int ID, uint8_t channel,
                                   record_every_dT, record_every_dI,
                                   initial_freq, final_freq, sweep_linear,
                                   amplitude_voltage, frequency_number, average_n_times,
-                                  correction, wait_for_steady, &context);
+                                  correction, wait_for_steady, processData, &context);
         if (result != SUCCESS) return result;
         
         if (progressCallback) {
@@ -1102,7 +1112,8 @@ int BL_RunSPEISQueued(int ID, uint8_t channel,
         .frequency_number = frequency_number,
         .average_n_times = average_n_times,
         .correction = correction,
-        .wait_for_steady = wait_for_steady
+        .wait_for_steady = wait_for_steady,
+		.processData = processData
     };
     
     BioCommandResult result;
@@ -1132,6 +1143,7 @@ int BL_RunGEISQueued(int ID, uint8_t channel,
                      bool correction,
                      double wait_for_steady,
                      int i_range,
+					 bool processData,
                      BL_RawDataBuffer **data,
                      int timeout_ms,
                      BioTechniqueProgressCallback progressCallback,
@@ -1145,7 +1157,7 @@ int BL_RunGEISQueued(int ID, uint8_t channel,
                                 duration_step, record_every_dT, record_every_dE,
                                 initial_freq, final_freq, sweep_linear,
                                 amplitude_current, frequency_number, average_n_times,
-                                correction, wait_for_steady, i_range, &context);
+                                correction, wait_for_steady, i_range, processData, &context);
         if (result != SUCCESS) return result;
         
         if (progressCallback) {
@@ -1184,7 +1196,8 @@ int BL_RunGEISQueued(int ID, uint8_t channel,
         .average_n_times = average_n_times,
         .correction = correction,
         .wait_for_steady = wait_for_steady,
-        .i_range = i_range
+        .i_range = i_range,
+		.processData = processData
     };
     
     BioCommandResult result;
@@ -1217,6 +1230,7 @@ int BL_RunSGEISQueued(int ID, uint8_t channel,
                       bool correction,
                       double wait_for_steady,
                       int i_range,
+					  bool processData,
                       BL_RawDataBuffer **data,
                       int timeout_ms,
                       BioTechniqueProgressCallback progressCallback,
@@ -1232,7 +1246,7 @@ int BL_RunSGEISQueued(int ID, uint8_t channel,
                                   record_every_dT, record_every_dE,
                                   initial_freq, final_freq, sweep_linear,
                                   amplitude_current, frequency_number, average_n_times,
-                                  correction, wait_for_steady, i_range, &context);
+                                  correction, wait_for_steady, i_range, processData, &context);
         if (result != SUCCESS) return result;
         
         if (progressCallback) {
@@ -1275,7 +1289,8 @@ int BL_RunSGEISQueued(int ID, uint8_t channel,
         .average_n_times = average_n_times,
         .correction = correction,
         .wait_for_steady = wait_for_steady,
-        .i_range = i_range
+        .i_range = i_range,
+		.processData = processData
     };
     
     BioCommandResult result;
@@ -1300,6 +1315,7 @@ BioCommandID BL_RunOCVAsync(int ID, uint8_t channel,
                             double record_every_dE,
                             double record_every_dT,
                             int e_range,
+							bool processData,
                             BioCommandCallback callback,
                             void *userData) {
     
@@ -1318,7 +1334,8 @@ BioCommandID BL_RunOCVAsync(int ID, uint8_t channel,
         .sample_interval_s = sample_interval_s,
         .record_every_dE = record_every_dE,
         .record_every_dT = record_every_dT,
-        .e_range = e_range
+        .e_range = e_range,
+		.processData = processData
     };
     
     return BIO_QueueCommandAsync(mgr, BIO_CMD_RUN_OCV, (BioCommandParams*)&cmd,
@@ -1339,6 +1356,7 @@ BioCommandID BL_RunPEISAsync(int ID, uint8_t channel,
                              int average_n_times,
                              bool correction,
                              double wait_for_steady,
+							 bool processData,
                              BioCommandCallback callback,
                              void *userData) {
     
@@ -1365,7 +1383,8 @@ BioCommandID BL_RunPEISAsync(int ID, uint8_t channel,
         .frequency_number = frequency_number,
         .average_n_times = average_n_times,
         .correction = correction,
-        .wait_for_steady = wait_for_steady
+        .wait_for_steady = wait_for_steady,
+		.processData = processData
     };
     
     return BIO_QueueCommandAsync(mgr, BIO_CMD_RUN_PEIS, (BioCommandParams*)&cmd,
@@ -1391,6 +1410,7 @@ BioCommandID BL_RunSPEISAsync(int ID, uint8_t channel,
                               int average_n_times,
                               bool correction,
                               double wait_for_steady,
+							  bool processData,
                               BioCommandCallback callback,
                               void *userData) {
     
@@ -1420,7 +1440,8 @@ BioCommandID BL_RunSPEISAsync(int ID, uint8_t channel,
         .frequency_number = frequency_number,
         .average_n_times = average_n_times,
         .correction = correction,
-        .wait_for_steady = wait_for_steady
+        .wait_for_steady = wait_for_steady,
+		.processData = processData
     };
     
     return BIO_QueueCommandAsync(mgr, BIO_CMD_RUN_SPEIS, (BioCommandParams*)&cmd,
@@ -1442,6 +1463,7 @@ BioCommandID BL_RunGEISAsync(int ID, uint8_t channel,
                              bool correction,
                              double wait_for_steady,
                              int i_range,
+							 bool processData,
                              BioCommandCallback callback,
                              void *userData) {
     
@@ -1469,7 +1491,8 @@ BioCommandID BL_RunGEISAsync(int ID, uint8_t channel,
         .average_n_times = average_n_times,
         .correction = correction,
         .wait_for_steady = wait_for_steady,
-        .i_range = i_range
+        .i_range = i_range,
+		.processData = processData
     };
     
     return BIO_QueueCommandAsync(mgr, BIO_CMD_RUN_GEIS, (BioCommandParams*)&cmd,
@@ -1494,6 +1517,7 @@ BioCommandID BL_RunSGEISAsync(int ID, uint8_t channel,
                               bool correction,
                               double wait_for_steady,
                               int i_range,
+							  bool processData,
                               BioCommandCallback callback,
                               void *userData) {
     
@@ -1524,7 +1548,8 @@ BioCommandID BL_RunSGEISAsync(int ID, uint8_t channel,
         .average_n_times = average_n_times,
         .correction = correction,
         .wait_for_steady = wait_for_steady,
-        .i_range = i_range
+        .i_range = i_range,
+		.processData = processData
     };
     
     return BIO_QueueCommandAsync(mgr, BIO_CMD_RUN_SGEIS, (BioCommandParams*)&cmd,

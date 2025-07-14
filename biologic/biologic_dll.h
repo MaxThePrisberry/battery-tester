@@ -48,6 +48,26 @@ typedef struct {
     int processIndex;           // From TDataInfos
 } BL_RawDataBuffer;
 
+// Converted data storage
+typedef struct {
+    int numPoints;
+    int numVariables;
+    char **variableNames;    // Array of variable names
+    char **variableUnits;    // Array of units
+    double **data;           // 2D array of converted values
+    int techniqueID;
+    int processIndex;
+} BL_ConvertedData;
+
+// Extended raw data buffer with optional converted data
+typedef struct {
+    // Original raw data
+    BL_RawDataBuffer *rawData;
+    
+    // Converted data (if processData was true)
+    BL_ConvertedData *convertedData;
+} BL_TechniqueData;
+
 // Technique configuration
 typedef struct {
     // Original parameters for reference
@@ -89,6 +109,9 @@ typedef struct {
     
     // Data collection
     BL_RawDataBuffer rawData;
+	BL_ConvertedData *convertedData;
+    bool processData;
+	
     TCurrentValues_t lastCurrentValues;
     int memFilledAtStart;
     
@@ -260,6 +283,18 @@ int BL_UpdateTechnique(BL_TechniqueContext *context);
 bool BL_IsTechniqueComplete(BL_TechniqueContext *context);
 int BL_StopTechnique(BL_TechniqueContext *context);
 int BL_GetTechniqueRawData(BL_TechniqueContext *context, BL_RawDataBuffer **data);
+int BL_GetTechniqueData(BL_TechniqueContext *context, BL_TechniqueData **data);
+
+// Data processing function
+int BL_ProcessTechniqueData(BL_RawDataBuffer *rawData, int techniqueID, int processIndex,
+                           uint32_t channelType, float timebase,
+                           BL_ConvertedData **convertedData);
+
+// Helper to free converted data
+void BL_FreeConvertedData(BL_ConvertedData *data);
+
+// Helper to free technique data (raw + converted)
+void BL_FreeTechniqueData(BL_TechniqueData *data);
 
 // OCV (Open Circuit Voltage)
 int BL_StartOCV(int ID, uint8_t channel,
@@ -268,6 +303,7 @@ int BL_StartOCV(int ID, uint8_t channel,
                 double record_every_dE,     // mV
                 double record_every_dT,     // seconds
                 int e_range,                // 0=2.5V, 1=5V, 2=10V, 3=Auto
+                bool processData,
                 BL_TechniqueContext **context);
 
 // PEIS (Potentio Electrochemical Impedance Spectroscopy)
@@ -285,6 +321,7 @@ int BL_StartPEIS(int ID, uint8_t channel,
                  int average_n_times,           // Number of repeat times
                  bool correction,               // Non-stationary correction
                  double wait_for_steady,        // Number of periods to wait
+				 bool processData,
                  BL_TechniqueContext **context);
 
 // SPEIS (Staircase Potentio Electrochemical Impedance Spectroscopy)
@@ -305,6 +342,7 @@ int BL_StartSPEIS(int ID, uint8_t channel,
                   int average_n_times,          // Number of repeat times
                   bool correction,              // Non-stationary correction
                   double wait_for_steady,       // Number of periods to wait
+                  bool processData,
                   BL_TechniqueContext **context);
 
 // GEIS (Galvano Electrochemical Impedance Spectroscopy)
@@ -323,6 +361,7 @@ int BL_StartGEIS(int ID, uint8_t channel,
                  bool correction,               // Non-stationary correction
                  double wait_for_steady,        // Number of periods to wait
                  int i_range,                   // Current range (cannot be auto)
+                 bool processData,
                  BL_TechniqueContext **context);
 
 // SGEIS (Staircase Galvano Electrochemical Impedance Spectroscopy)
@@ -344,6 +383,7 @@ int BL_StartSGEIS(int ID, uint8_t channel,
                   bool correction,              // Non-stationary correction
                   double wait_for_steady,       // Number of periods to wait
                   int i_range,                  // Current range (cannot be auto)
+                  bool processData,
                   BL_TechniqueContext **context);
 
 // ============================================================================
