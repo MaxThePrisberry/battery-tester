@@ -1220,18 +1220,25 @@ BL_TechniqueContext* BL_CreateTechniqueContext(int ID, uint8_t channel, BioTechn
     return context;
 }
 
-// Free a technique context
 void BL_FreeTechniqueContext(BL_TechniqueContext *context) {
     if (!context) return;
     
     // Free parameter copy
     if (context->config.paramsCopy) {
         free(context->config.paramsCopy);
+        context->config.paramsCopy = NULL;
     }
     
     // Free raw data buffer
     if (context->rawData.rawData) {
         free(context->rawData.rawData);
+        context->rawData.rawData = NULL;
+    }
+    
+    // Free converted data if owned by context
+    if (context->convertedData) {
+        BL_FreeConvertedData(context->convertedData);
+        context->convertedData = NULL;
     }
     
     free(context);
@@ -1301,63 +1308,129 @@ int BL_UpdateTechnique(BL_TechniqueContext *context) {
                                   &dataBuffer, &dataInfo, &currentValues);
                 
                 if (result == SUCCESS) {
-                    // Store raw data
+                    // Calculate data size and allocate memory
                     int dataSize = dataInfo.NbRows * dataInfo.NbCols;
-                    context->rawData.rawData = malloc(dataSize * sizeof(unsigned int));
                     
-                    // In BL_UpdateTechnique, after storing raw data:
-					if (context->rawData.rawData) {
-					    memcpy(context->rawData.rawData, dataBuffer.data, 
-					           dataSize * sizeof(unsigned int));
-					    context->rawData.bufferSize = dataSize;
-					    context->rawData.numPoints = dataInfo.NbRows;
-					    context->rawData.numVariables = dataInfo.NbCols;
-					    context->rawData.techniqueID = dataInfo.TechniqueID;
-					    context->rawData.processIndex = dataInfo.ProcessIndex;
-					    
-					    LogDebugEx(LOG_DEVICE_BIO, "Retrieved %d data points with %d variables each",
-					             dataInfo.NbRows, dataInfo.NbCols);
-					    
-					    // Process data if requested
-					    if (context->processData) {
-					        // Get channel type for conversion
-					        uint32_t channelType;
-					        result = BL_GetChannelBoardType(context->deviceID, context->channel, &channelType);
-					        
-					        if (result == SUCCESS) {
-					            float timebase = currentValues.TimeBase;
-					            result = BL_ProcessTechniqueData(&context->rawData, 
-					                                           dataInfo.TechniqueID,
-					                                           dataInfo.ProcessIndex,
-					                                           channelType,
-					                                           timebase,
-					                                           &context->convertedData);
-					            
-					            if (result == SUCCESS) {
-					                LogDebugEx(LOG_DEVICE_BIO, "Data processed: %d variables converted",
-					                         context->convertedData->numVariables);
-					            } else {
-					                LogWarningEx(LOG_DEVICE_BIO, "Failed to process data: %d", result);
-					            }
-					        }
-					    }
-					}
-                    
-                    // Call data callback if set
-                    if (context->dataCallback) {
-                        context->dataCallback(&dataInfo, context->userData);
+                    // Free any existing raw data first (shouldn't happen, but be safe)
+                    if (context->rawData.rawData) {
+                        free(context->rawData.rawData);
+                        context->rawData.rawData = NULL;
                     }
                     
-                    context->state = BIO_TECH_STATE_COMPLETED;
+                    // Allocate new buffer for raw data
+                    context->rawData.rawData = malloc(dataSize * sizeof(unsigned int));
+                    
+                    if (context->rawData.rawData) {
+                        // Copy raw data
+                        memcpy(context->rawData.rawData, dataBuffer.data, 
+                               dataSize * sizeof(unsigned int));
+                        context->rawData.bufferSize = dataSize;
+                        context->rawData.numPoints = dataInfo.NbRows;
+                        context->rawData.numVariables = dataInfo.NbCols;
+                        context->rawData.techniqueID = dataInfo.TechniqueID;
+                        context->rawData.processIndex = dataInfo.ProcessIndex;
+                        
+                        LogDebugEx(LOG_DEVICE_BIO, "Retrieved %d data points with %d variables each",
+                                 dataInfo.NbRows, dataInfo.NbCols);
+                        
+                        // Process data if requested
+                        if (context->processData) {
+                            // Get channel type for conversion
+                            uint32_t channelType;
+                            result = BL_GetChannelBoardType(context->deviceID, context->channel, &channelType);
+                            
+                            if (result == SUCCESS) {
+                                float timebase = currentValues.TimeBase;
+                                
+                                // Free any existing converted data first
+                                if (context->convertedData) {
+                                    BL_FreeConvertedData(context->convertedData);
+                                    context->convertedData = NULL;
+                                }
+                                
+                                // Attempt to process the data
+                                result = BL_ProcessTechniqueData(&context->rawData, 
+                                                               dataInfo.TechniqueID,
+                                                               dataInfo.ProcessIndex,
+                                                               channelType,
+                                                               timebase,
+                                                               &context->convertedData);
+                                
+                                if (result == SUCCESS) {
+                                    LogDebugEx(LOG_DEVICE_BIO, "Data processed: %d variables converted",
+                                             context->convertedData->numVariables);
+                                } else {
+                                    LogWarningEx(LOG_DEVICE_BIO, "Failed to process data: %d", result);
+                                    // Note: We keep the raw data even if processing failed
+                                    // The technique is still considered successful if we got raw data
+                                }
+                            } else {
+                                LogWarningEx(LOG_DEVICE_BIO, "Failed to get channel type for data processing: %d", result);
+                            }
+                        }
+                        
+                        // Call data callback if set (regardless of processing success)
+                        if (context->dataCallback) {
+                            context->dataCallback(&dataInfo, context->userData);
+                        }
+                        
+                        // Mark as completed - we have raw data at minimum
+                        context->state = BIO_TECH_STATE_COMPLETED;
+                        
+                    } else {
+                        // Failed to allocate memory for raw data
+                        LogErrorEx(LOG_DEVICE_BIO, "Failed to allocate memory for raw data (%d bytes)", 
+                                 dataSize * sizeof(unsigned int));
+                        context->lastError = BL_ERR_FUNCTIONFAILED;
+                        context->state = BIO_TECH_STATE_ERROR;
+                    }
+                    
                 } else if (currentValues.OptErr != 0) {
-                    // Partial data with error
+                    // Partial data with error - attempt to retrieve what we can
                     LogWarningEx(LOG_DEVICE_BIO, "Technique stopped with error, attempting to retrieve partial data");
+                    
+                    // Try to get partial data
+                    result = BL_GetData(context->deviceID, context->channel, 
+                                      &dataBuffer, &dataInfo, &currentValues);
+                    
+                    if (result == SUCCESS && dataInfo.NbRows > 0) {
+                        // We got some data, store it
+                        int dataSize = dataInfo.NbRows * dataInfo.NbCols;
+                        
+                        // Free any existing raw data first
+                        if (context->rawData.rawData) {
+                            free(context->rawData.rawData);
+                            context->rawData.rawData = NULL;
+                        }
+                        
+                        context->rawData.rawData = malloc(dataSize * sizeof(unsigned int));
+                        
+                        if (context->rawData.rawData) {
+                            memcpy(context->rawData.rawData, dataBuffer.data, 
+                                   dataSize * sizeof(unsigned int));
+                            context->rawData.bufferSize = dataSize;
+                            context->rawData.numPoints = dataInfo.NbRows;
+                            context->rawData.numVariables = dataInfo.NbCols;
+                            context->rawData.techniqueID = dataInfo.TechniqueID;
+                            context->rawData.processIndex = dataInfo.ProcessIndex;
+                            
+                            LogDebugEx(LOG_DEVICE_BIO, "Retrieved %d partial data points", dataInfo.NbRows);
+                            
+                            // Don't attempt to process partial data
+                            context->convertedData = NULL;
+                        }
+                    }
+                    
                     context->lastError = currentValues.OptErr;
                     snprintf(context->errorMessage, sizeof(context->errorMessage),
                            "Technique stopped with OptErr=%d", currentValues.OptErr);
                     context->state = BIO_TECH_STATE_ERROR;
+                    
                 } else {
+                    // Failed to get any data
                     context->lastError = result;
+                    snprintf(context->errorMessage, sizeof(context->errorMessage),
+                           "Failed to retrieve data: %s", BL_GetErrorString(result));
                     context->state = BIO_TECH_STATE_ERROR;
                 }
             }
@@ -1367,6 +1440,10 @@ int BL_UpdateTechnique(BL_TechniqueContext *context) {
         case BIO_TECH_STATE_ERROR:
         case BIO_TECH_STATE_CANCELLED:
             // Terminal states - no update needed
+            break;
+            
+        default:
+            LogWarningEx(LOG_DEVICE_BIO, "Unknown technique state: %d", context->state);
             break;
     }
     
@@ -1684,7 +1761,7 @@ int BL_ProcessTechniqueData(BL_RawDataBuffer *rawData, int techniqueID, int proc
 }
 
 // Helper function to copy raw data buffer
-static BL_RawDataBuffer* CopyRawDataBuffer(BL_RawDataBuffer *src) {
+BL_RawDataBuffer* BL_CopyRawDataBuffer(BL_RawDataBuffer *src) {
     if (!src || !src->rawData) return NULL;
     
     BL_RawDataBuffer *copy = malloc(sizeof(BL_RawDataBuffer));
@@ -1736,10 +1813,15 @@ void BL_FreeConvertedData(BL_ConvertedData *data) {
 void BL_FreeTechniqueData(BL_TechniqueData *data) {
     if (!data) return;
     
+    // Free raw data
     if (data->rawData) {
-        BL_FreeTechniqueResult(data->rawData);
+        if (data->rawData->rawData) {
+            free(data->rawData->rawData);
+        }
+        free(data->rawData);
     }
     
+    // Free converted data
     if (data->convertedData) {
         BL_FreeConvertedData(data->convertedData);
     }
@@ -1755,7 +1837,7 @@ int BL_GetTechniqueData(BL_TechniqueContext *context, BL_TechniqueData **data) {
         if (!techData) return BL_ERR_FUNCTIONFAILED;
         
         // Copy raw data
-        techData->rawData = CopyRawDataBuffer(&context->rawData);
+        techData->rawData = BL_CopyRawDataBuffer(&context->rawData);
         
         // Copy converted data if available
         if (context->convertedData) {

@@ -419,7 +419,7 @@ int CVICALLBACK TestGEISCallback(int panel, int control, int event,
                        initial_freq, final_freq, frequency_number, amplitude_current * 1000);
             
             // Run GEIS
-            BL_RawDataBuffer *rawData = NULL;
+            BL_TechniqueData *techData = NULL;
             int result = BL_RunGEISQueued(
                 deviceID, channel,
                 vs_initial, initial_current_step, duration_step,
@@ -427,7 +427,7 @@ int CVICALLBACK TestGEISCallback(int panel, int control, int event,
                 initial_freq, final_freq, sweep_linear,
                 amplitude_current, frequency_number, average_n_times,
                 correction, wait_for_steady, i_range, true,  // processData=true
-                &rawData, 60000, NULL, NULL  // 60 second timeout
+                &techData, 60000, NULL, NULL  // 60 second timeout
             );
             
             if (result != SUCCESS && result != BL_ERR_PARTIAL_DATA) {
@@ -435,28 +435,19 @@ int CVICALLBACK TestGEISCallback(int panel, int control, int event,
                 return 0;
             }
             
-            if (!rawData || rawData->numPoints == 0) {
+            if (!techData || !techData->rawData || techData->rawData->numPoints == 0) {
                 LogError("No data received");
-                if (rawData) BL_FreeTechniqueResult(rawData);
+                if (techData) BL_FreeTechniqueData(techData);
                 return 0;
             }
             
-            LogMessage("Got %d data points, processing...", rawData->numPoints);
+            LogMessage("Got %d data points, processing...", techData->rawData->numPoints);
             
-            // Process data
-            uint32_t channelType;
-            BL_GetChannelBoardType(deviceID, channel, &channelType);
-            
-            TCurrentValues_t currentValues;
-            BL_GetCurrentValues(deviceID, channel, &currentValues);
-            
-            BL_ConvertedData *data = NULL;
-            result = BL_ProcessTechniqueData(rawData, KBIO_TECHID_GEIS, 1,
-                                           channelType, currentValues.TimeBase, &data);
-            
+            // Use converted data if available
+            BL_ConvertedData *data = techData->convertedData;
             if (!data) {
-                LogError("Failed to process data");
-                BL_FreeTechniqueResult(rawData);
+                LogError("No converted data available");
+                BL_FreeTechniqueData(techData);
                 return 0;
             }
             
@@ -466,8 +457,7 @@ int CVICALLBACK TestGEISCallback(int panel, int control, int event,
             // Verify we have the expected columns
             if (data->numVariables < 6) {
                 LogError("Unexpected data format: only %d variables", data->numVariables);
-                BL_FreeConvertedData(data);
-                BL_FreeTechniqueResult(rawData);
+                BL_FreeTechniqueData(techData);
                 return 0;
             }
             
@@ -524,8 +514,7 @@ int CVICALLBACK TestGEISCallback(int panel, int control, int event,
             
             free(realZ);
             free(negImagZ);
-            BL_FreeConvertedData(data);
-            BL_FreeTechniqueResult(rawData);
+            BL_FreeTechniqueData(techData);
             
             LogMessage("GEIS test completed");
             break;

@@ -211,10 +211,10 @@ typedef struct {
         
         // Technique results
         struct {
-            BL_RawDataBuffer *rawData;  // Caller must free rawData->rawData and rawData
-            double elapsedTime;         // Total measurement time
-            int finalState;             // Final state of technique
-            bool partialData;           // True if data is partial due to error
+            BL_TechniqueData *techniqueData;      // Combined raw and converted data
+            double elapsedTime;                   // Total measurement time
+            int finalState;                       // Final state of technique
+            bool partialData;                     // True if data is partial due to error
         } techniqueResult;
     } data;
 } BioCommandResult;
@@ -288,7 +288,7 @@ int BL_RunOCVQueued(int ID, uint8_t channel,
                     double record_every_dT,
                     int e_range,
 					bool processData,
-                    BL_RawDataBuffer **data,
+                    BL_TechniqueData **result,
                     int timeout_ms,
                     BioTechniqueProgressCallback progressCallback,
                     void *userData);
@@ -309,7 +309,7 @@ int BL_RunPEISQueued(int ID, uint8_t channel,
                      bool correction,
                      double wait_for_steady,
 					 bool processData,
-                     BL_RawDataBuffer **data,
+                     BL_TechniqueData **result,
                      int timeout_ms,
                      BioTechniqueProgressCallback progressCallback,
                      void *userData);
@@ -333,7 +333,7 @@ int BL_RunSPEISQueued(int ID, uint8_t channel,
                       bool correction,
                       double wait_for_steady,
 					  bool processData,
-                      BL_RawDataBuffer **data,
+                      BL_TechniqueData **result,
                       int timeout_ms,
                       BioTechniqueProgressCallback progressCallback,
                       void *userData);
@@ -355,7 +355,7 @@ int BL_RunGEISQueued(int ID, uint8_t channel,
                      double wait_for_steady,
                      int i_range,
 					 bool processData,
-                     BL_RawDataBuffer **data,
+                     BL_TechniqueData **result,
                      int timeout_ms,
                      BioTechniqueProgressCallback progressCallback,
                      void *userData);
@@ -380,7 +380,7 @@ int BL_RunSGEISQueued(int ID, uint8_t channel,
                       double wait_for_steady,
                       int i_range,
 					  bool processData,
-                      BL_RawDataBuffer **data,
+                      BL_TechniqueData **result,
                       int timeout_ms,
                       BioTechniqueProgressCallback progressCallback,
                       void *userData);
@@ -513,8 +513,5 @@ BioQueueManager* BIO_GetGlobalQueueManager(void);
 
 // Get device ID from queue manager
 int BIO_QueueGetDeviceID(BioQueueManager *mgr);
-
-// Free technique result data
-void BL_FreeTechniqueResult(BL_RawDataBuffer *data);
 
 #endif // BIOLOGIC_QUEUE_H

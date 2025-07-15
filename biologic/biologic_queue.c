@@ -96,30 +96,6 @@ static const DeviceAdapter g_bioAdapter = {
 };
 
 /******************************************************************************
- * Helper Functions
- ******************************************************************************/
-
-static BL_RawDataBuffer* CopyRawDataBuffer(BL_RawDataBuffer *src) {
-    if (!src || !src->rawData) return NULL;
-    
-    BL_RawDataBuffer *copy = malloc(sizeof(BL_RawDataBuffer));
-    if (!copy) return NULL;
-    
-    *copy = *src;  // Copy all fields
-    
-    // Deep copy the data array
-    int dataSize = src->bufferSize * sizeof(unsigned int);
-    copy->rawData = malloc(dataSize);
-    if (!copy->rawData) {
-        free(copy);
-        return NULL;
-    }
-    
-    memcpy(copy->rawData, src->rawData, dataSize);
-    return copy;
-}
-
-/******************************************************************************
  * Adapter Function Implementations
  ******************************************************************************/
 
@@ -309,12 +285,19 @@ static int BIO_AdapterExecuteCommand(void *deviceContext, int commandType, void 
                 Delay(0.1);  // Poll every 100ms
             }
             
+            // Create combined result
+            BL_TechniqueData *combinedResult = calloc(1, sizeof(BL_TechniqueData));
+            if (!combinedResult) {
+                cmdResult->errorCode = BL_ERR_FUNCTIONFAILED;
+                BL_FreeTechniqueContext(techContext);
+                break;
+            }
+            
             // Get results
             BL_RawDataBuffer *rawData = NULL;
             bool partialData = false;
             
             if (techContext->state == BIO_TECH_STATE_ERROR) {
-                // Try to get partial data
                 if (BL_GetTechniqueRawData(techContext, &rawData) == SUCCESS && rawData) {
                     partialData = true;
                     cmdResult->errorCode = BL_ERR_PARTIAL_DATA;
@@ -329,12 +312,22 @@ static int BIO_AdapterExecuteCommand(void *deviceContext, int commandType, void 
                 }
             }
             
-            // Copy raw data to result
+            // Copy data to combined result
             if (rawData) {
-                cmdResult->data.techniqueResult.rawData = CopyRawDataBuffer(rawData);
+                combinedResult->rawData = BL_CopyRawDataBuffer(rawData);
+                
+                // Transfer converted data ownership if available
+                if (techContext->convertedData) {
+                    combinedResult->convertedData = techContext->convertedData;
+                    techContext->convertedData = NULL; // Transfer ownership
+                }
+                
+                cmdResult->data.techniqueResult.techniqueData = combinedResult;
                 cmdResult->data.techniqueResult.elapsedTime = Timer() - startTime;
                 cmdResult->data.techniqueResult.finalState = techContext->state;
                 cmdResult->data.techniqueResult.partialData = partialData;
+            } else {
+                free(combinedResult);
             }
             
             // Clean up
@@ -382,7 +375,15 @@ static int BIO_AdapterExecuteCommand(void *deviceContext, int commandType, void 
                 Delay(0.1);
             }
             
-            // Get results (same as OCV)
+            // Create combined result
+            BL_TechniqueData *combinedResult = calloc(1, sizeof(BL_TechniqueData));
+            if (!combinedResult) {
+                cmdResult->errorCode = BL_ERR_FUNCTIONFAILED;
+                BL_FreeTechniqueContext(techContext);
+                break;
+            }
+            
+            // Get results
             BL_RawDataBuffer *rawData = NULL;
             bool partialData = false;
             
@@ -401,12 +402,22 @@ static int BIO_AdapterExecuteCommand(void *deviceContext, int commandType, void 
                 }
             }
             
-            // Copy raw data to result
+            // Copy data to combined result
             if (rawData) {
-                cmdResult->data.techniqueResult.rawData = CopyRawDataBuffer(rawData);
+                combinedResult->rawData = BL_CopyRawDataBuffer(rawData);
+                
+                // Transfer converted data ownership if available
+                if (techContext->convertedData) {
+                    combinedResult->convertedData = techContext->convertedData;
+                    techContext->convertedData = NULL; // Transfer ownership
+                }
+                
+                cmdResult->data.techniqueResult.techniqueData = combinedResult;
                 cmdResult->data.techniqueResult.elapsedTime = Timer() - startTime;
                 cmdResult->data.techniqueResult.finalState = techContext->state;
                 cmdResult->data.techniqueResult.partialData = partialData;
+            } else {
+                free(combinedResult);
             }
             
             // Clean up
@@ -457,7 +468,15 @@ static int BIO_AdapterExecuteCommand(void *deviceContext, int commandType, void 
 		        Delay(0.1);
 		    }
 		    
-		    // Get results (same as OCV/PEIS)
+		    // Create combined result
+		    BL_TechniqueData *combinedResult = calloc(1, sizeof(BL_TechniqueData));
+		    if (!combinedResult) {
+		        cmdResult->errorCode = BL_ERR_FUNCTIONFAILED;
+		        BL_FreeTechniqueContext(techContext);
+		        break;
+		    }
+		    
+		    // Get results
 		    BL_RawDataBuffer *rawData = NULL;
 		    bool partialData = false;
 		    
@@ -476,12 +495,22 @@ static int BIO_AdapterExecuteCommand(void *deviceContext, int commandType, void 
 		        }
 		    }
 		    
-		    // Copy raw data to result
+		    // Copy data to combined result
 		    if (rawData) {
-		        cmdResult->data.techniqueResult.rawData = CopyRawDataBuffer(rawData);
+		        combinedResult->rawData = BL_CopyRawDataBuffer(rawData);
+		        
+		        // Transfer converted data ownership if available
+		        if (techContext->convertedData) {
+		            combinedResult->convertedData = techContext->convertedData;
+		            techContext->convertedData = NULL; // Transfer ownership
+		        }
+		        
+		        cmdResult->data.techniqueResult.techniqueData = combinedResult;
 		        cmdResult->data.techniqueResult.elapsedTime = Timer() - startTime;
 		        cmdResult->data.techniqueResult.finalState = techContext->state;
 		        cmdResult->data.techniqueResult.partialData = partialData;
+		    } else {
+		        free(combinedResult);
 		    }
 		    
 		    // Clean up
@@ -530,7 +559,15 @@ static int BIO_AdapterExecuteCommand(void *deviceContext, int commandType, void 
 		        Delay(0.1);
 		    }
 		    
-		    // Get results (same as OCV/PEIS/SPEIS)
+		    // Create combined result
+		    BL_TechniqueData *combinedResult = calloc(1, sizeof(BL_TechniqueData));
+		    if (!combinedResult) {
+		        cmdResult->errorCode = BL_ERR_FUNCTIONFAILED;
+		        BL_FreeTechniqueContext(techContext);
+		        break;
+		    }
+		    
+		    // Get results
 		    BL_RawDataBuffer *rawData = NULL;
 		    bool partialData = false;
 		    
@@ -549,12 +586,22 @@ static int BIO_AdapterExecuteCommand(void *deviceContext, int commandType, void 
 		        }
 		    }
 		    
-		    // Copy raw data to result
+		    // Copy data to combined result
 		    if (rawData) {
-		        cmdResult->data.techniqueResult.rawData = CopyRawDataBuffer(rawData);
+		        combinedResult->rawData = BL_CopyRawDataBuffer(rawData);
+		        
+		        // Transfer converted data ownership if available
+		        if (techContext->convertedData) {
+		            combinedResult->convertedData = techContext->convertedData;
+		            techContext->convertedData = NULL; // Transfer ownership
+		        }
+		        
+		        cmdResult->data.techniqueResult.techniqueData = combinedResult;
 		        cmdResult->data.techniqueResult.elapsedTime = Timer() - startTime;
 		        cmdResult->data.techniqueResult.finalState = techContext->state;
 		        cmdResult->data.techniqueResult.partialData = partialData;
+		    } else {
+		        free(combinedResult);
 		    }
 		    
 		    // Clean up
@@ -588,7 +635,7 @@ static int BIO_AdapterExecuteCommand(void *deviceContext, int commandType, void 
 		        cmd->correction,
 		        cmd->wait_for_steady,
 		        cmd->i_range,
-				cmd->processData,
+		        cmd->processData,
 		        &techContext
 		    );
 		    
@@ -606,7 +653,15 @@ static int BIO_AdapterExecuteCommand(void *deviceContext, int commandType, void 
 		        Delay(0.1);
 		    }
 		    
-		    // Get results (same as other techniques)
+		    // Create combined result
+		    BL_TechniqueData *combinedResult = calloc(1, sizeof(BL_TechniqueData));
+		    if (!combinedResult) {
+		        cmdResult->errorCode = BL_ERR_FUNCTIONFAILED;
+		        BL_FreeTechniqueContext(techContext);
+		        break;
+		    }
+		    
+		    // Get results
 		    BL_RawDataBuffer *rawData = NULL;
 		    bool partialData = false;
 		    
@@ -625,12 +680,22 @@ static int BIO_AdapterExecuteCommand(void *deviceContext, int commandType, void 
 		        }
 		    }
 		    
-		    // Copy raw data to result
+		    // Copy data to combined result
 		    if (rawData) {
-		        cmdResult->data.techniqueResult.rawData = CopyRawDataBuffer(rawData);
+		        combinedResult->rawData = BL_CopyRawDataBuffer(rawData);
+		        
+		        // Transfer converted data ownership if available
+		        if (techContext->convertedData) {
+		            combinedResult->convertedData = techContext->convertedData;
+		            techContext->convertedData = NULL; // Transfer ownership
+		        }
+		        
+		        cmdResult->data.techniqueResult.techniqueData = combinedResult;
 		        cmdResult->data.techniqueResult.elapsedTime = Timer() - startTime;
 		        cmdResult->data.techniqueResult.finalState = techContext->state;
 		        cmdResult->data.techniqueResult.partialData = partialData;
+		    } else {
+		        free(combinedResult);
 		    }
 		    
 		    // Clean up
@@ -745,8 +810,8 @@ static void BIO_AdapterFreeCommandResult(int commandType, void *result) {
 	if ((commandType == BIO_CMD_RUN_OCV || commandType == BIO_CMD_RUN_PEIS || 
 	     commandType == BIO_CMD_RUN_SPEIS || commandType == BIO_CMD_RUN_GEIS || 
 	     commandType == BIO_CMD_RUN_SGEIS) &&
-	    cmdResult->data.techniqueResult.rawData) {
-	    BL_FreeTechniqueResult(cmdResult->data.techniqueResult.rawData);
+	    cmdResult->data.techniqueResult.techniqueData) {
+	    BL_FreeTechniqueData(cmdResult->data.techniqueResult.techniqueData);
 	}
     
     free(result);
@@ -760,13 +825,14 @@ static void BIO_AdapterCopyCommandResult(int commandType, void *dest, void *src)
     
     *destResult = *srcResult;
     
-    // Deep copy technique results
+    // For technique results, transfer ownership
 	if ((commandType == BIO_CMD_RUN_OCV || commandType == BIO_CMD_RUN_PEIS || 
 	     commandType == BIO_CMD_RUN_SPEIS || commandType == BIO_CMD_RUN_GEIS || 
 	     commandType == BIO_CMD_RUN_SGEIS) &&
-	    srcResult->data.techniqueResult.rawData) {
-	    destResult->data.techniqueResult.rawData = 
-	        CopyRawDataBuffer(srcResult->data.techniqueResult.rawData);
+	    srcResult->data.techniqueResult.techniqueData) {
+	    destResult->data.techniqueResult.techniqueData = 
+	        srcResult->data.techniqueResult.techniqueData;
+	    srcResult->data.techniqueResult.techniqueData = NULL; // Transfer ownership
 	}
 }
 
@@ -899,7 +965,7 @@ int BL_RunOCVQueued(int ID, uint8_t channel,
                     double record_every_dT,
                     int e_range,
 					bool processData,
-                    BL_RawDataBuffer **data,
+                    BL_TechniqueData **result,
                     int timeout_ms,
                     BioTechniqueProgressCallback progressCallback,
                     void *userData) {
@@ -908,9 +974,9 @@ int BL_RunOCVQueued(int ID, uint8_t channel,
     if (!mgr) {
         // Direct call without queue
         BL_TechniqueContext *context;
-        int result = BL_StartOCV(ID, channel, duration_s, sample_interval_s,
+        int ret = BL_StartOCV(ID, channel, duration_s, sample_interval_s,
                                record_every_dE, record_every_dT, e_range, processData, &context);
-        if (result != SUCCESS) return result;
+        if (ret != SUCCESS) return ret;
         
         if (progressCallback) {
             context->progressCallback = progressCallback;
@@ -922,9 +988,27 @@ int BL_RunOCVQueued(int ID, uint8_t channel,
             Delay(0.1);
         }
         
-        result = BL_GetTechniqueRawData(context, data);
+        // Create combined result
+        if (result) {
+            BL_TechniqueData *techData = calloc(1, sizeof(BL_TechniqueData));
+            if (techData) {
+                BL_RawDataBuffer *rawData = NULL;
+                if (BL_GetTechniqueRawData(context, &rawData) == SUCCESS) {
+                    techData->rawData = BL_CopyRawDataBuffer(rawData);
+                }
+                
+                if (context->convertedData) {
+                    techData->convertedData = context->convertedData;
+                    context->convertedData = NULL; // Transfer ownership
+                }
+                
+                *result = techData;
+            }
+        }
+        
+        ret = context->state == BIO_TECH_STATE_COMPLETED ? SUCCESS : context->lastError;
         BL_FreeTechniqueContext(context);
-        return result;
+        return ret;
     }
     
     BioOCVCommand cmd = {
@@ -943,13 +1027,15 @@ int BL_RunOCVQueued(int ID, uint8_t channel,
 		.processData = processData
     };
     
-    BioCommandResult result;
+    BioCommandResult cmdResult;
     int error = BIO_QueueCommandBlocking(mgr, BIO_CMD_RUN_OCV,
-                                       (BioCommandParams*)&cmd, BIO_PRIORITY_HIGH, &result,
+                                       (BioCommandParams*)&cmd, BIO_PRIORITY_HIGH, &cmdResult,
                                        cmd.base.timeout_ms);
     
-    if ((error == SUCCESS || error == BL_ERR_PARTIAL_DATA) && data) {
-        *data = result.data.techniqueResult.rawData;
+    if ((error == SUCCESS || error == BL_ERR_PARTIAL_DATA) && result) {
+        *result = cmdResult.data.techniqueResult.techniqueData;
+        // Transfer ownership - don't free in adapter
+        cmdResult.data.techniqueResult.techniqueData = NULL;
     }
     
     return error;
@@ -970,7 +1056,7 @@ int BL_RunPEISQueued(int ID, uint8_t channel,
                      bool correction,
                      double wait_for_steady,
 					 bool processData,
-                     BL_RawDataBuffer **data,
+                     BL_TechniqueData **result,
                      int timeout_ms,
                      BioTechniqueProgressCallback progressCallback,
                      void *userData) {
@@ -979,12 +1065,12 @@ int BL_RunPEISQueued(int ID, uint8_t channel,
     if (!mgr) {
         // Direct call without queue
         BL_TechniqueContext *context;
-        int result = BL_StartPEIS(ID, channel, vs_initial, initial_voltage_step,
+        int ret = BL_StartPEIS(ID, channel, vs_initial, initial_voltage_step,
                                 duration_step, record_every_dT, record_every_dI,
                                 initial_freq, final_freq, sweep_linear,
                                 amplitude_voltage, frequency_number, average_n_times,
                                 correction, wait_for_steady, processData, &context);
-        if (result != SUCCESS) return result;
+        if (ret != SUCCESS) return ret;
         
         if (progressCallback) {
             context->progressCallback = progressCallback;
@@ -996,9 +1082,27 @@ int BL_RunPEISQueued(int ID, uint8_t channel,
             Delay(0.1);
         }
         
-        result = BL_GetTechniqueRawData(context, data);
+        // Create combined result
+        if (result) {
+            BL_TechniqueData *techData = calloc(1, sizeof(BL_TechniqueData));
+            if (techData) {
+                BL_RawDataBuffer *rawData = NULL;
+                if (BL_GetTechniqueRawData(context, &rawData) == SUCCESS) {
+                    techData->rawData = BL_CopyRawDataBuffer(rawData);
+                }
+                
+                if (context->convertedData) {
+                    techData->convertedData = context->convertedData;
+                    context->convertedData = NULL; // Transfer ownership
+                }
+                
+                *result = techData;
+            }
+        }
+        
+        ret = context->state == BIO_TECH_STATE_COMPLETED ? SUCCESS : context->lastError;
         BL_FreeTechniqueContext(context);
-        return result;
+        return ret;
     }
     
     BioPEISCommand cmd = {
@@ -1025,13 +1129,15 @@ int BL_RunPEISQueued(int ID, uint8_t channel,
 		.processData = processData
     };
     
-    BioCommandResult result;
+    BioCommandResult cmdResult;
     int error = BIO_QueueCommandBlocking(mgr, BIO_CMD_RUN_PEIS,
-                                       (BioCommandParams*)&cmd, BIO_PRIORITY_HIGH, &result,
+                                       (BioCommandParams*)&cmd, BIO_PRIORITY_HIGH, &cmdResult,
                                        cmd.base.timeout_ms);
     
-    if ((error == SUCCESS || error == BL_ERR_PARTIAL_DATA) && data) {
-        *data = result.data.techniqueResult.rawData;
+    if ((error == SUCCESS || error == BL_ERR_PARTIAL_DATA) && result) {
+        *result = cmdResult.data.techniqueResult.techniqueData;
+        // Transfer ownership - don't free in adapter
+        cmdResult.data.techniqueResult.techniqueData = NULL;
     }
     
     return error;
@@ -1055,7 +1161,7 @@ int BL_RunSPEISQueued(int ID, uint8_t channel,
                       bool correction,
                       double wait_for_steady,
 					  bool processData,
-                      BL_RawDataBuffer **data,
+                      BL_TechniqueData **result,
                       int timeout_ms,
                       BioTechniqueProgressCallback progressCallback,
                       void *userData) {
@@ -1064,14 +1170,14 @@ int BL_RunSPEISQueued(int ID, uint8_t channel,
     if (!mgr) {
         // Direct call without queue
         BL_TechniqueContext *context;
-        int result = BL_StartSPEIS(ID, channel, vs_initial, vs_final,
+        int ret = BL_StartSPEIS(ID, channel, vs_initial, vs_final,
                                   initial_voltage_step, final_voltage_step,
                                   duration_step, step_number,
                                   record_every_dT, record_every_dI,
                                   initial_freq, final_freq, sweep_linear,
                                   amplitude_voltage, frequency_number, average_n_times,
                                   correction, wait_for_steady, processData, &context);
-        if (result != SUCCESS) return result;
+        if (ret != SUCCESS) return ret;
         
         if (progressCallback) {
             context->progressCallback = progressCallback;
@@ -1083,9 +1189,27 @@ int BL_RunSPEISQueued(int ID, uint8_t channel,
             Delay(0.1);
         }
         
-        result = BL_GetTechniqueRawData(context, data);
+        // Create combined result
+        if (result) {
+            BL_TechniqueData *techData = calloc(1, sizeof(BL_TechniqueData));
+            if (techData) {
+                BL_RawDataBuffer *rawData = NULL;
+                if (BL_GetTechniqueRawData(context, &rawData) == SUCCESS) {
+                    techData->rawData = BL_CopyRawDataBuffer(rawData);
+                }
+                
+                if (context->convertedData) {
+                    techData->convertedData = context->convertedData;
+                    context->convertedData = NULL; // Transfer ownership
+                }
+                
+                *result = techData;
+            }
+        }
+        
+        ret = context->state == BIO_TECH_STATE_COMPLETED ? SUCCESS : context->lastError;
         BL_FreeTechniqueContext(context);
-        return result;
+        return ret;
     }
     
     BioSPEISCommand cmd = {
@@ -1116,13 +1240,15 @@ int BL_RunSPEISQueued(int ID, uint8_t channel,
 		.processData = processData
     };
     
-    BioCommandResult result;
+    BioCommandResult cmdResult;
     int error = BIO_QueueCommandBlocking(mgr, BIO_CMD_RUN_SPEIS,
-                                       (BioCommandParams*)&cmd, BIO_PRIORITY_HIGH, &result,
+                                       (BioCommandParams*)&cmd, BIO_PRIORITY_HIGH, &cmdResult,
                                        cmd.base.timeout_ms);
     
-    if ((error == SUCCESS || error == BL_ERR_PARTIAL_DATA) && data) {
-        *data = result.data.techniqueResult.rawData;
+    if ((error == SUCCESS || error == BL_ERR_PARTIAL_DATA) && result) {
+        *result = cmdResult.data.techniqueResult.techniqueData;
+        // Transfer ownership - don't free in adapter
+        cmdResult.data.techniqueResult.techniqueData = NULL;
     }
     
     return error;
@@ -1144,7 +1270,7 @@ int BL_RunGEISQueued(int ID, uint8_t channel,
                      double wait_for_steady,
                      int i_range,
 					 bool processData,
-                     BL_RawDataBuffer **data,
+                     BL_TechniqueData **result,
                      int timeout_ms,
                      BioTechniqueProgressCallback progressCallback,
                      void *userData) {
@@ -1153,12 +1279,12 @@ int BL_RunGEISQueued(int ID, uint8_t channel,
     if (!mgr) {
         // Direct call without queue
         BL_TechniqueContext *context;
-        int result = BL_StartGEIS(ID, channel, vs_initial, initial_current_step,
+        int ret = BL_StartGEIS(ID, channel, vs_initial, initial_current_step,
                                 duration_step, record_every_dT, record_every_dE,
                                 initial_freq, final_freq, sweep_linear,
                                 amplitude_current, frequency_number, average_n_times,
                                 correction, wait_for_steady, i_range, processData, &context);
-        if (result != SUCCESS) return result;
+        if (ret != SUCCESS) return ret;
         
         if (progressCallback) {
             context->progressCallback = progressCallback;
@@ -1170,9 +1296,27 @@ int BL_RunGEISQueued(int ID, uint8_t channel,
             Delay(0.1);
         }
         
-        result = BL_GetTechniqueRawData(context, data);
+        // Create combined result
+        if (result) {
+            BL_TechniqueData *techData = calloc(1, sizeof(BL_TechniqueData));
+            if (techData) {
+                BL_RawDataBuffer *rawData = NULL;
+                if (BL_GetTechniqueRawData(context, &rawData) == SUCCESS) {
+                    techData->rawData = BL_CopyRawDataBuffer(rawData);
+                }
+                
+                if (context->convertedData) {
+                    techData->convertedData = context->convertedData;
+                    context->convertedData = NULL; // Transfer ownership
+                }
+                
+                *result = techData;
+            }
+        }
+        
+        ret = context->state == BIO_TECH_STATE_COMPLETED ? SUCCESS : context->lastError;
         BL_FreeTechniqueContext(context);
-        return result;
+        return ret;
     }
     
     BioGEISCommand cmd = {
@@ -1200,13 +1344,15 @@ int BL_RunGEISQueued(int ID, uint8_t channel,
 		.processData = processData
     };
     
-    BioCommandResult result;
+    BioCommandResult cmdResult;
     int error = BIO_QueueCommandBlocking(mgr, BIO_CMD_RUN_GEIS,
-                                       (BioCommandParams*)&cmd, BIO_PRIORITY_HIGH, &result,
+                                       (BioCommandParams*)&cmd, BIO_PRIORITY_HIGH, &cmdResult,
                                        cmd.base.timeout_ms);
     
-    if ((error == SUCCESS || error == BL_ERR_PARTIAL_DATA) && data) {
-        *data = result.data.techniqueResult.rawData;
+    if ((error == SUCCESS || error == BL_ERR_PARTIAL_DATA) && result) {
+        *result = cmdResult.data.techniqueResult.techniqueData;
+        // Transfer ownership - don't free in adapter
+        cmdResult.data.techniqueResult.techniqueData = NULL;
     }
     
     return error;
@@ -1231,7 +1377,7 @@ int BL_RunSGEISQueued(int ID, uint8_t channel,
                       double wait_for_steady,
                       int i_range,
 					  bool processData,
-                      BL_RawDataBuffer **data,
+                      BL_TechniqueData **result,
                       int timeout_ms,
                       BioTechniqueProgressCallback progressCallback,
                       void *userData) {
@@ -1240,14 +1386,14 @@ int BL_RunSGEISQueued(int ID, uint8_t channel,
     if (!mgr) {
         // Direct call without queue
         BL_TechniqueContext *context;
-        int result = BL_StartSGEIS(ID, channel, vs_initial, vs_final,
+        int ret = BL_StartSGEIS(ID, channel, vs_initial, vs_final,
                                   initial_current_step, final_current_step,
                                   duration_step, step_number,
                                   record_every_dT, record_every_dE,
                                   initial_freq, final_freq, sweep_linear,
                                   amplitude_current, frequency_number, average_n_times,
                                   correction, wait_for_steady, i_range, processData, &context);
-        if (result != SUCCESS) return result;
+        if (ret != SUCCESS) return ret;
         
         if (progressCallback) {
             context->progressCallback = progressCallback;
@@ -1259,9 +1405,27 @@ int BL_RunSGEISQueued(int ID, uint8_t channel,
             Delay(0.1);
         }
         
-        result = BL_GetTechniqueRawData(context, data);
+        // Create combined result
+        if (result) {
+            BL_TechniqueData *techData = calloc(1, sizeof(BL_TechniqueData));
+            if (techData) {
+                BL_RawDataBuffer *rawData = NULL;
+                if (BL_GetTechniqueRawData(context, &rawData) == SUCCESS) {
+                    techData->rawData = BL_CopyRawDataBuffer(rawData);
+                }
+                
+                if (context->convertedData) {
+                    techData->convertedData = context->convertedData;
+                    context->convertedData = NULL; // Transfer ownership
+                }
+                
+                *result = techData;
+            }
+        }
+        
+        ret = context->state == BIO_TECH_STATE_COMPLETED ? SUCCESS : context->lastError;
         BL_FreeTechniqueContext(context);
-        return result;
+        return ret;
     }
     
     BioSGEISCommand cmd = {
@@ -1293,13 +1457,15 @@ int BL_RunSGEISQueued(int ID, uint8_t channel,
 		.processData = processData
     };
     
-    BioCommandResult result;
+    BioCommandResult cmdResult;
     int error = BIO_QueueCommandBlocking(mgr, BIO_CMD_RUN_SGEIS,
-                                       (BioCommandParams*)&cmd, BIO_PRIORITY_HIGH, &result,
+                                       (BioCommandParams*)&cmd, BIO_PRIORITY_HIGH, &cmdResult,
                                        cmd.base.timeout_ms);
     
-    if ((error == SUCCESS || error == BL_ERR_PARTIAL_DATA) && data) {
-        *data = result.data.techniqueResult.rawData;
+    if ((error == SUCCESS || error == BL_ERR_PARTIAL_DATA) && result) {
+        *result = cmdResult.data.techniqueResult.techniqueData;
+        // Transfer ownership - don't free in adapter
+        cmdResult.data.techniqueResult.techniqueData = NULL;
     }
     
     return error;
@@ -1710,15 +1876,6 @@ int BIO_QueueGetCommandDelay(BioCommandType type) {
         default:
             return BIO_DELAY_RECOVERY;
     }
-}
-
-void BL_FreeTechniqueResult(BL_RawDataBuffer *data) {
-    if (!data) return;
-    
-    if (data->rawData) {
-        free(data->rawData);
-    }
-    free(data);
 }
 
 /******************************************************************************

@@ -296,6 +296,8 @@ void BL_FreeConvertedData(BL_ConvertedData *data);
 // Helper to free technique data (raw + converted)
 void BL_FreeTechniqueData(BL_TechniqueData *data);
 
+BL_RawDataBuffer* BL_CopyRawDataBuffer(BL_RawDataBuffer *src);
+
 // OCV (Open Circuit Voltage)
 int BL_StartOCV(int ID, uint8_t channel,
                 double duration_s,
