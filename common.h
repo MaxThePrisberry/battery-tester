@@ -53,6 +53,7 @@
 #define ERR_BASE_UI             -5000
 #define ERR_BASE_FILE           -6000
 #define ERR_BASE_THREAD         -7000
+#define ERR_BASE_DTB            -8000
 
 // System errors (-1000 to -1999)
 #define ERR_INVALID_PARAMETER   (ERR_BASE_SYSTEM - 1)

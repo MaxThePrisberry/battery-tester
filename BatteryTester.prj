@@ -11,7 +11,7 @@ IVI Standard Root Dir = "/c/Program Files/IVI Foundation/IVI"
 VXIplug&play Framework Dir = "/C/Program Files (x86)/IVI Foundation/VISA/winnt"
 IVI Standard Root 64-bit Dir = "/C/Program Files/IVI Foundation/IVI"
 VXIplug&play Framework 64-bit Dir = "/C/Program Files/IVI Foundation/VISA/win64"
-Number of Files = 31
+Number of Files = 33
 Target Type = "Executable"
 Flags = 2064
 Copied From Locked InstrDrv Directory = False
@@ -163,9 +163,9 @@ File Type = "Include"
 Res Id = 11
 Path Is Rel = True
 Path Rel To = "Project"
-Path Rel Path = "exp_capacity.h"
-Path Line0001 = "/c/Users/CV166/Documents/LabWindowsCVI/BatteryTester/battery-tester/exp_capacity"
-Path Line0002 = ".h"
+Path Rel Path = "dtb4848/dtb4848_dll.h"
+Path Line0001 = "/c/Users/CV166/Documents/LabWindowsCVI/BatteryTester/battery-tester/dtb4848/dtb4"
+Path Line0002 = "848_dll.h"
 Exclude = False
 Project Flags = 0
 Folder = "Include Files"
@@ -176,8 +176,9 @@ File Type = "Include"
 Res Id = 12
 Path Is Rel = True
 Path Rel To = "Project"
-Path Rel Path = "logging.h"
-Path = "/c/Users/CV166/Documents/LabWindowsCVI/BatteryTester/battery-tester/logging.h"
+Path Rel Path = "exp_capacity.h"
+Path Line0001 = "/c/Users/CV166/Documents/LabWindowsCVI/BatteryTester/battery-tester/exp_capacity"
+Path Line0002 = ".h"
 Exclude = False
 Project Flags = 0
 Folder = "Include Files"
@@ -188,9 +189,8 @@ File Type = "Include"
 Res Id = 13
 Path Is Rel = True
 Path Rel To = "Project"
-Path Rel Path = "psb10000/psb10000_dll.h"
-Path Line0001 = "/c/Users/CV166/Documents/LabWindowsCVI/BatteryTester/battery-tester/psb10000/psb"
-Path Line0002 = "10000_dll.h"
+Path Rel Path = "logging.h"
+Path = "/c/Users/CV166/Documents/LabWindowsCVI/BatteryTester/battery-tester/logging.h"
 Exclude = False
 Project Flags = 0
 Folder = "Include Files"
@@ -201,9 +201,9 @@ File Type = "Include"
 Res Id = 14
 Path Is Rel = True
 Path Rel To = "Project"
-Path Rel Path = "psb10000/psb10000_queue.h"
+Path Rel Path = "psb10000/psb10000_dll.h"
 Path Line0001 = "/c/Users/CV166/Documents/LabWindowsCVI/BatteryTester/battery-tester/psb10000/psb"
-Path Line0002 = "10000_queue.h"
+Path Line0002 = "10000_dll.h"
 Exclude = False
 Project Flags = 0
 Folder = "Include Files"
@@ -214,9 +214,9 @@ File Type = "Include"
 Res Id = 15
 Path Is Rel = True
 Path Rel To = "Project"
-Path Rel Path = "tests/psb10000_test.h"
-Path Line0001 = "/c/Users/CV166/Documents/LabWindowsCVI/BatteryTester/battery-tester/tests/psb100"
-Path Line0002 = "00_test.h"
+Path Rel Path = "psb10000/psb10000_queue.h"
+Path Line0001 = "/c/Users/CV166/Documents/LabWindowsCVI/BatteryTester/battery-tester/psb10000/psb"
+Path Line0002 = "10000_queue.h"
 Exclude = False
 Project Flags = 0
 Folder = "Include Files"
@@ -227,8 +227,9 @@ File Type = "Include"
 Res Id = 16
 Path Is Rel = True
 Path Rel To = "Project"
-Path Rel Path = "status.h"
-Path = "/c/Users/CV166/Documents/LabWindowsCVI/BatteryTester/battery-tester/status.h"
+Path Rel Path = "tests/psb10000_test.h"
+Path Line0001 = "/c/Users/CV166/Documents/LabWindowsCVI/BatteryTester/battery-tester/tests/psb100"
+Path Line0002 = "00_test.h"
 Exclude = False
 Project Flags = 0
 Folder = "Include Files"
@@ -239,6 +240,18 @@ File Type = "Include"
 Res Id = 17
 Path Is Rel = True
 Path Rel To = "Project"
+Path Rel Path = "status.h"
+Path = "/c/Users/CV166/Documents/LabWindowsCVI/BatteryTester/battery-tester/status.h"
+Exclude = False
+Project Flags = 0
+Folder = "Include Files"
+Folder Id = 1
+
+[File 0018]
+File Type = "Include"
+Res Id = 18
+Path Is Rel = True
+Path Rel To = "Project"
 Path Rel Path = "utils.h"
 Path = "/c/Users/CV166/Documents/LabWindowsCVI/BatteryTester/battery-tester/utils.h"
 Exclude = False
@@ -246,9 +259,9 @@ Project Flags = 0
 Folder = "Include Files"
 Folder Id = 1
 
-[File 0018]
+[File 0019]
 File Type = "CSource"
-Res Id = 18
+Res Id = 19
 Path Is Rel = True
 Path Rel To = "Project"
 Path Rel Path = "battery_utils.c"
@@ -260,9 +273,9 @@ Project Flags = 0
 Folder = "Source Files"
 Folder Id = 2
 
-[File 0019]
+[File 0020]
 File Type = "CSource"
-Res Id = 19
+Res Id = 20
 Path Is Rel = True
 Path Rel To = "Project"
 Path Rel Path = "BatteryTester.c"
@@ -274,9 +287,9 @@ Project Flags = 0
 Folder = "Source Files"
 Folder Id = 2
 
-[File 0020]
+[File 0021]
 File Type = "CSource"
-Res Id = 20
+Res Id = 21
 Path Is Rel = True
 Path Rel To = "Project"
 Path Rel Path = "biologic/biologic_dll.c"
@@ -288,9 +301,9 @@ Project Flags = 0
 Folder = "Source Files"
 Folder Id = 2
 
-[File 0021]
+[File 0022]
 File Type = "CSource"
-Res Id = 21
+Res Id = 22
 Path Is Rel = True
 Path Rel To = "Project"
 Path Rel Path = "biologic/biologic_queue.c"
@@ -302,9 +315,9 @@ Project Flags = 0
 Folder = "Source Files"
 Folder Id = 2
 
-[File 0022]
+[File 0023]
 File Type = "CSource"
-Res Id = 22
+Res Id = 23
 Path Is Rel = True
 Path Rel To = "Project"
 Path Rel Path = "tests/biologic_test.c"
@@ -316,9 +329,9 @@ Project Flags = 0
 Folder = "Source Files"
 Folder Id = 2
 
-[File 0023]
+[File 0024]
 File Type = "CSource"
-Res Id = 23
+Res Id = 24
 Path Is Rel = True
 Path Rel To = "Project"
 Path Rel Path = "device_queue.c"
@@ -330,9 +343,9 @@ Project Flags = 0
 Folder = "Source Files"
 Folder Id = 2
 
-[File 0024]
+[File 0025]
 File Type = "CSource"
-Res Id = 24
+Res Id = 25
 Path Is Rel = True
 Path Rel To = "Project"
 Path Rel Path = "tests/device_queue_test.c"
@@ -344,27 +357,14 @@ Project Flags = 0
 Folder = "Source Files"
 Folder Id = 2
 
-[File 0025]
-File Type = "CSource"
-Res Id = 25
-Path Is Rel = True
-Path Rel To = "Project"
-Path Rel Path = "exp_capacity.c"
-Path Line0001 = "/c/Users/CV166/Documents/LabWindowsCVI/BatteryTester/battery-tester/exp_capacity"
-Path Line0002 = ".c"
-Exclude = False
-Compile Into Object File = False
-Project Flags = 0
-Folder = "Source Files"
-Folder Id = 2
-
 [File 0026]
 File Type = "CSource"
 Res Id = 26
 Path Is Rel = True
 Path Rel To = "Project"
-Path Rel Path = "logging.c"
-Path = "/c/Users/CV166/Documents/LabWindowsCVI/BatteryTester/battery-tester/logging.c"
+Path Rel Path = "dtb4848/dtb4848_dll.c"
+Path Line0001 = "/c/Users/CV166/Documents/LabWindowsCVI/BatteryTester/battery-tester/dtb4848/dtb4"
+Path Line0002 = "848_dll.c"
 Exclude = False
 Compile Into Object File = False
 Project Flags = 0
@@ -376,9 +376,9 @@ File Type = "CSource"
 Res Id = 27
 Path Is Rel = True
 Path Rel To = "Project"
-Path Rel Path = "psb10000/psb10000_dll.c"
-Path Line0001 = "/c/Users/CV166/Documents/LabWindowsCVI/BatteryTester/battery-tester/psb10000/psb"
-Path Line0002 = "10000_dll.c"
+Path Rel Path = "exp_capacity.c"
+Path Line0001 = "/c/Users/CV166/Documents/LabWindowsCVI/BatteryTester/battery-tester/exp_capacity"
+Path Line0002 = ".c"
 Exclude = False
 Compile Into Object File = False
 Project Flags = 0
@@ -390,9 +390,8 @@ File Type = "CSource"
 Res Id = 28
 Path Is Rel = True
 Path Rel To = "Project"
-Path Rel Path = "psb10000/psb10000_queue.c"
-Path Line0001 = "/c/Users/CV166/Documents/LabWindowsCVI/BatteryTester/battery-tester/psb10000/psb"
-Path Line0002 = "10000_queue.c"
+Path Rel Path = "logging.c"
+Path = "/c/Users/CV166/Documents/LabWindowsCVI/BatteryTester/battery-tester/logging.c"
 Exclude = False
 Compile Into Object File = False
 Project Flags = 0
@@ -404,9 +403,9 @@ File Type = "CSource"
 Res Id = 29
 Path Is Rel = True
 Path Rel To = "Project"
-Path Rel Path = "tests/psb10000_test.c"
-Path Line0001 = "/c/Users/CV166/Documents/LabWindowsCVI/BatteryTester/battery-tester/tests/psb100"
-Path Line0002 = "00_test.c"
+Path Rel Path = "psb10000/psb10000_dll.c"
+Path Line0001 = "/c/Users/CV166/Documents/LabWindowsCVI/BatteryTester/battery-tester/psb10000/psb"
+Path Line0002 = "10000_dll.c"
 Exclude = False
 Compile Into Object File = False
 Project Flags = 0
@@ -418,8 +417,9 @@ File Type = "CSource"
 Res Id = 30
 Path Is Rel = True
 Path Rel To = "Project"
-Path Rel Path = "status.c"
-Path = "/c/Users/CV166/Documents/LabWindowsCVI/BatteryTester/battery-tester/status.c"
+Path Rel Path = "psb10000/psb10000_queue.c"
+Path Line0001 = "/c/Users/CV166/Documents/LabWindowsCVI/BatteryTester/battery-tester/psb10000/psb"
+Path Line0002 = "10000_queue.c"
 Exclude = False
 Compile Into Object File = False
 Project Flags = 0
@@ -429,6 +429,33 @@ Folder Id = 2
 [File 0031]
 File Type = "CSource"
 Res Id = 31
+Path Is Rel = True
+Path Rel To = "Project"
+Path Rel Path = "tests/psb10000_test.c"
+Path Line0001 = "/c/Users/CV166/Documents/LabWindowsCVI/BatteryTester/battery-tester/tests/psb100"
+Path Line0002 = "00_test.c"
+Exclude = False
+Compile Into Object File = False
+Project Flags = 0
+Folder = "Source Files"
+Folder Id = 2
+
+[File 0032]
+File Type = "CSource"
+Res Id = 32
+Path Is Rel = True
+Path Rel To = "Project"
+Path Rel Path = "status.c"
+Path = "/c/Users/CV166/Documents/LabWindowsCVI/BatteryTester/battery-tester/status.c"
+Exclude = False
+Compile Into Object File = False
+Project Flags = 0
+Folder = "Source Files"
+Folder Id = 2
+
+[File 0033]
+File Type = "CSource"
+Res Id = 33
 Path Is Rel = True
 Path Rel To = "Project"
 Path Rel Path = "utils.c"
