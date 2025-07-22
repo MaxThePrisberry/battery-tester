@@ -12,7 +12,10 @@
 #include "psb10000_queue.h"
 #include "biologic_dll.h"
 #include "biologic_queue.h"
+#include "dtb4848_dll.h"
+#include "dtb4848_queue.h"
 #include "logging.h"
+#include "controls.h"
 #include <utility.h>
 #include <toolbox.h>
 
@@ -29,8 +32,9 @@ static struct {
     // Last known states for change detection
     ConnectionState lastPSBState;
     ConnectionState lastBioState;
-	
-	// Track pending remote mode change
+    ConnectionState lastDTBState;
+    
+    // Track pending remote mode change
     volatile int remoteModeChangePending;
     volatile int pendingRemoteModeValue;
 } g_status = {0};
@@ -42,14 +46,17 @@ static int g_initialized = 0;
  ******************************************************************************/
 static int CVICALLBACK Status_TimerThread(void *functionData);
 static void Status_TimerUpdate(void);
-static void UpdateDeviceLED(int isPSB, ConnectionState state);
-static void UpdateDeviceStatus(int isPSB, const char* message);
+static void UpdateDeviceLED(int deviceType, ConnectionState state);
+static void UpdateDeviceStatus(int deviceType, const char* message);
 static void UpdatePSBValues(PSB_Status* status);
+static void UpdateDTBValues(DTB_Status* status);
 static void CVICALLBACK DeferredLEDUpdate(void* data);
 static void CVICALLBACK DeferredStatusUpdate(void* data);
 static void CVICALLBACK DeferredNumericUpdate(void* data);
 static void CVICALLBACK DeferredToggleUpdate(void* data);
 static void PSBStatusCallback(CommandID cmdId, PSBCommandType type, 
+                            void *result, void *userData);
+static void DTBStatusCallback(CommandID cmdId, DTBCommandType type,
                             void *result, void *userData);
 
 /******************************************************************************
@@ -61,6 +68,13 @@ typedef struct {
     double dblValue; // For numeric values
     char strValue[MEDIUM_BUFFER_SIZE]; // For string values
 } UIUpdateData;
+
+// Device type enumeration
+typedef enum {
+    DEVICE_PSB = 0,
+    DEVICE_BIOLOGIC = 1,
+    DEVICE_DTB = 2
+} DeviceType;
 
 /******************************************************************************
  * Public Functions Implementation
@@ -79,16 +93,22 @@ int Status_Initialize(int panelHandle) {
     g_status.statusPaused = 0;
     g_status.lastPSBState = CONN_STATE_IDLE;
     g_status.lastBioState = CONN_STATE_IDLE;
+    g_status.lastDTBState = CONN_STATE_IDLE;
     
     // Set initial LED states
     if (ENABLE_PSB) {
-        UpdateDeviceLED(1, CONN_STATE_IDLE);
-        UpdateDeviceStatus(1, "PSB Monitoring");
+        UpdateDeviceLED(DEVICE_PSB, CONN_STATE_IDLE);
+        UpdateDeviceStatus(DEVICE_PSB, "PSB Monitoring");
     }
     
     if (ENABLE_BIOLOGIC) {
-        UpdateDeviceLED(0, CONN_STATE_IDLE);
-        UpdateDeviceStatus(0, "BioLogic Monitoring");
+        UpdateDeviceLED(DEVICE_BIOLOGIC, CONN_STATE_IDLE);
+        UpdateDeviceStatus(DEVICE_BIOLOGIC, "BioLogic Monitoring");
+    }
+    
+    if (ENABLE_DTB) {
+        UpdateDeviceLED(DEVICE_DTB, CONN_STATE_IDLE);
+        UpdateDeviceStatus(DEVICE_DTB, "DTB Monitoring");
     }
     
     g_initialized = 1;
@@ -163,10 +183,13 @@ int Status_Pause(void) {
     
     // Update UI to show paused state
     if (ENABLE_PSB) {
-        UpdateDeviceStatus(1, "Monitoring Paused");
+        UpdateDeviceStatus(DEVICE_PSB, "Monitoring Paused");
     }
     if (ENABLE_BIOLOGIC) {
-        UpdateDeviceStatus(0, "Monitoring Paused");
+        UpdateDeviceStatus(DEVICE_BIOLOGIC, "Monitoring Paused");
+    }
+    if (ENABLE_DTB) {
+        UpdateDeviceStatus(DEVICE_DTB, "Monitoring Paused");
     }
     
     return SUCCESS;
@@ -237,15 +260,15 @@ static void Status_TimerUpdate(void) {
             // Update UI if state changed
             if (currentState != g_status.lastPSBState) {
                 g_status.lastPSBState = currentState;
-                UpdateDeviceLED(1, currentState);
-                UpdateDeviceStatus(1, stats.isConnected ? "PSB Connected" : "PSB Not Connected");
+                UpdateDeviceLED(DEVICE_PSB, currentState);
+                UpdateDeviceStatus(DEVICE_PSB, stats.isConnected ? "PSB Connected" : "PSB Not Connected");
                 
-                // Get initial values if just connected
+                // Get initial values if just connected (blocking call)
                 if (stats.isConnected && currentState == CONN_STATE_CONNECTED) {
                     PSB_Handle *handle = PSB_QueueGetHandle(psbQueueMgr);
                     if (handle) {
                         PSB_Status status;
-                        if (PSB_GetStatus(handle, &status) == PSB_SUCCESS) {
+                        if (PSB_GetStatusQueued(handle, &status) == PSB_SUCCESS) {
                             UpdatePSBValues(&status);
                             
                             // Set initial remote mode LED state
@@ -288,7 +311,7 @@ static void Status_TimerUpdate(void) {
                 }
             }
             
-            // Queue periodic status update if connected
+            // Queue periodic status update if connected (async call)
             if (stats.isConnected && !PSB_QueueHasCommandType(psbQueueMgr, PSB_CMD_GET_STATUS)) {
                 PSB_QueueCommandAsync(psbQueueMgr, PSB_CMD_GET_STATUS, NULL, 
                                     PSB_PRIORITY_NORMAL, PSBStatusCallback, NULL);
@@ -309,8 +332,43 @@ static void Status_TimerUpdate(void) {
             // Update UI if state changed
             if (currentState != g_status.lastBioState) {
                 g_status.lastBioState = currentState;
-                UpdateDeviceLED(0, currentState);
-                UpdateDeviceStatus(0, stats.isConnected ? "BioLogic Connected" : "BioLogic Not Connected");
+                UpdateDeviceLED(DEVICE_BIOLOGIC, currentState);
+                UpdateDeviceStatus(DEVICE_BIOLOGIC, stats.isConnected ? "BioLogic Connected" : "BioLogic Not Connected");
+            }
+        }
+    }
+    
+    // Update DTB status
+    if (ENABLE_DTB) {
+        DTBQueueManager *dtbQueueMgr = DTB_GetGlobalQueueManager();
+        if (dtbQueueMgr) {
+            DTBQueueStats stats;
+            DTB_QueueGetStats(dtbQueueMgr, &stats);
+            
+            // Check if state changed
+            if (!stats.isConnected && g_status.lastDTBState != CONN_STATE_ERROR) {
+                // Lost connection
+                g_status.lastDTBState = CONN_STATE_ERROR;
+                UpdateDeviceLED(DEVICE_DTB, CONN_STATE_ERROR);
+                UpdateDeviceStatus(DEVICE_DTB, "DTB Not Connected");
+            } else if (stats.isConnected && g_status.lastDTBState == CONN_STATE_ERROR) {
+                // Just connected - get initial status (blocking call)
+                DTB_Handle *handle = DTB_QueueGetHandle(dtbQueueMgr);
+                if (handle) {
+                    DTB_Status status;
+                    if (DTB_GetStatusQueued(handle, &status) == DTB_SUCCESS) {
+                        UpdateDTBValues(&status);
+                        // Set state based on output enabled
+                        g_status.lastDTBState = status.outputEnabled ? CONN_STATE_CONNECTED : CONN_STATE_IDLE;
+                        UpdateDeviceStatus(DEVICE_DTB, "DTB Connected");
+                    }
+                }
+            }
+            
+            // Queue periodic status update if connected (async call)
+            if (stats.isConnected && !DTB_QueueHasCommandType(dtbQueueMgr, DTB_CMD_GET_STATUS)) {
+                DTB_QueueCommandAsync(dtbQueueMgr, DTB_CMD_GET_STATUS, NULL,
+                                    DTB_PRIORITY_NORMAL, DTBStatusCallback, NULL);
             }
         }
     }
@@ -349,6 +407,42 @@ static void PSBStatusCallback(CommandID cmdId, PSBCommandType type,
             toggleData->intValue = status->remoteMode;
             PostDeferredCall(DeferredToggleUpdate, toggleData);
         }
+    } else {
+        // Error occurred - update LED to error state but keep last values
+        LogErrorEx(LOG_DEVICE_PSB, "Failed to get PSB status: %s", 
+                 PSB_GetErrorString(cmdResult->errorCode));
+        UpdateDeviceLED(DEVICE_PSB, CONN_STATE_ERROR);
+    }
+}
+
+/******************************************************************************
+ * DTB Status Callback
+ ******************************************************************************/
+
+static void DTBStatusCallback(CommandID cmdId, DTBCommandType type,
+                            void *result, void *userData) {
+    DTBCommandResult *cmdResult = (DTBCommandResult *)result;
+    
+    if (!cmdResult) {
+        LogErrorEx(LOG_DEVICE_DTB, "DTBStatusCallback: NULL result pointer");
+        return;
+    }
+    
+    if (cmdResult->errorCode == DTB_SUCCESS) {
+        DTB_Status *status = &cmdResult->data.status;
+        UpdateDTBValues(status);
+        
+        // Update stored state based on output enabled status
+        ConnectionState newState = status->outputEnabled ? CONN_STATE_CONNECTED : CONN_STATE_IDLE;
+        if (newState != g_status.lastDTBState) {
+            g_status.lastDTBState = newState;
+        }
+    } else {
+        // Error occurred - update LED to error state but keep last values
+        LogErrorEx(LOG_DEVICE_DTB, "Failed to get DTB status: %s",
+                 DTB_GetErrorString(cmdResult->errorCode));
+        g_status.lastDTBState = CONN_STATE_ERROR;
+        UpdateDeviceLED(DEVICE_DTB, CONN_STATE_ERROR);
     }
 }
 
@@ -356,21 +450,39 @@ static void PSBStatusCallback(CommandID cmdId, PSBCommandType type,
  * UI Update Functions
  ******************************************************************************/
 
-static void UpdateDeviceLED(int isPSB, ConnectionState state) {
+static void UpdateDeviceLED(int deviceType, ConnectionState state) {
     UIUpdateData* data = malloc(sizeof(UIUpdateData));
     if (!data) return;
     
-    data->control = isPSB ? PANEL_LED_PSB_STATUS : PANEL_LED_BIOLOGIC_STATUS;
+    switch (deviceType) {
+        case DEVICE_PSB:
+            data->control = PANEL_LED_PSB_STATUS;
+            break;
+        case DEVICE_BIOLOGIC:
+            data->control = PANEL_LED_BIOLOGIC_STATUS;
+            break;
+        case DEVICE_DTB:
+            data->control = PANEL_LED_DTB_STATUS;
+            break;
+        default:
+            free(data);
+            return;
+    }
     
     // Determine LED color based on state
+    // For DTB: Green=Output Enabled, Yellow=Output Disabled, Red=Error/Disconnected
+    // For PSB/BioLogic: Green=Connected, Red=Error/Disconnected
     switch (state) {
         case CONN_STATE_IDLE:
+            data->intValue = VAL_YELLOW;  // Yellow for idle/stopped
+            break;
+            
         case CONN_STATE_ERROR:
-            data->intValue = VAL_RED;
+            data->intValue = VAL_RED;      // Red for errors
             break;
             
         case CONN_STATE_CONNECTED:
-            data->intValue = VAL_GREEN;
+            data->intValue = VAL_GREEN;    // Green for connected/running
             break;
             
         default:
@@ -381,11 +493,25 @@ static void UpdateDeviceLED(int isPSB, ConnectionState state) {
     PostDeferredCall(DeferredLEDUpdate, data);
 }
 
-static void UpdateDeviceStatus(int isPSB, const char* message) {
+static void UpdateDeviceStatus(int deviceType, const char* message) {
     UIUpdateData* data = malloc(sizeof(UIUpdateData));
     if (!data) return;
     
-    data->control = isPSB ? PANEL_STR_PSB_STATUS : PANEL_STR_BIOLOGIC_STATUS;
+    switch (deviceType) {
+        case DEVICE_PSB:
+            data->control = PANEL_STR_PSB_STATUS;
+            break;
+        case DEVICE_BIOLOGIC:
+            data->control = PANEL_STR_BIOLOGIC_STATUS;
+            break;
+        case DEVICE_DTB:
+            data->control = PANEL_STR_DTB_STATUS;
+            break;
+        default:
+            free(data);
+            return;
+    }
+    
     SAFE_STRCPY(data->strValue, message, sizeof(data->strValue));
     
     PostDeferredCall(DeferredStatusUpdate, data);
@@ -415,6 +541,29 @@ static void UpdatePSBValues(PSB_Status* status) {
         pData->dblValue = status->power;
         PostDeferredCall(DeferredNumericUpdate, pData);
     }
+}
+
+static void UpdateDTBValues(DTB_Status* status) {
+    // Update current temperature
+    UIUpdateData* tempData = malloc(sizeof(UIUpdateData));
+    if (tempData) {
+        tempData->control = PANEL_NUM_DTB_TEMPERATURE;
+        tempData->dblValue = status->processValue;
+        PostDeferredCall(DeferredNumericUpdate, tempData);
+    }
+    
+    // Update set temperature
+    UIUpdateData* setData = malloc(sizeof(UIUpdateData));
+    if (setData) {
+        setData->control = PANEL_NUM_DTB_SETPOINT;
+        setData->dblValue = status->setPoint;
+        PostDeferredCall(DeferredNumericUpdate, setData);
+    }
+    
+    // Update DTB LED based on output enabled state
+    // The single DTB LED shows: Green=Output Enabled (Running), Yellow=Output Disabled (Stopped), Red=Error/Disconnected
+    ConnectionState state = status->outputEnabled ? CONN_STATE_CONNECTED : CONN_STATE_IDLE;
+    UpdateDeviceLED(DEVICE_DTB, state);
 }
 
 /******************************************************************************
@@ -473,15 +622,6 @@ static void CVICALLBACK DeferredToggleUpdate(void* data) {
         
         free(updateData);
     }
-}
-
-void Status_SetRemoteModeChangePending(int pending, int value) {
-    g_status.remoteModeChangePending = pending;
-    g_status.pendingRemoteModeValue = value;
-}
-
-int Status_IsRemoteModeChangePending(void) {
-    return g_status.remoteModeChangePending;
 }
 
 void Status_UpdateRemoteLED(int isOn) {

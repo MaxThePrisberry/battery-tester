@@ -17,11 +17,12 @@
 #include "exp_capacity.h"
 #include "logging.h"
 #include "status.h"
+#include "controls.h"
 
 /******************************************************************************
  * Module Constants
  ******************************************************************************/
-#define THREAD_POOL_SIZE        4
+#define THREAD_POOL_SIZE        10
 #define PSB_TARGET_SERIAL       "2872380001"  // Target PSB serial number
 
 /******************************************************************************
@@ -66,6 +67,9 @@ int main (int argc, char *argv[]) {
     
     // Initialize status monitoring BEFORE queue managers
     Status_Initialize(g_mainPanelHandle);
+	
+	// Initialize controls module
+	Controls_Initialize(g_mainPanelHandle);
     
     // Initialize PSB queue manager with specific port
 	if (ENABLE_PSB) {
@@ -153,109 +157,6 @@ int main (int argc, char *argv[]) {
         CmtDiscardThreadPool(g_threadPool);
     }
     
-    return 0;
-}
-
-/******************************************************************************
- * Modified Remote Mode Toggle Callback
- ******************************************************************************/
-
-// Worker thread data structure
-typedef struct {
-    int panel;
-    int control;
-    int enable;
-} RemoteModeData;
-
-// Worker thread function
-int CVICALLBACK RemoteModeWorkerThread(void *functionData) {
-    RemoteModeData *data = (RemoteModeData*)functionData;
-    PSB_Handle *psbHandle = PSB_QueueGetHandle(g_psbQueueMgr);
-    
-    if (psbHandle) {
-        // Use queued version
-        int result = PSB_SetRemoteModeQueued(psbHandle, data->enable);
-        
-        if (result != PSB_SUCCESS) {
-            LogError("Failed to set remote mode: %s", PSB_GetErrorString(result));
-            
-            // On failure, get current state and update LED
-            PSB_Status status;
-            int currentState = 0;  // Default to off
-            if (PSB_GetStatusQueued(psbHandle, &status) == PSB_SUCCESS) {
-                currentState = status.remoteMode;
-            }
-            Status_UpdateRemoteLED(currentState);
-        } else {
-            // Update LED to new state
-            Status_UpdateRemoteLED(data->enable);
-        }
-    } else {
-        LogWarning("PSB not connected - cannot change remote mode");
-    }
-    
-    // Clear pending state
-    Status_SetRemoteModeChangePending(0, 0);
-    
-    // Clear busy flag
-    CmtGetLock(g_busyLock);
-    g_systemBusy = 0;
-    CmtReleaseLock(g_busyLock);
-    
-    free(data);
-    return 0;
-}
-
-int CVICALLBACK RemoteModeToggle (int panel, int control, int event,
-                                 void *callbackData, int eventData1, int eventData2) {
-    switch (event) {
-        case EVENT_COMMIT:
-            // Check if system is busy
-            CmtGetLock(g_busyLock);
-            if (g_systemBusy) {
-                CmtReleaseLock(g_busyLock);
-                LogWarning("System is busy - please wait for current operation to complete");
-                // Reset toggle to current state
-                PSB_Handle *psbHandle = PSB_QueueGetHandle(g_psbQueueMgr);
-                if (psbHandle) {
-                    PSB_Status status;
-                    if (PSB_GetStatusQueued(psbHandle, &status) == PSB_SUCCESS) {
-                        SetCtrlVal(panel, control, status.remoteMode);
-                    }
-                }
-                return 0;
-            }
-            
-            // Mark system as busy
-            g_systemBusy = 1;
-            CmtReleaseLock(g_busyLock);
-            
-            // Get toggle value
-            int enable;
-            GetCtrlVal(panel, control, &enable);
-            
-            // Set pending flag in status module
-            Status_SetRemoteModeChangePending(1, enable);
-            
-            // Create worker thread data
-            RemoteModeData *data = malloc(sizeof(RemoteModeData));
-            if (data) {
-                data->panel = panel;
-                data->control = control;
-                data->enable = enable;
-                
-                CmtThreadFunctionID threadID;
-                CmtScheduleThreadPoolFunction(g_threadPool, 
-                    RemoteModeWorkerThread, data, &threadID);
-            } else {
-                // Failed to allocate - clear busy flag and pending state
-                Status_SetRemoteModeChangePending(0, 0);
-                CmtGetLock(g_busyLock);
-                g_systemBusy = 0;
-                CmtReleaseLock(g_busyLock);
-            }
-            break;
-    }
     return 0;
 }
 
@@ -353,6 +254,9 @@ int CVICALLBACK PanelCallback(int panel, int event, void *callbackData,
             LogMessage("Cleaning up capacity test module...");
             CapacityTest_Cleanup();
             
+			// Clean up controls module
+			Controls_Cleanup();
+			
             // Clean up status module
             Status_Cleanup();
             
