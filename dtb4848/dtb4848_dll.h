@@ -185,11 +185,6 @@ typedef struct {
 /******************************************************************************
  * Function Prototypes
  ******************************************************************************/
-
-// Auto-Discovery Functions
-int DTB_ScanPort(int comPort, DTB_DiscoveryResult *result);
-int DTB_AutoDiscover(DTB_Handle *handle);
-
 // Connection Functions
 int DTB_Initialize(DTB_Handle *handle, int comPort, int slaveAddress, int baudRate);
 int DTB_Close(DTB_Handle *handle);

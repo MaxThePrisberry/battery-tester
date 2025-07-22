@@ -133,11 +133,6 @@ typedef struct {
 /******************************************************************************
  * Function Prototypes
  ******************************************************************************/
-
-// Auto-Discovery Functions
-int PSB_ScanPort(int comPort, PSB_DiscoveryResult *result);
-int PSB_AutoDiscover(const char *targetSerial, PSB_Handle *handle);
-
 // Connection Functions
 int PSB_InitializeSpecific(PSB_Handle *handle, int comPort, int slaveAddress, int baudRate);
 int PSB_Close(PSB_Handle *handle);

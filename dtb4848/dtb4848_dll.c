@@ -110,18 +110,28 @@ static int SendModbusASCII(DTB_Handle *handle, unsigned char functionCode,
     sprintf(asciiFrame, ":%s%02X\r\n", hexData, lrc);
     
     PrintDebug("TX: %s", asciiFrame);
+    LogDebugEx(LOG_DEVICE_DTB, "Sending frame: %s (length=%d)", asciiFrame, strlen(asciiFrame));
     
-    // Clear input buffer
-    FlushInQ(handle->comPort);
+    // Check input queue before sending
+    int bytesInQueue = GetInQLen(handle->comPort);
+    if (bytesInQueue > 0) {
+        LogWarningEx(LOG_DEVICE_DTB, "Input queue has %d bytes before sending", bytesInQueue);
+        FlushInQ(handle->comPort);
+    }
     
     // Send command
     int frameLen = strlen(asciiFrame);
-    if (ComWrt(handle->comPort, asciiFrame, frameLen) != frameLen) {
-        LogErrorEx(LOG_DEVICE_DTB, "Failed to write to COM port");
+    int bytesWritten = ComWrt(handle->comPort, asciiFrame, frameLen);
+    if (bytesWritten != frameLen) {
+        LogErrorEx(LOG_DEVICE_DTB, "Failed to write to COM port: wrote %d of %d bytes", 
+                   bytesWritten, frameLen);
         return DTB_ERROR_COMM;
     }
     
-    // Wait for response
+    LogDebugEx(LOG_DEVICE_DTB, "Successfully wrote %d bytes", bytesWritten);
+    
+    // Wait for response - try different delays
+    double sendTime = Timer();
     Delay(0.1);  // 100ms for device processing
     
     // Read response
@@ -129,24 +139,56 @@ static int SendModbusASCII(DTB_Handle *handle, unsigned char functionCode,
     int totalRead = 0;
     double startTime = Timer();
     
+    LogDebugEx(LOG_DEVICE_DTB, "Waiting for response (timeout=%.1f seconds)...", 
+               handle->timeoutMs / 1000.0);
+    
     // Look for start character
+    int checksPerSecond = 0;
     while (totalRead == 0) {
         int available = GetInQLen(handle->comPort);
+        
+        // Log queue status periodically
+        checksPerSecond++;
+        if (checksPerSecond % 10 == 0) {
+            LogDebugEx(LOG_DEVICE_DTB, "Waiting... %d bytes available, elapsed=%.3f sec", 
+                       available, Timer() - startTime);
+        }
+        
         if (available > 0) {
+            LogDebugEx(LOG_DEVICE_DTB, "Data available: %d bytes", available);
             char c;
             if (ComRd(handle->comPort, &c, 1) == 1) {
+                LogDebugEx(LOG_DEVICE_DTB, "Read character: 0x%02X ('%c')", c, isprint(c) ? c : '?');
                 if (c == MODBUS_ASCII_START) {
                     rxBuffer[totalRead++] = c;
                     break;
+                } else {
+                    LogWarningEx(LOG_DEVICE_DTB, "Unexpected character while looking for start: 0x%02X", c);
                 }
             }
         }
         
         if ((Timer() - startTime) > (handle->timeoutMs / 1000.0)) {
-            LogErrorEx(LOG_DEVICE_DTB, "Timeout waiting for response");
+            LogErrorEx(LOG_DEVICE_DTB, "Timeout waiting for response start character");
+            // Check if any data was received at all
+            int finalAvailable = GetInQLen(handle->comPort);
+            if (finalAvailable > 0) {
+                LogErrorEx(LOG_DEVICE_DTB, "%d bytes available but no start character found", finalAvailable);
+                // Read and log what's in the buffer
+                char debugBuf[64];
+                int debugRead = ComRd(handle->comPort, debugBuf, MIN(finalAvailable, 63));
+                if (debugRead > 0) {
+                    debugBuf[debugRead] = '\0';
+                    LogErrorEx(LOG_DEVICE_DTB, "Buffer contents: %s", debugBuf);
+                }
+            }
             return DTB_ERROR_TIMEOUT;
         }
+        
+        Delay(0.01);  // 10ms between checks
     }
+    
+    LogDebugEx(LOG_DEVICE_DTB, "Found start character, reading rest of frame...");
     
     // Read until CR/LF
     while (totalRead < sizeof(rxBuffer) - 1) {
@@ -157,23 +199,26 @@ static int SendModbusASCII(DTB_Handle *handle, unsigned char functionCode,
                 rxBuffer[totalRead++] = c;
                 if (totalRead >= 2 && rxBuffer[totalRead-2] == MODBUS_ASCII_CR && 
                     rxBuffer[totalRead-1] == MODBUS_ASCII_LF) {
+                    LogDebugEx(LOG_DEVICE_DTB, "Found CR/LF, frame complete");
                     break;
                 }
             }
         }
         
         if ((Timer() - startTime) > (handle->timeoutMs / 1000.0)) {
-            LogErrorEx(LOG_DEVICE_DTB, "Timeout reading response");
+            LogErrorEx(LOG_DEVICE_DTB, "Timeout reading response (got %d bytes so far)", totalRead);
             return DTB_ERROR_TIMEOUT;
         }
     }
     
     rxBuffer[totalRead] = '\0';
     PrintDebug("RX: %s", rxBuffer);
+    LogDebugEx(LOG_DEVICE_DTB, "Received frame: %s (length=%d)", rxBuffer, totalRead);
     
     // Parse ASCII response
     if (totalRead < 11 || rxBuffer[0] != MODBUS_ASCII_START) {
-        LogErrorEx(LOG_DEVICE_DTB, "Invalid response format");
+        LogErrorEx(LOG_DEVICE_DTB, "Invalid response format: length=%d, start=0x%02X", 
+                   totalRead, rxBuffer[0]);
         return DTB_ERROR_RESPONSE;
     }
     
@@ -184,11 +229,13 @@ static int SendModbusASCII(DTB_Handle *handle, unsigned char functionCode,
     }
     hexData[hexLen] = '\0';
     
+    LogDebugEx(LOG_DEVICE_DTB, "Hex data: %s", hexData);
+    
     // Convert hex to binary
     unsigned char binResponse[64];
     int binLen = HexStringToBytes(hexData, binResponse, sizeof(binResponse));
     if (binLen < 4) {
-        LogErrorEx(LOG_DEVICE_DTB, "Response too short");
+        LogErrorEx(LOG_DEVICE_DTB, "Response too short: %d bytes", binLen);
         return DTB_ERROR_RESPONSE;
     }
     
@@ -227,111 +274,12 @@ static int SendModbusASCII(DTB_Handle *handle, unsigned char functionCode,
         memcpy(response, binResponse, copyLen);
     }
     
+    double totalTime = Timer() - sendTime;
+    LogDebugEx(LOG_DEVICE_DTB, "Transaction completed successfully in %.3f seconds", totalTime);
+    
     Delay(0.05);  // 50ms recovery time
     
     return DTB_SUCCESS;
-}
-
-/******************************************************************************
- * Auto-Discovery Functions
- ******************************************************************************/
-
-int DTB_ScanPort(int comPort, DTB_DiscoveryResult *result) {
-    if (!result) return DTB_ERROR_INVALID_PARAM;
-    
-    memset(result, 0, sizeof(DTB_DiscoveryResult));
-    
-    // Try default communication parameters first
-    int baudRates[] = {9600, 19200, 38400, 57600, 115200};
-    int numRates = sizeof(baudRates) / sizeof(baudRates[0]);
-    
-    for (int i = 0; i < numRates; i++) {
-        PrintDebug("Trying COM%d at %d baud...", comPort, baudRates[i]);
-        
-        SetBreakOnLibraryErrors(0);
-        int portResult = OpenComConfig(comPort, "", baudRates[i], 0, 8, 1, 512, 512);
-        SetBreakOnLibraryErrors(1);
-        
-        if (portResult < 0) {
-            continue;
-        }
-        
-        SetComTime(comPort, 1.0);
-        
-        // Create temporary handle for testing
-        DTB_Handle tempHandle;
-        tempHandle.comPort = comPort;
-        tempHandle.slaveAddress = DEFAULT_SLAVE_ADDRESS;
-        tempHandle.baudRate = baudRates[i];
-        tempHandle.timeoutMs = DEFAULT_TIMEOUT_MS;
-        tempHandle.isConnected = 1;
-        
-        // Try to read software version
-        unsigned short version;
-        if (DTB_ReadRegister(&tempHandle, REG_SOFTWARE_VERSION, &version) == DTB_SUCCESS) {
-            // Success! Fill in discovery result
-            result->comPort = comPort;
-            result->slaveAddress = DEFAULT_SLAVE_ADDRESS;
-            result->baudRate = baudRates[i];
-            result->firmwareVersion = version / 100.0;
-            sprintf(result->modelType, "DTB4848 V%.2f", result->firmwareVersion);
-            
-            CloseCom(comPort);
-            
-            LogMessageEx(LOG_DEVICE_DTB, "Found DTB4848 on COM%d: %s", 
-                        comPort, result->modelType);
-            
-            return DTB_SUCCESS;
-        }
-        
-        CloseCom(comPort);
-    }
-    
-    return DTB_ERROR_COMM;
-}
-
-int DTB_AutoDiscover(DTB_Handle *handle) {
-    if (!handle) return DTB_ERROR_INVALID_PARAM;
-    
-    LogMessageEx(LOG_DEVICE_DTB, "=== AUTO-DISCOVERING DTB4848 ===");
-    
-    SetBreakOnLibraryErrors(0);
-    
-    // Scan common COM ports
-    int portsToScan[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16};
-    int numPorts = sizeof(portsToScan) / sizeof(portsToScan[0]);
-    
-    for (int i = 0; i < numPorts; i++) {
-        int port = portsToScan[i];
-        DTB_DiscoveryResult result;
-        
-        LogMessageEx(LOG_DEVICE_DTB, "Scanning COM%d...", port);
-        
-        if (DTB_ScanPort(port, &result) == DTB_SUCCESS) {
-            LogMessageEx(LOG_DEVICE_DTB, "  Found DTB4848!");
-            LogMessageEx(LOG_DEVICE_DTB, "  Model: %s", result.modelType);
-            
-            SetBreakOnLibraryErrors(1);
-            
-            // Initialize with discovered parameters
-            if (DTB_Initialize(handle, result.comPort, result.slaveAddress, 
-                              result.baudRate) == DTB_SUCCESS) {
-                strcpy(handle->modelNumber, result.modelType);
-                LogMessageEx(LOG_DEVICE_DTB, "? Successfully connected to DTB4848 on COM%d", port);
-                return DTB_SUCCESS;
-            } else {
-                LogErrorEx(LOG_DEVICE_DTB, "? Found device but failed to connect");
-                return DTB_ERROR_COMM;
-            }
-        }
-        
-        Delay(0.05);
-    }
-    
-    SetBreakOnLibraryErrors(1);
-    
-    LogErrorEx(LOG_DEVICE_DTB, "? DTB4848 not found on any port");
-    return DTB_ERROR_COMM;
 }
 
 /******************************************************************************
@@ -351,7 +299,7 @@ int DTB_Initialize(DTB_Handle *handle, int comPort, int slaveAddress, int baudRa
     LogMessageEx(LOG_DEVICE_DTB, "Initializing on COM%d, slave %d, %d baud", 
                  comPort, slaveAddress, baudRate);
     
-    if (OpenComConfig(comPort, "", baudRate, 0, 8, 1, 512, 512) < 0) {
+    if (OpenComConfig(comPort, "", baudRate, 2, 7, 1, 512, 512) < 0) {
         LogErrorEx(LOG_DEVICE_DTB, "Failed to open COM%d", comPort);
         handle->state = DEVICE_STATE_ERROR;
         return DTB_ERROR_COMM;

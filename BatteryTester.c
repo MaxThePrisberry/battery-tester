@@ -13,6 +13,7 @@
 #include "psb10000_dll.h"
 #include "psb10000_queue.h"
 #include "psb10000_test.h"
+#include "dtb4848_queue.h"
 #include "exp_capacity.h"
 #include "logging.h"
 #include "status.h"
@@ -41,6 +42,7 @@ int g_systemBusy = 0;
 // Queue managers
 PSBQueueManager *g_psbQueueMgr = NULL;
 BioQueueManager *g_bioQueueMgr = NULL;
+DTBQueueManager *g_dtbQueueMgr = NULL;
 
 /******************************************************************************
  * Main Function
@@ -65,35 +67,56 @@ int main (int argc, char *argv[]) {
     // Initialize status monitoring BEFORE queue managers
     Status_Initialize(g_mainPanelHandle);
     
-    // Initialize PSB queue manager with auto-discovery
-    if (STATUS_MONITOR_PSB) {
-        LogMessage("Initializing PSB queue manager...");
-        g_psbQueueMgr = PSB_QueueInit(PSB_TARGET_SERIAL);
-        
-        if (g_psbQueueMgr) {
-		    PSB_SetGlobalQueueManager(g_psbQueueMgr);
-		    
-		    // Just check if connected, don't set handle
-		    PSBQueueStats stats;
-		    PSB_QueueGetStats(g_psbQueueMgr, &stats);
-		    if (stats.isConnected) {
-		        LogMessage("PSB queue manager initialized and connected");
-		    } else {
-		        LogWarning("PSB queue manager initialized but not connected");
-		    }
-		} else {
-            LogError("Failed to initialize PSB queue manager");
-        }
-    }
-    
-    // Initialize BioLogic queue manager if BioLogic monitoring is enabled
-	if (STATUS_MONITOR_BIOLOGIC) {
+    // Initialize PSB queue manager with specific port
+	if (ENABLE_PSB) {
+	    LogMessage("Initializing PSB queue manager on COM%d...", PSB_COM_PORT);
+	    g_psbQueueMgr = PSB_QueueInitSpecific(PSB_COM_PORT, PSB_SLAVE_ADDRESS, PSB_BAUD_RATE);
+	    
+	    if (g_psbQueueMgr) {
+	        PSB_SetGlobalQueueManager(g_psbQueueMgr);
+	        
+	        // Check if connected
+	        PSBQueueStats stats;
+	        PSB_QueueGetStats(g_psbQueueMgr, &stats);
+	        if (stats.isConnected) {
+	            LogMessage("PSB queue manager initialized and connected on COM%d", PSB_COM_PORT);
+	        } else {
+	            LogWarning("PSB queue manager initialized but not connected on COM%d", PSB_COM_PORT);
+	        }
+	    } else {
+	        LogError("Failed to initialize PSB queue manager on COM%d", PSB_COM_PORT);
+	    }
+	}
+
+	// Initialize BioLogic queue manager if BioLogic monitoring is enabled
+	if (ENABLE_BIOLOGIC) {
 	    LogMessage("Initializing BioLogic queue manager...");
-	    g_bioQueueMgr = BIO_QueueInit(BIOLOGIC_DEFAULT_ADDRESS);  // Pass address, not -1
+	    g_bioQueueMgr = BIO_QueueInit(BIOLOGIC_DEFAULT_ADDRESS);
 	    
 	    if (g_bioQueueMgr) {
 	        BIO_SetGlobalQueueManager(g_bioQueueMgr);
 	        LogMessage("BioLogic queue manager initialized");
+	    }
+	}
+
+	// Initialize DTB queue manager with specific port
+	if (ENABLE_DTB) {
+	    LogMessage("Initializing DTB queue manager on COM%d...", DTB_COM_PORT);
+	    g_dtbQueueMgr = DTB_QueueInit(DTB_COM_PORT, DTB_SLAVE_ADDRESS, DTB_BAUD_RATE);
+	    
+	    if (g_dtbQueueMgr) {
+	        DTB_SetGlobalQueueManager(g_dtbQueueMgr);
+	        
+	        // Check if connected
+	        DTBQueueStats stats;
+	        DTB_QueueGetStats(g_dtbQueueMgr, &stats);
+	        if (stats.isConnected) {
+	            LogMessage("DTB queue manager initialized and connected on COM%d", DTB_COM_PORT);
+	        } else {
+	            LogWarning("DTB queue manager initialized but not connected on COM%d", DTB_COM_PORT);
+	        }
+	    } else {
+	        LogError("Failed to initialize DTB queue manager on COM%d", DTB_COM_PORT);
 	    }
 	}
     
@@ -296,26 +319,35 @@ int CVICALLBACK PanelCallback(int panel, int event, void *callbackData,
             Delay(0.2);
             
             // Shutdown PSB queue manager
-            if (g_psbQueueMgr) {
-                LogMessage("Shutting down PSB queue manager...");
-                PSBQueueManager *tempMgr = g_psbQueueMgr;
-                g_psbQueueMgr = NULL;  // Clear global pointer FIRST
-                PSB_SetGlobalQueueManager(NULL);  // Clear global reference
-                PSB_QueueShutdown(tempMgr);  // Then shutdown
-            }
-            
-            // Shutdown BioLogic queue manager
-            if (g_bioQueueMgr) {
-                LogMessage("Shutting down BioLogic queue manager...");
-                BioQueueManager *tempMgr = g_bioQueueMgr;
-                g_bioQueueMgr = NULL;  // Clear global pointer FIRST
-                BIO_SetGlobalQueueManager(NULL);  // Clear global reference
-                BIO_QueueShutdown(tempMgr);  // Then shutdown
-            }
-            
-            // Both queue shutdown functions already wait for their threads
-            ProcessSystemEvents();
-            Delay(0.2);
+			if (g_psbQueueMgr) {
+			    LogMessage("Shutting down PSB queue manager...");
+			    PSBQueueManager *tempMgr = g_psbQueueMgr;
+			    g_psbQueueMgr = NULL;  // Clear global pointer FIRST
+			    PSB_SetGlobalQueueManager(NULL);  // Clear global reference
+			    PSB_QueueShutdown(tempMgr);  // Then shutdown
+			}
+
+			// Shutdown BioLogic queue manager
+			if (g_bioQueueMgr) {
+			    LogMessage("Shutting down BioLogic queue manager...");
+			    BioQueueManager *tempMgr = g_bioQueueMgr;
+			    g_bioQueueMgr = NULL;  // Clear global pointer FIRST
+			    BIO_SetGlobalQueueManager(NULL);  // Clear global reference
+			    BIO_QueueShutdown(tempMgr);  // Then shutdown
+			}
+
+			// Shutdown DTB queue manager
+			if (g_dtbQueueMgr) {
+			    LogMessage("Shutting down DTB queue manager...");
+			    DTBQueueManager *tempMgr = g_dtbQueueMgr;
+			    g_dtbQueueMgr = NULL;  // Clear global pointer FIRST
+			    DTB_SetGlobalQueueManager(NULL);  // Clear global reference
+			    DTB_QueueShutdown(tempMgr);  // Then shutdown
+			}
+
+			// All queue shutdown functions already wait for their threads
+			ProcessSystemEvents();
+			Delay(0.2);
             
             // Clean up capacity test module
             LogMessage("Cleaning up capacity test module...");

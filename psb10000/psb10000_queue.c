@@ -57,7 +57,6 @@ typedef struct {
     int comPort;
     int baudRate;
     int slaveAddress;
-    bool autoDiscovery;
 } PSBConnectionParams;
 
 /******************************************************************************
@@ -114,44 +113,21 @@ static int PSB_AdapterConnect(void *deviceContext, void *connectionParams) {
     PSBDeviceContext *ctx = (PSBDeviceContext*)deviceContext;
     PSBConnectionParams *params = (PSBConnectionParams*)connectionParams;
     int result;
+	
+    // Use specific connection parameters
+    LogMessageEx(LOG_DEVICE_PSB, "Connecting to PSB on COM%d...", params->comPort);
+    result = PSB_InitializeSpecific(&ctx->handle, params->comPort, 
+                                  params->slaveAddress, params->baudRate);
     
-    if (params->autoDiscovery) {
-        // Use auto-discovery
-        LogMessageEx(LOG_DEVICE_PSB, "Auto-discovering PSB with serial %s...", params->targetSerial);
-        result = PSB_AutoDiscover(params->targetSerial, &ctx->handle);
+    if (result == PSB_SUCCESS) {
+        ctx->autoDiscovery = false;
+        ctx->specificPort = params->comPort;
+        ctx->specificBaudRate = params->baudRate;
+        ctx->specificSlaveAddress = params->slaveAddress;
         
-        if (result == PSB_SUCCESS) {
-            SAFE_STRCPY(ctx->targetSerial, params->targetSerial, sizeof(ctx->targetSerial));
-            ctx->autoDiscovery = true;
-            
-            // Set initial state
-            PSB_SetRemoteMode(&ctx->handle, 1);
-            PSB_SetOutputEnable(&ctx->handle, 0);  // Start with output disabled
-            
-            // Get initial status
-            PSB_Status status;
-            if (PSB_GetStatus(&ctx->handle, &status) == PSB_SUCCESS) {
-                LogMessageEx(LOG_DEVICE_PSB, "PSB Status: Output=%s, Remote=%s", 
-                           status.outputEnabled ? "ON" : "OFF",
-                           status.remoteMode ? "YES" : "NO");
-            }
-        }
-    } else {
-        // Use specific connection parameters
-        LogMessageEx(LOG_DEVICE_PSB, "Connecting to PSB on COM%d...", params->comPort);
-        result = PSB_InitializeSpecific(&ctx->handle, params->comPort, 
-                                      params->slaveAddress, params->baudRate);
-        
-        if (result == PSB_SUCCESS) {
-            ctx->autoDiscovery = false;
-            ctx->specificPort = params->comPort;
-            ctx->specificBaudRate = params->baudRate;
-            ctx->specificSlaveAddress = params->slaveAddress;
-            
-            // Set initial state
-            PSB_SetRemoteMode(&ctx->handle, 1);
-            PSB_SetOutputEnable(&ctx->handle, 0);
-        }
+        // Set initial state
+        PSB_SetRemoteMode(&ctx->handle, 1);
+        PSB_SetOutputEnable(&ctx->handle, 0);
     }
     
     return result;
@@ -372,7 +348,6 @@ PSBQueueManager* PSB_QueueInit(const char *targetSerial) {
     }
     
     SAFE_STRCPY(connParams->targetSerial, targetSerial, sizeof(connParams->targetSerial));
-    connParams->autoDiscovery = true;
     
     // Create the generic device queue
     PSBQueueManager *mgr = DeviceQueue_Create(&g_psbAdapter, context, connParams, 0);
@@ -408,7 +383,6 @@ PSBQueueManager* PSB_QueueInitSpecific(int comPort, int slaveAddress, int baudRa
     connParams->comPort = comPort;
     connParams->slaveAddress = slaveAddress;
     connParams->baudRate = baudRate;
-    connParams->autoDiscovery = false;
     
     // Create the generic device queue
     PSBQueueManager *mgr = DeviceQueue_Create(&g_psbAdapter, context, connParams, 0);

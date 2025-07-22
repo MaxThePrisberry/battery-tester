@@ -12,10 +12,6 @@
 /******************************************************************************
  * Configuration Constants
  ******************************************************************************/
-// Device enable flags - set to 1 to enable monitoring, 0 to disable
-#define STATUS_MONITOR_PSB         1    // Enable PSB 10000 monitoring
-#define STATUS_MONITOR_BIOLOGIC    1    // Enable BioLogic SP-150e monitoring
-
 // Update rates
 #define STATUS_UPDATE_RATE_HZ      5    // Status update frequency in Hz
 #define STATUS_UPDATE_PERIOD_MS    (1000 / STATUS_UPDATE_RATE_HZ)  // 200ms

@@ -81,12 +81,12 @@ int Status_Initialize(int panelHandle) {
     g_status.lastBioState = CONN_STATE_IDLE;
     
     // Set initial LED states
-    if (STATUS_MONITOR_PSB) {
+    if (ENABLE_PSB) {
         UpdateDeviceLED(1, CONN_STATE_IDLE);
         UpdateDeviceStatus(1, "PSB Monitoring");
     }
     
-    if (STATUS_MONITOR_BIOLOGIC) {
+    if (ENABLE_BIOLOGIC) {
         UpdateDeviceLED(0, CONN_STATE_IDLE);
         UpdateDeviceStatus(0, "BioLogic Monitoring");
     }
@@ -162,10 +162,10 @@ int Status_Pause(void) {
     LogMessage("Status monitoring paused");
     
     // Update UI to show paused state
-    if (STATUS_MONITOR_PSB) {
+    if (ENABLE_PSB) {
         UpdateDeviceStatus(1, "Monitoring Paused");
     }
-    if (STATUS_MONITOR_BIOLOGIC) {
+    if (ENABLE_BIOLOGIC) {
         UpdateDeviceStatus(0, "Monitoring Paused");
     }
     
@@ -225,7 +225,7 @@ static void Status_TimerUpdate(void) {
     }
     
     // Update PSB status
-    if (STATUS_MONITOR_PSB) {
+    if (ENABLE_PSB) {
         PSBQueueManager *psbQueueMgr = PSB_GetGlobalQueueManager();
         if (psbQueueMgr) {
             PSBQueueStats stats;
@@ -297,7 +297,7 @@ static void Status_TimerUpdate(void) {
     }
     
     // Update BioLogic status
-    if (STATUS_MONITOR_BIOLOGIC) {
+    if (ENABLE_BIOLOGIC) {
         BioQueueManager *bioQueueMgr = BIO_GetGlobalQueueManager();
         if (bioQueueMgr) {
             BioQueueStats stats;
