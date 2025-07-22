@@ -351,7 +351,7 @@ DTBQueueManager* DTB_QueueInit(int comPort, int slaveAddress, int baudRate) {
     // Create device context
     DTBDeviceContext *context = calloc(1, sizeof(DTBDeviceContext));
     if (!context) {
-        LogErrorEx(LOG_DEVICE_DTB, "DTB_QueueInitSpecific: Failed to allocate device context");
+        LogErrorEx(LOG_DEVICE_DTB, "DTB_QueueInit: Failed to allocate device context");
         return NULL;
     }
     
@@ -359,7 +359,7 @@ DTBQueueManager* DTB_QueueInit(int comPort, int slaveAddress, int baudRate) {
     DTBConnectionParams *connParams = calloc(1, sizeof(DTBConnectionParams));
     if (!connParams) {
         free(context);
-        LogErrorEx(LOG_DEVICE_DTB, "DTB_QueueInitSpecific: Failed to allocate connection params");
+        LogErrorEx(LOG_DEVICE_DTB, "DTB_QueueInit: Failed to allocate connection params");
         return NULL;
     }
     

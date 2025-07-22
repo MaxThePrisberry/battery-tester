@@ -33,7 +33,7 @@
 //==============================================================================
 // Device enable flags - set to 1 to enable monitoring, 0 to disable
 #define ENABLE_PSB         1    // Enable PSB 10000 monitoring
-#define ENABLE_BIOLOGIC    0    // Enable BioLogic SP-150e monitoring
+#define ENABLE_BIOLOGIC    1    // Enable BioLogic SP-150e monitoring
 #define ENABLE_DTB         1    // Enable DTB4848 monitoring
 
 #define PSB_COM_PORT            3       // PSB 10000 COM port

@@ -552,14 +552,6 @@ static void UpdateDTBValues(DTB_Status* status) {
         PostDeferredCall(DeferredNumericUpdate, tempData);
     }
     
-    // Update set temperature
-    UIUpdateData* setData = malloc(sizeof(UIUpdateData));
-    if (setData) {
-        setData->control = PANEL_NUM_DTB_SETPOINT;
-        setData->dblValue = status->setPoint;
-        PostDeferredCall(DeferredNumericUpdate, setData);
-    }
-    
     // Update DTB LED based on output enabled state
     // The single DTB LED shows: Green=Output Enabled (Running), Yellow=Output Disabled (Stopped), Red=Error/Disconnected
     ConnectionState state = status->outputEnabled ? CONN_STATE_CONNECTED : CONN_STATE_IDLE;

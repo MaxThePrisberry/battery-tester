@@ -70,7 +70,10 @@ void Controls_NotifyRemoteModeState(int remoteMode);
  * Notify controls module of DTB run state
  * Used for state synchronization
  * @param isRunning - Current DTB output enabled state (0 or 1)
- * @param setpoint - Current setpoint value
+ * @param setpoint - Current setpoint value (tracked but not displayed)
+ * 
+ * Note: The setpoint value is tracked internally but NOT written to the 
+ *       setpoint control to avoid overwriting user edits
  */
 void Controls_NotifyDTBRunState(int isRunning, double setpoint);
 

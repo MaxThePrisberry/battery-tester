@@ -110,7 +110,8 @@ int Controls_Initialize(int panelHandle) {
                     // Update button state
                     UpdateDTBButtonState(status.outputEnabled);
                     
-                    // Update setpoint display
+                    // Update setpoint display ONLY during initialization
+                    // During normal operation, we don't overwrite user edits
                     SetCtrlVal(panelHandle, PANEL_NUM_DTB_SETPOINT, status.setPoint);
                     
                     LogMessage("Initial DTB state: %s, setpoint: %.1f°C", 
@@ -324,6 +325,9 @@ int CVICALLBACK DTBRunStopCallback(int panel, int control, int event,
                 
                 LogMessage("Setting DTB setpoint to %.1f°C...", setpoint);
                 
+                // Store the setpoint we're sending
+                g_controls.lastKnownDTBSetpoint = setpoint;
+                
                 // Queue setpoint command first
                 DTBCommandParams params = {.setpoint = {setpoint}};
                 CommandID cmdId = DTB_QueueCommandAsync(dtbQueueMgr, DTB_CMD_SET_SETPOINT,
@@ -430,11 +434,9 @@ void Controls_NotifyDTBRunState(int isRunning, double setpoint) {
             UpdateDTBButtonState(isRunning);
         }
         
-        // Always update setpoint display
-        if (setpoint != g_controls.lastKnownDTBSetpoint) {
-            g_controls.lastKnownDTBSetpoint = setpoint;
-            SetCtrlVal(g_controls.panelHandle, PANEL_NUM_DTB_SETPOINT, setpoint);
-        }
+        // Update internal tracking of setpoint, but DON'T update the control
+        // The user might be editing it
+        g_controls.lastKnownDTBSetpoint = setpoint;
     }
 }
 
