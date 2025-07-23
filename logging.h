@@ -15,7 +15,8 @@ typedef enum {
     LOG_DEVICE_NONE = 0,    // No device prefix
     LOG_DEVICE_PSB,         // [PSB] prefix
     LOG_DEVICE_BIO,         // [BIO] prefix
-	LOG_DEVICE_DTB          // [DTB] prefix
+	LOG_DEVICE_DTB,         // [DTB] prefix
+	LOG_DEVICE_TNY          // [TNY] prefix
 } LogDevice;
 
 //==============================================================================

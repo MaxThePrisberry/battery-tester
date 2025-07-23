@@ -8,10 +8,9 @@
 #include "common.h"
 #include "controls.h"
 #include "BatteryTester.h"
-#include "psb10000_dll.h"
 #include "psb10000_queue.h"
-#include "dtb4848_dll.h"
 #include "dtb4848_queue.h"
+#include "teensy_queue.h"
 #include "status.h"
 #include "logging.h"
 
@@ -547,4 +546,54 @@ static void CVICALLBACK DeferredButtonTextUpdate(void* data) {
                         ATTR_LABEL_TEXT, updateData->strValue);
         free(updateData);
     }
+}
+
+/******************************************************************************
+ * TestTeensyCallback - Toggle callback to control Teensy pin 13
+ * 
+ * This callback responds to toggle changes and sets Teensy pin 13 high/low
+ * through the queue system.
+ ******************************************************************************/
+int CVICALLBACK TestTeensyCallback(int panel, int control, int event,
+                                   void *callbackData, int eventData1, int eventData2) {
+    switch (event) {
+        case EVENT_COMMIT: {
+            // Get toggle value
+            int toggleValue = 0;
+            GetCtrlVal(panel, control, &toggleValue);
+			TNYQueueManager *g_tnyQueueMgr = TNY_GetGlobalQueueManager();
+            
+            // Check if Teensy queue is available
+            if (!g_tnyQueueMgr) {
+                LogError("Teensy queue manager not initialized");
+                MessagePopup("Error", "Teensy is not connected!");
+                
+                // Reset toggle to off
+                SetCtrlVal(panel, control, 0);
+                return 0;
+            }
+            
+            // Log the action
+            LogMessage("Setting Teensy pin 13 to %s", toggleValue ? "HIGH" : "LOW");
+            
+            // Set pin 13 through the queue
+            int result = TNY_SetPinQueued(NULL, 13, toggleValue ? TNY_PIN_STATE_HIGH : TNY_PIN_STATE_LOW);
+            
+            if (result != TNY_SUCCESS) {
+                LogError("Failed to set Teensy pin 13: %s", TNY_GetErrorString(result));
+                
+                // Show error to user
+                char errorMsg[256];
+                sprintf(errorMsg, "Failed to control Teensy pin 13:\n%s", 
+                       TNY_GetErrorString(result));
+                MessagePopup("Teensy Control Error", errorMsg);
+                
+                // Reset toggle to opposite state since command failed
+                SetCtrlVal(panel, control, !toggleValue);
+            }
+            
+            break;
+        }
+    }
+    return 0;
 }

@@ -7,13 +7,10 @@
 
 #include "common.h"
 #include "BatteryTester.h"  
-#include "biologic_dll.h"
 #include "biologic_queue.h"
-#include "biologic_test.h"
-#include "psb10000_dll.h"
 #include "psb10000_queue.h"
-#include "psb10000_test.h"
 #include "dtb4848_queue.h"
+#include "teensy_queue.h"
 #include "exp_capacity.h"
 #include "logging.h"
 #include "status.h"
@@ -44,6 +41,7 @@ int g_systemBusy = 0;
 PSBQueueManager *g_psbQueueMgr = NULL;
 BioQueueManager *g_bioQueueMgr = NULL;
 DTBQueueManager *g_dtbQueueMgr = NULL;
+TNYQueueManager *g_tnyQueueMgr = NULL;
 
 /******************************************************************************
  * Main Function
@@ -159,6 +157,31 @@ int main (int argc, char *argv[]) {
 	        }
 	    } else {
 	        LogError("Failed to initialize DTB queue manager on COM%d", DTB_COM_PORT);
+	    }
+	}
+	
+	// Initialize teensy manager
+	if (ENABLE_TNY) {
+	    LogMessage("Initializing Teensy queue manager on COM%d...", TNY_COM_PORT);
+	    g_tnyQueueMgr = TNY_QueueInit(TNY_COM_PORT, TNY_DEFAULT_BAUD_RATE);
+	    
+	    if (g_tnyQueueMgr) {
+	        TNY_SetGlobalQueueManager(g_tnyQueueMgr);
+	        
+	        // Check if connected
+	        TNYQueueStats stats;
+	        TNY_QueueGetStats(g_tnyQueueMgr, &stats);
+	        if (stats.isConnected) {
+	            LogMessage("Teensy queue manager initialized and connected on COM%d", TNY_COM_PORT);
+	            
+	            // Optional: Initialize pins to known state
+	            int lowPins[] = {0, 1, 2, 3, 4};
+	            TNY_InitializePins(NULL, lowPins, 5, NULL, 0);
+	        } else {
+	            LogWarning("Teensy queue manager initialized but not connected on COM%d", TNY_COM_PORT);
+	        }
+	    } else {
+	        LogError("Failed to initialize Teensy queue manager on COM%d", TNY_COM_PORT);
 	    }
 	}
     
@@ -283,6 +306,15 @@ int CVICALLBACK PanelCallback(int panel, int event, void *callbackData,
 			    g_dtbQueueMgr = NULL;  // Clear global pointer FIRST
 			    DTB_SetGlobalQueueManager(NULL);  // Clear global reference
 			    DTB_QueueShutdown(tempMgr);  // Then shutdown
+			}
+			
+			// Shutdown Teensy queue manager
+			if (g_tnyQueueMgr) {
+			    LogMessage("Shutting down Teensy queue manager...");
+			    TNYQueueManager *tempMgr = g_tnyQueueMgr;
+			    g_tnyQueueMgr = NULL;  // Clear global pointer FIRST
+			    TNY_SetGlobalQueueManager(NULL);  // Clear global reference
+			    TNY_QueueShutdown(tempMgr);  // Then shutdown
 			}
 
 			// All queue shutdown functions already wait for their threads

@@ -52,7 +52,8 @@ static const char* g_deviceNames[] = {
     "",     // LOG_DEVICE_NONE - no prefix
     "PSB",  // LOG_DEVICE_PSB
     "BIO",  // LOG_DEVICE_BIO
-	"DTB"   // LOG_DEVICE_DTB
+	"DTB",  // LOG_DEVICE_DTB
+	"TNY"   // LOG_DEVICE_TNY
 };
 
 typedef enum {

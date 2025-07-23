@@ -52,8 +52,9 @@
 #define  PANEL_STR_DTB_STATUS             37      /* control type: string, callback function: (none) */
 #define  PANEL_NUM_DTB_SETPOINT           38      /* control type: numeric, callback function: (none) */
 #define  PANEL_NUM_DTB_TEMPERATURE        39      /* control type: scale, callback function: (none) */
-#define  PANEL_DEC_TMPCTRL                40      /* control type: deco, callback function: (none) */
-#define  PANEL_DEC_BIO_GRAPH              41      /* control type: deco, callback function: (none) */
+#define  PANEL_TOGGLE_TEENSY              40      /* control type: binary, callback function: TestTeensyCallback */
+#define  PANEL_DEC_TMPCTRL                41      /* control type: deco, callback function: (none) */
+#define  PANEL_DEC_BIO_GRAPH              42      /* control type: deco, callback function: (none) */
 
      /* tab page panel controls */
 #define  CAPACITY_BTN_EXP_CAPACITY        2       /* control type: command, callback function: StartCapacityExperimentCallback */
@@ -87,6 +88,7 @@ int  CVICALLBACK StartCapacityExperimentCallback(int panel, int control, int eve
 int  CVICALLBACK TestBiologicCallback(int panel, int control, int event, void *callbackData, int eventData1, int eventData2);
 int  CVICALLBACK TestDeviceQueueCallback(int panel, int control, int event, void *callbackData, int eventData1, int eventData2);
 int  CVICALLBACK TestPSBCallback(int panel, int control, int event, void *callbackData, int eventData1, int eventData2);
+int  CVICALLBACK TestTeensyCallback(int panel, int control, int event, void *callbackData, int eventData1, int eventData2);
 
 
 #ifdef __cplusplus

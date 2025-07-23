@@ -35,6 +35,7 @@
 #define ENABLE_PSB         1    // Enable PSB 10000 monitoring
 #define ENABLE_BIOLOGIC    1    // Enable BioLogic SP-150e monitoring
 #define ENABLE_DTB         1    // Enable DTB4848 monitoring
+#define ENABLE_TNY         0    // Enable Teensy monitoring
 
 #define PSB_COM_PORT            3       // PSB 10000 COM port
 #define PSB_SLAVE_ADDRESS       1       // PSB Modbus slave address
@@ -43,6 +44,8 @@
 #define DTB_COM_PORT            5       // DTB 4848 COM port  
 #define DTB_SLAVE_ADDRESS       1       // DTB Modbus slave address
 #define DTB_BAUD_RATE           9600    // DTB baud rate
+
+#define TNY_COM_PORT            6       // Teensy COM port
 
 //==============================================================================
 // Project Configuration
@@ -70,6 +73,7 @@
 #define ERR_BASE_FILE           -6000
 #define ERR_BASE_THREAD         -7000
 #define ERR_BASE_DTB            -8000
+#define ERR_BASE_TNY            -9000
 
 // System errors (-1000 to -1999)
 #define ERR_INVALID_PARAMETER   (ERR_BASE_SYSTEM - 1)
