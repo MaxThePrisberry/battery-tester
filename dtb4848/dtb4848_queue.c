@@ -25,7 +25,7 @@ static const char* g_commandTypeNames[] = {
     "SET_TEMPERATURE_LIMITS",
     "SET_ALARM_LIMITS",
     "CONFIGURE",
-    "CONFIGURE_FOR_PID",
+    "CONFIGURE_DEFAULT",
     "FACTORY_RESET",
     "GET_STATUS",
     "GET_PROCESS_VALUE",
@@ -33,6 +33,9 @@ static const char* g_commandTypeNames[] = {
     "GET_PID_PARAMS",
     "GET_ALARM_STATUS",
     "CLEAR_ALARM",
+	"ENABLE_WRITE_ACCESS",
+	"DISABLE_WRITE_ACCESS", 
+	"GET_WRITE_ACCESS_STATUS",
     "RAW_MODBUS"
 };
 
@@ -203,8 +206,8 @@ static int DTB_AdapterExecuteCommand(void *deviceContext, int commandType, void 
             cmdResult->errorCode = DTB_Configure(&ctx->handle, &cmdParams->configure.config);
             break;
             
-        case DTB_CMD_CONFIGURE_FOR_PID:
-            cmdResult->errorCode = DTB_ConfigureForPID(&ctx->handle);
+        case DTB_CMD_CONFIGURE_DEFAULT:
+            cmdResult->errorCode = DTB_ConfigureDefault(&ctx->handle);
             break;
             
         case DTB_CMD_FACTORY_RESET:
@@ -236,6 +239,19 @@ static int DTB_AdapterExecuteCommand(void *deviceContext, int commandType, void 
         case DTB_CMD_CLEAR_ALARM:
             cmdResult->errorCode = DTB_ClearAlarm(&ctx->handle);
             break;
+			
+		case DTB_CMD_ENABLE_WRITE_ACCESS:
+		    cmdResult->errorCode = DTB_EnableWriteAccess(&ctx->handle);
+		    break;
+		    
+		case DTB_CMD_DISABLE_WRITE_ACCESS:
+		    cmdResult->errorCode = DTB_DisableWriteAccess(&ctx->handle);
+		    break;
+		    
+		case DTB_CMD_GET_WRITE_ACCESS_STATUS:
+		    cmdResult->errorCode = DTB_GetWriteAccessStatus(&ctx->handle, 
+		        &cmdResult->data.writeAccessEnabled);
+		    break;
             
         case DTB_CMD_RAW_MODBUS:
             // TODO: Implement raw Modbus command execution
@@ -575,13 +591,13 @@ int DTB_ConfigureQueued(DTB_Handle *handle, const DTB_Configuration *config) {
                                   DTB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int DTB_ConfigureForPIDQueued(DTB_Handle *handle) {
-    if (!g_dtbQueueManager) return DTB_ConfigureForPID(handle);
+int DTB_ConfigureDefaultQueued(DTB_Handle *handle) {
+    if (!g_dtbQueueManager) return DTB_ConfigureDefault(handle);
     
     DTBCommandParams params = {0};
     DTBCommandResult result;
     
-    return DTB_QueueCommandBlocking(g_dtbQueueManager, DTB_CMD_CONFIGURE_FOR_PID,
+    return DTB_QueueCommandBlocking(g_dtbQueueManager, DTB_CMD_CONFIGURE_DEFAULT,
                                   &params, DTB_PRIORITY_HIGH, &result,
                                   DTB_QUEUE_COMMAND_TIMEOUT_MS);
 }
@@ -688,6 +704,44 @@ int DTB_ClearAlarmQueued(DTB_Handle *handle) {
                                   DTB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
+int DTB_EnableWriteAccessQueued(DTB_Handle *handle) {
+    if (!g_dtbQueueManager) return DTB_EnableWriteAccess(handle);
+    
+    DTBCommandParams params = {0};
+    DTBCommandResult result;
+    
+    return DTB_QueueCommandBlocking(g_dtbQueueManager, DTB_CMD_ENABLE_WRITE_ACCESS,
+                                  &params, DTB_PRIORITY_HIGH, &result,
+                                  DTB_QUEUE_COMMAND_TIMEOUT_MS);
+}
+
+int DTB_DisableWriteAccessQueued(DTB_Handle *handle) {
+    if (!g_dtbQueueManager) return DTB_DisableWriteAccess(handle);
+    
+    DTBCommandParams params = {0};
+    DTBCommandResult result;
+    
+    return DTB_QueueCommandBlocking(g_dtbQueueManager, DTB_CMD_DISABLE_WRITE_ACCESS,
+                                  &params, DTB_PRIORITY_HIGH, &result,
+                                  DTB_QUEUE_COMMAND_TIMEOUT_MS);
+}
+
+int DTB_GetWriteAccessStatusQueued(DTB_Handle *handle, int *isEnabled) {
+    if (!g_dtbQueueManager || !isEnabled) return DTB_GetWriteAccessStatus(handle, isEnabled);
+    
+    DTBCommandParams params = {0};
+    DTBCommandResult result;
+    
+    int error = DTB_QueueCommandBlocking(g_dtbQueueManager, DTB_CMD_GET_WRITE_ACCESS_STATUS,
+                                       &params, DTB_PRIORITY_NORMAL, &result,
+                                       DTB_QUEUE_COMMAND_TIMEOUT_MS);
+    
+    if (error == DTB_SUCCESS) {
+        *isEnabled = result.data.writeAccessEnabled;
+    }
+    return error;
+}
+
 /******************************************************************************
  * Utility Functions
  ******************************************************************************/
@@ -715,7 +769,7 @@ int DTB_QueueGetCommandDelay(DTBCommandType type) {
         case DTB_CMD_SET_PID_MODE:
         case DTB_CMD_SET_SENSOR_TYPE:
         case DTB_CMD_CONFIGURE:
-        case DTB_CMD_CONFIGURE_FOR_PID:
+        case DTB_CMD_CONFIGURE_DEFAULT:
             return DTB_DELAY_CONFIG_CHANGE;
             
         case DTB_CMD_SET_TEMPERATURE_LIMITS:

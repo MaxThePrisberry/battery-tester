@@ -116,6 +116,44 @@ int main (int argc, char *argv[]) {
 	        DTB_QueueGetStats(g_dtbQueueMgr, &stats);
 	        if (stats.isConnected) {
 	            LogMessage("DTB queue manager initialized and connected on COM%d", DTB_COM_PORT);
+	            
+	            // Get DTB handle
+	            DTB_Handle *dtbHandle = DTB_QueueGetHandle(g_dtbQueueMgr);
+	            
+	            // Check current write access status
+	            int writeEnabled = 0;
+	            int statusResult = DTB_GetWriteAccessStatusQueued(dtbHandle, &writeEnabled);
+	            if (statusResult == DTB_SUCCESS) {
+	                LogMessage("DTB write access currently: %s", writeEnabled ? "ENABLED" : "DISABLED");
+	            }
+	            
+	            // Enable write access if needed
+	            if (!writeEnabled) {
+	                LogMessage("Enabling DTB write access...");
+	                int writeResult = DTB_EnableWriteAccessQueued(dtbHandle);
+	                if (writeResult != DTB_SUCCESS) {
+	                    LogError("Failed to enable DTB write access: %s", 
+	                            DTB_GetErrorString(writeResult));
+	                } else {
+	                    LogMessage("DTB write access enabled successfully");
+	                }
+	            }
+	            
+	            // Configure DTB for K-type thermocouple with PID control
+	            LogMessage("Configuring DTB4848 for K-type thermocouple with PID control...");
+	            int configResult = DTB_ConfigureDefaultQueued(dtbHandle);
+	            
+	            if (configResult == DTB_SUCCESS) {
+	                LogMessage("DTB4848 configured successfully");
+	                
+	                // Optionally re-enable write protection for safety
+	                // LogMessage("Re-enabling DTB write protection...");
+	                // DTB_DisableWriteAccessQueued(dtbHandle);
+	            } else {
+	                LogWarning("DTB4848 configuration failed: %s", 
+	                          DTB_GetErrorString(configResult));
+	                // Device may still work with existing configuration
+	            }
 	        } else {
 	            LogWarning("DTB queue manager initialized but not connected on COM%d", DTB_COM_PORT);
 	        }
@@ -126,12 +164,13 @@ int main (int argc, char *argv[]) {
     
     // Now start status monitoring (which will use the queue managers)
     Status_Start();
-    
+    Controls_Start();
+	
     // Display panel
-    DisplayPanel (g_mainPanelHandle);
+    DisplayPanel(g_mainPanelHandle);
     
     // Run the UI
-    RunUserInterface ();
+    RunUserInterface();
     
     // Cleanup
     if (g_psbQueueMgr) {
@@ -254,11 +293,11 @@ int CVICALLBACK PanelCallback(int panel, int event, void *callbackData,
             LogMessage("Cleaning up capacity test module...");
             CapacityTest_Cleanup();
             
-			// Clean up controls module
+			LogMessage("Stopping controls module...");
 			Controls_Cleanup();
-			
-            // Clean up status module
-            Status_Cleanup();
+
+			LogMessage("Stopping status monitoring...");
+			Status_Stop();
             
             // Clean up thread pool
             if (g_threadPool) {

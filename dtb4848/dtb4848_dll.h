@@ -113,8 +113,8 @@
 #define PID_MODE_AUTO               4   // Automatic PID selection
 
 // Temperature ranges for K-type thermocouple
-#define K_TYPE_MIN_TEMP             -200.0
-#define K_TYPE_MAX_TEMP             1300.0
+#define K_TYPE_MIN_TEMP             -199.9
+#define K_TYPE_MAX_TEMP             999.9
 
 // Alarm types
 #define ALARM_DISABLED              0
@@ -193,7 +193,7 @@ int DTB_TestConnection(DTB_Handle *handle);
 // Configuration Functions
 int DTB_FactoryReset(DTB_Handle *handle);
 int DTB_Configure(DTB_Handle *handle, const DTB_Configuration *config);
-int DTB_ConfigureForPID(DTB_Handle *handle);  // Simplified config for PID with K-type
+int DTB_ConfigureDefault(DTB_Handle *handle);  // Simplified config for PID with K-type
 
 // Basic Control Functions
 int DTB_SetRunStop(DTB_Handle *handle, int run);
@@ -217,6 +217,11 @@ int DTB_SetControlMethod(DTB_Handle *handle, int method);
 int DTB_SetPIDMode(DTB_Handle *handle, int mode);
 int DTB_SetSensorType(DTB_Handle *handle, int sensorType);
 int DTB_SetTemperatureLimits(DTB_Handle *handle, double upperLimit, double lowerLimit);
+
+// Write Protection Functions
+int DTB_EnableWriteAccess(DTB_Handle *handle);
+int DTB_DisableWriteAccess(DTB_Handle *handle);
+int DTB_GetWriteAccessStatus(DTB_Handle *handle, int *isEnabled);
 
 // Utility Functions
 const char* DTB_GetErrorString(int errorCode);

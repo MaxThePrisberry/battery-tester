@@ -64,7 +64,7 @@ typedef enum {
     DTB_CMD_SET_TEMPERATURE_LIMITS,
     DTB_CMD_SET_ALARM_LIMITS,
     DTB_CMD_CONFIGURE,
-    DTB_CMD_CONFIGURE_FOR_PID,
+    DTB_CMD_CONFIGURE_DEFAULT,
     DTB_CMD_FACTORY_RESET,
     
     // Query commands
@@ -76,6 +76,11 @@ typedef enum {
     
     // Alarm commands
     DTB_CMD_CLEAR_ALARM,
+	
+	// Write access commands
+	DTB_CMD_ENABLE_WRITE_ACCESS,
+	DTB_CMD_DISABLE_WRITE_ACCESS,
+	DTB_CMD_GET_WRITE_ACCESS_STATUS,
     
     // Raw Modbus commands
     DTB_CMD_RAW_MODBUS,
@@ -112,6 +117,7 @@ typedef struct {
         double setpoint;
         DTB_PIDParams pidParams;
         int alarmActive;
+		int writeAccessEnabled;
         struct { unsigned char *rxData; int rxLength; } rawResponse;
     } data;
 } DTBCommandResult;
@@ -203,7 +209,7 @@ int DTB_SetSensorTypeQueued(DTB_Handle *handle, int sensorType);
 int DTB_SetTemperatureLimitsQueued(DTB_Handle *handle, double upperLimit, double lowerLimit);
 int DTB_SetAlarmLimitsQueued(DTB_Handle *handle, double upperLimit, double lowerLimit);
 int DTB_ConfigureQueued(DTB_Handle *handle, const DTB_Configuration *config);
-int DTB_ConfigureForPIDQueued(DTB_Handle *handle);
+int DTB_ConfigureDefaultQueued(DTB_Handle *handle);
 int DTB_FactoryResetQueued(DTB_Handle *handle);
 
 // Read functions
@@ -215,6 +221,11 @@ int DTB_GetAlarmStatusQueued(DTB_Handle *handle, int *alarmActive);
 
 // Alarm functions
 int DTB_ClearAlarmQueued(DTB_Handle *handle);
+
+// Write protection functions
+int DTB_EnableWriteAccessQueued(DTB_Handle *handle);
+int DTB_DisableWriteAccessQueued(DTB_Handle *handle);
+int DTB_GetWriteAccessStatusQueued(DTB_Handle *handle, int *isEnabled);
 
 /******************************************************************************
  * Utility Functions

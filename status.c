@@ -443,6 +443,8 @@ static void DTBStatusCallback(CommandID cmdId, DTBCommandType type,
                  DTB_GetErrorString(cmdResult->errorCode));
         g_status.lastDTBState = CONN_STATE_ERROR;
         UpdateDeviceLED(DEVICE_DTB, CONN_STATE_ERROR);
+		
+		UpdateDeviceStatus(DEVICE_DTB, "DTB Error");
     }
 }
 
@@ -556,6 +558,8 @@ static void UpdateDTBValues(DTB_Status* status) {
     // The single DTB LED shows: Green=Output Enabled (Running), Yellow=Output Disabled (Stopped), Red=Error/Disconnected
     ConnectionState state = status->outputEnabled ? CONN_STATE_CONNECTED : CONN_STATE_IDLE;
     UpdateDeviceLED(DEVICE_DTB, state);
+	
+	UpdateDeviceStatus(DEVICE_DTB, status->outputEnabled ? "DTB Running" : "DTB Stopped");
 }
 
 /******************************************************************************

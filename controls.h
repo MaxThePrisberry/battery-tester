@@ -16,11 +16,17 @@
 
 /**
  * Initialize the controls module
- * Sets up initial control states based on device states
  * @param panelHandle - Main panel handle
  * @return SUCCESS or error code
  */
 int Controls_Initialize(int panelHandle);
+
+/**
+ * Start the controls module and sync with device states
+ * Should be called after all device queue managers are initialized
+ * @return SUCCESS or error code
+ */
+int Controls_Start(void);
 
 /**
  * Clean up controls module resources

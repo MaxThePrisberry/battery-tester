@@ -72,59 +72,39 @@ int Controls_Initialize(int panelHandle) {
         return SUCCESS;
     }
     
-    // Initialize state
+    // Initialize state - internal setup only
     memset(&g_controls, 0, sizeof(g_controls));
     g_controls.panelHandle = panelHandle;
     
-    // Get initial states from devices if connected
+    // Initialize pending flags to false
+    g_controls.remoteModeChangePending = 0;
+    g_controls.pendingRemoteModeValue = 0;
+    g_controls.lastKnownRemoteMode = 0;
     
-    // Check PSB state
-    if (ENABLE_PSB) {
-        PSBQueueManager *psbQueueMgr = PSB_GetGlobalQueueManager();
-        if (psbQueueMgr) {
-            PSB_Handle *psbHandle = PSB_QueueGetHandle(psbQueueMgr);
-            if (psbHandle && psbHandle->isConnected) {
-                PSB_Status status;
-                if (PSB_GetStatusQueued(psbHandle, &status) == PSB_SUCCESS) {
-                    g_controls.lastKnownRemoteMode = status.remoteMode;
-                    UpdateRemoteToggleState(status.remoteMode);
-                    Status_UpdateRemoteLED(status.remoteMode);
-                    LogMessage("Initial PSB remote mode: %s", 
-                             status.remoteMode ? "ON" : "OFF");
-                }
-            }
-        }
-    }
-    
-    // Check DTB state
-    if (ENABLE_DTB) {
-        DTBQueueManager *dtbQueueMgr = DTB_GetGlobalQueueManager();
-        if (dtbQueueMgr) {
-            DTB_Handle *dtbHandle = DTB_QueueGetHandle(dtbQueueMgr);
-            if (dtbHandle && dtbHandle->isConnected) {
-                DTB_Status status;
-                if (DTB_GetStatusQueued(dtbHandle, &status) == DTB_SUCCESS) {
-                    g_controls.lastKnownDTBRunState = status.outputEnabled;
-                    g_controls.lastKnownDTBSetpoint = status.setPoint;
-                    
-                    // Update button state
-                    UpdateDTBButtonState(status.outputEnabled);
-                    
-                    // Update setpoint display ONLY during initialization
-                    // During normal operation, we don't overwrite user edits
-                    SetCtrlVal(panelHandle, PANEL_NUM_DTB_SETPOINT, status.setPoint);
-                    
-                    LogMessage("Initial DTB state: %s, setpoint: %.1f°C", 
-                             status.outputEnabled ? "Running" : "Stopped",
-                             status.setPoint);
-                }
-            }
-        }
-    }
+    g_controls.dtbRunStateChangePending = 0;
+    g_controls.pendingDTBRunState = 0;
+    g_controls.lastKnownDTBRunState = 0;
+    g_controls.lastKnownDTBSetpoint = 0.0;
     
     g_initialized = 1;
     LogMessage("Controls module initialized");
     
+    return SUCCESS;
+}
+
+int Controls_Start(void) {
+    if (!g_initialized) {
+        LogError("Controls module not initialized");
+        return ERR_NOT_INITIALIZED;
+    }
+    
+    LogMessage("Starting controls module - syncing with device states...");
+    
+    // Use the existing function to sync with device states
+    // At startup, there won't be any pending operations, so this is safe
+    Controls_UpdateFromDeviceStates();
+    
+    LogMessage("Controls module started");
     return SUCCESS;
 }
 
@@ -138,8 +118,66 @@ void Controls_Cleanup(void) {
 }
 
 void Controls_UpdateFromDeviceStates(void) {
-    // This can be called by the status module to sync control states
-    // Currently handled through callbacks, but could be extended if needed
+    if (!g_initialized) {
+        LogWarning("Controls module not initialized");
+        return;
+    }
+    
+    // Check PSB state if no pending changes
+    if (ENABLE_PSB && !g_controls.remoteModeChangePending) {
+        PSBQueueManager *psbQueueMgr = PSB_GetGlobalQueueManager();
+        if (psbQueueMgr) {
+            PSB_Handle *psbHandle = PSB_QueueGetHandle(psbQueueMgr);
+            if (psbHandle && psbHandle->isConnected) {
+                PSB_Status status;
+                if (PSB_GetStatusQueued(psbHandle, &status) == PSB_SUCCESS) {
+                    if (status.remoteMode != g_controls.lastKnownRemoteMode) {
+                        g_controls.lastKnownRemoteMode = status.remoteMode;
+                        UpdateRemoteToggleState(status.remoteMode);
+                        Status_UpdateRemoteLED(status.remoteMode);
+                        LogMessage("PSB remote mode: %s", 
+                                 status.remoteMode ? "ON" : "OFF");
+                    }
+                }
+            }
+        }
+    }
+    
+    // Check DTB state if no pending changes
+    if (ENABLE_DTB && !g_controls.dtbRunStateChangePending) {
+        DTBQueueManager *dtbQueueMgr = DTB_GetGlobalQueueManager();
+        if (dtbQueueMgr) {
+            DTB_Handle *dtbHandle = DTB_QueueGetHandle(dtbQueueMgr);
+            if (dtbHandle && dtbHandle->isConnected) {
+                DTB_Status status;
+                if (DTB_GetStatusQueued(dtbHandle, &status) == DTB_SUCCESS) {
+                    int stateChanged = (status.outputEnabled != g_controls.lastKnownDTBRunState);
+                    int setpointChanged = (fabs(status.setPoint - g_controls.lastKnownDTBSetpoint) > 0.1);
+                    
+                    if (stateChanged) {
+                        g_controls.lastKnownDTBRunState = status.outputEnabled;
+                        UpdateDTBButtonState(status.outputEnabled);
+                    }
+                    
+                    // Update setpoint display only if it's significantly different
+                    // This happens on initial sync or if device setpoint was changed externally
+                    if (setpointChanged && g_controls.lastKnownDTBSetpoint == 0.0) {
+                        // Initial sync - update the display
+                        SetCtrlVal(g_controls.panelHandle, PANEL_NUM_DTB_SETPOINT, status.setPoint);
+                    }
+                    
+                    // Always update internal tracking
+                    g_controls.lastKnownDTBSetpoint = status.setPoint;
+                    
+                    if (stateChanged || (setpointChanged && g_controls.lastKnownDTBSetpoint == 0.0)) {
+                        LogMessage("DTB state: %s, setpoint: %.1f°C", 
+                                 status.outputEnabled ? "Running" : "Stopped",
+                                 status.setPoint);
+                    }
+                }
+            }
+        }
+    }
 }
 
 /******************************************************************************
