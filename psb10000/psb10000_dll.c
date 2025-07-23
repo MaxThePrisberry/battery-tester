@@ -15,8 +15,6 @@ extern PSBQueueManager* PSB_GetGlobalQueueManager(void);
  * Static Variables
  ******************************************************************************/
 
-static int debugEnabled = 0;
-
 static const char* errorStrings[] = {
     "Success",
     "Communication error",
@@ -34,7 +32,7 @@ static const char* errorStrings[] = {
  ******************************************************************************/
 
 static void PrintHexDump(const char *label, unsigned char *data, int length) {
-    if (!debugEnabled) return;
+    if (!g_debugMode) return;
     
     char hexBuffer[LARGE_BUFFER_SIZE];
     char *ptr = hexBuffer;
@@ -864,13 +862,6 @@ const char* PSB_GetErrorString(int errorCode) {
         return errorStrings[index];
     }
     return "Unknown error";
-}
-
-void PSB_EnableDebugOutput(int enable) {
-    debugEnabled = enable;
-    if (enable) {
-        LogMessageEx(LOG_DEVICE_PSB,"Debug output enabled");
-    }
 }
 
 void PSB_PrintStatus(PSB_Status *status) {

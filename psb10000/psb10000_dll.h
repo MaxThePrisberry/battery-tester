@@ -166,7 +166,6 @@ const char* PSB_GetErrorString(int errorCode);
 unsigned short PSB_CalculateCRC(unsigned char *data, int length);
 
 // Debug Functions
-void PSB_EnableDebugOutput(int enable);
 void PSB_PrintStatus(PSB_Status *status);
 
 #endif // PSB10000_H

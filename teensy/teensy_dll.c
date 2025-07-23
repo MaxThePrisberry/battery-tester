@@ -18,7 +18,6 @@
  * Static Variables
  ******************************************************************************/
 
-static int debugEnabled = 0;
 static const char* libraryVersion = "1.0.0";
 
 static const char* errorStrings[] = {
@@ -37,7 +36,7 @@ static const char* errorStrings[] = {
  ******************************************************************************/
 
 static void PrintDebug(const char *format, ...) {
-    if (!debugEnabled) return;
+    if (!g_debugMode) return;
     
     char buffer[256];
     va_list args;
@@ -356,13 +355,6 @@ const char* TNY_GetErrorString(int errorCode) {
         return errorStrings[index];
     }
     return "Unknown error";
-}
-
-void TNY_EnableDebugOutput(int enable) {
-    debugEnabled = enable;
-    if (enable) {
-        LogMessageEx(LOG_DEVICE_TNY, "Debug output enabled");
-    }
 }
 
 const char* TNY_GetVersion(void) {

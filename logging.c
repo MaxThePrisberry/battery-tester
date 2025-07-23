@@ -390,15 +390,6 @@ static void LogMessageInternalEx(LogDevice device, LogLevel level, const char *f
             WriteToUI(uiMessage);
         }
     }
-    
-    // Also write to console in debug builds
-    #ifdef _DEBUG
-    if (device != LOG_DEVICE_NONE && strlen(deviceStr) > 0) {
-        fprintf(stderr, "[%s] %s [%s]: %s\n", timeStr, levelStr, deviceStr, rawBuffer);
-    } else {
-        fprintf(stderr, "[%s] %s: %s\n", timeStr, levelStr, rawBuffer);
-    }
-    #endif
 }
 
 static void WriteToLogFile(const char *timestamp, const char *deviceStr, const char *levelStr, const char *message) {

@@ -35,7 +35,7 @@
 #define ENABLE_PSB         1    // Enable PSB 10000 monitoring
 #define ENABLE_BIOLOGIC    1    // Enable BioLogic SP-150e monitoring
 #define ENABLE_DTB         1    // Enable DTB4848 monitoring
-#define ENABLE_TNY         0    // Enable Teensy monitoring
+#define ENABLE_TNY         1    // Enable Teensy monitoring
 
 #define PSB_COM_PORT            3       // PSB 10000 COM port
 #define PSB_SLAVE_ADDRESS       1       // PSB Modbus slave address
@@ -261,46 +261,6 @@ extern int g_systemBusy;
         flag = 0; \
         CmtReleaseLock(lock); \
     } while(0)
-
-//==============================================================================
-// Debug and Logging Functions
-//==============================================================================
-
-// These should be implemented in a common logging module
-void LogMessage(const char *format, ...);
-void LogError(const char *format, ...);
-void LogDebug(const char *format, ...);
-void LogWarning(const char *format, ...);
-
-// Debug print that can be compiled out
-#ifdef _DEBUG
-    #define DEBUG_PRINT(fmt, ...) \
-        do { \
-            if (g_debugMode) { \
-                printf("[DEBUG] " fmt "\n", ##__VA_ARGS__); \
-            } \
-        } while(0)
-#else
-    #define DEBUG_PRINT(fmt, ...) ((void)0)
-#endif
-
-// Assert macro for debugging
-#ifdef _DEBUG
-    #define ASSERT(condition) \
-        do { \
-            if (!(condition)) { \
-                LogError("Assertion failed: %s, file %s, line %d", \
-                        #condition, __FILE__, __LINE__); \
-                MessagePopup("Assertion Failed", \
-                            "Assertion failed:\n" #condition "\n\n" \
-                            "File: " __FILE__ "\n" \
-                            "Line: " #__LINE__); \
-                abort(); \
-            } \
-        } while(0)
-#else
-    #define ASSERT(condition) ((void)0)
-#endif
 
 //==============================================================================
 // UI Update Notes

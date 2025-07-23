@@ -15,8 +15,6 @@
  * Static Variables
  ******************************************************************************/
 
-static int debugEnabled = 0;
-
 static const char* errorStrings[] = {
     "Success",
     "Communication error",
@@ -34,7 +32,7 @@ static const char* errorStrings[] = {
  ******************************************************************************/
 
 static void PrintDebug(const char *format, ...) {
-    if (!debugEnabled) return;
+    if (!g_debugMode) return;
     
     char buffer[256];
     va_list args;
@@ -851,13 +849,6 @@ const char* DTB_GetErrorString(int errorCode) {
         return errorStrings[index];
     }
     return "Unknown error";
-}
-
-void DTB_EnableDebugOutput(int enable) {
-    debugEnabled = enable;
-    if (enable) {
-        LogMessageEx(LOG_DEVICE_DTB, "Debug output enabled");
-    }
 }
 
 void DTB_PrintStatus(const DTB_Status *status) {
