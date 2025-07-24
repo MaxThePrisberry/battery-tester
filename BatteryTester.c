@@ -11,6 +11,7 @@
 #include "psb10000_queue.h"
 #include "dtb4848_queue.h"
 #include "teensy_queue.h"
+#include "exp_cdc.h"
 #include "exp_capacity.h"
 #include "exp_soceis.h"
 #include "logging.h"
@@ -262,6 +263,16 @@ int CVICALLBACK PanelCallback(int panel, int event, void *callbackData,
             LogMessage("Shutting down Battery Tester application");
             LogMessage("========================================");
             
+			// Check if CDC test is running and abort it
+			if (CDCTest_IsRunning()) {
+			    LogMessage("Aborting running CDC test...");
+			    CDCTest_Abort();
+			    
+			    // Give it a moment to clean up properly
+			    ProcessSystemEvents();
+			    Delay(0.5);
+			}
+			
             // Check if capacity test is running and abort it
 			if (CapacityTest_IsRunning()) {
 			    LogMessage("Aborting running capacity test...");
@@ -331,6 +342,10 @@ int CVICALLBACK PanelCallback(int panel, int event, void *callbackData,
 			// All queue shutdown functions already wait for their threads
 			ProcessSystemEvents();
 			Delay(0.2);
+			
+			// Clean up CDC test module
+			LogMessage("Cleaning up CDC test module...");
+			CDCTest_Cleanup();
             
             // Clean up capacity test module
             LogMessage("Cleaning up capacity test module...");

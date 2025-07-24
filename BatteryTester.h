@@ -65,6 +65,12 @@
 #define  CAPACITY_CHECKBOX_RETURN_50      7       /* control type: radioButton, callback function: (none) */
 
      /* tab page panel controls */
+#define  CDC_BTN_DISCHARGE                2       /* control type: command, callback function: CDCDischargeCallback */
+#define  CDC_BTN_CHARGE                   3       /* control type: command, callback function: CDCChargeCallback */
+#define  CDC_NUM_CURRENT_THRESHOLD        4       /* control type: numeric, callback function: (none) */
+#define  CDC_NUM_INTERVAL                 5       /* control type: numeric, callback function: (none) */
+
+     /* tab page panel controls */
 #define  SOCEIS_NUM_EIS_INTERVAL          2       /* control type: numeric, callback function: (none) */
 #define  SOCEIS_NUM_CAPACITY              3       /* control type: numeric, callback function: (none) */
 #define  SOCEIS_NUM_CURRENT_THRESHOLD     4       /* control type: numeric, callback function: (none) */
@@ -91,6 +97,8 @@
 
      /* Callback Prototypes: */
 
+int  CVICALLBACK CDCChargeCallback(int panel, int control, int event, void *callbackData, int eventData1, int eventData2);
+int  CVICALLBACK CDCDischargeCallback(int panel, int control, int event, void *callbackData, int eventData1, int eventData2);
 int  CVICALLBACK DTBRunStopCallback(int panel, int control, int event, void *callbackData, int eventData1, int eventData2);
 int  CVICALLBACK ImportSOCEISSettingsCallback(int panel, int control, int event, void *callbackData, int eventData1, int eventData2);
 int  CVICALLBACK PanelCallback(int panel, int event, void *callbackData, int eventData1, int eventData2);
