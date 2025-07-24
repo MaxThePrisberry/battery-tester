@@ -71,8 +71,8 @@
 #define  SOCEIS_NUM_INTERVAL              5       /* control type: numeric, callback function: (none) */
 #define  SOCEIS_NUM_SOC                   6       /* control type: numeric, callback function: (none) */
 #define  SOCEIS_CHECKBOX_DISCHARGE        7       /* control type: radioButton, callback function: (none) */
-#define  SOCEIS_BTN_SOC_EIS               8       /* control type: command, callback function: SOCEISImportSettingsCallback */
-#define  SOCEIS_BTN_IMPORT_SETTINGS       9       /* control type: command, callback function: SOCEISImportSettingsCallback */
+#define  SOCEIS_BTN_SOC_EIS               8       /* control type: command, callback function: StartSOCEISExperimentCallback */
+#define  SOCEIS_BTN_IMPORT_SETTINGS       9       /* control type: command, callback function: ImportSOCEISSettingsCallback */
 
 
      /* Control Arrays: */
@@ -92,10 +92,11 @@
      /* Callback Prototypes: */
 
 int  CVICALLBACK DTBRunStopCallback(int panel, int control, int event, void *callbackData, int eventData1, int eventData2);
+int  CVICALLBACK ImportSOCEISSettingsCallback(int panel, int control, int event, void *callbackData, int eventData1, int eventData2);
 int  CVICALLBACK PanelCallback(int panel, int event, void *callbackData, int eventData1, int eventData2);
 int  CVICALLBACK RemoteModeToggle(int panel, int control, int event, void *callbackData, int eventData1, int eventData2);
-int  CVICALLBACK SOCEISImportSettingsCallback(int panel, int control, int event, void *callbackData, int eventData1, int eventData2);
 int  CVICALLBACK StartCapacityExperimentCallback(int panel, int control, int event, void *callbackData, int eventData1, int eventData2);
+int  CVICALLBACK StartSOCEISExperimentCallback(int panel, int control, int event, void *callbackData, int eventData1, int eventData2);
 int  CVICALLBACK TestBiologicCallback(int panel, int control, int event, void *callbackData, int eventData1, int eventData2);
 int  CVICALLBACK TestDeviceQueueCallback(int panel, int control, int event, void *callbackData, int eventData1, int eventData2);
 int  CVICALLBACK TestPSBCallback(int panel, int control, int event, void *callbackData, int eventData1, int eventData2);

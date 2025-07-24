@@ -417,12 +417,10 @@ void DimControlArray(int panel, int arrayID, int dim);
  * @param mainPanel - Main panel handle
  * @param tabPanel - Tab panel handle (capacity tab)
  * @param dim - 1 to dim controls, 0 to enable them
- * @param currentThresholdCtrl - Control ID for current threshold numeric
- * @param intervalCtrl - Control ID for interval numeric
- * @param return50Ctrl - Control ID for return to 50% checkbox
+ * @param controls - array of tab-specific controls
+ * @param numControls - number of tab-specific controls
  */
-void DimCapacityExperimentControls(int mainPanel, int tabPanel, int dim,
-                                   int currentThresholdCtrl, int intervalCtrl, int return50Ctrl);
+void DimCapacityExperimentControls(int mainPanel, int tabPanel, int dim, int *controls, int numControls);
 
 // Thread synchronization helpers
 int WaitForCondition(int (*condition)(void), double timeoutSeconds);

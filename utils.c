@@ -345,8 +345,7 @@ void DimControlArray(int panel, int arrayID, int dim) {
     }
 }
 
-void DimCapacityExperimentControls(int mainPanel, int tabPanel, int dim,
-                                   int currentThresholdCtrl, int intervalCtrl, int return50Ctrl) {
+void DimCapacityExperimentControls(int mainPanel, int tabPanel, int dim, int *controls, int numControls) {
     // Dim control arrays on main panel
     DimControlArray(mainPanel, BATTERY_CONSTANTS_ARR, dim);
     DimControlArray(mainPanel, MANUAL_CONTROL_ARR, dim);
@@ -373,20 +372,12 @@ void DimCapacityExperimentControls(int mainPanel, int tabPanel, int dim,
         }
     }
     
-    // Dim specific controls on the capacity tab
-    if (currentThresholdCtrl > 0) {
-        SetCtrlAttribute(tabPanel, currentThresholdCtrl, ATTR_DIMMED, dim);
-    }
-    
-    if (intervalCtrl > 0) {
-        SetCtrlAttribute(tabPanel, intervalCtrl, ATTR_DIMMED, dim);
-    }
-    
-    if (return50Ctrl > 0) {
-        SetCtrlAttribute(tabPanel, return50Ctrl, ATTR_DIMMED, dim);
-    }
-    
-    // Note: BTN_EXP_CAPACITY is NOT dimmed as requested
+    // Dim specific controls
+	for (int i = 0; i < numControls; i++) {
+		if (controls[i] > 0) {
+			SetCtrlAttribute(tabPanel, controls[i], ATTR_DIMMED, dim);
+		}
+	}
 }
 
 /******************************************************************************

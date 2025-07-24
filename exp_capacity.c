@@ -23,6 +23,11 @@
 static CapacityTestContext g_testContext = {0};
 static CmtThreadFunctionID g_testThreadId = 0;
 
+static const int numControls = 3;
+static const int controls[numControls] = {CAPACITY_NUM_CURRENT_THRESHOLD, 
+					                      CAPACITY_NUM_INTERVAL,
+                                          CAPACITY_CHECKBOX_RETURN_50};
+
 /******************************************************************************
  * Internal Function Prototypes
  ******************************************************************************/
@@ -145,10 +150,7 @@ int CVICALLBACK StartCapacityExperimentCallback(int panel, int control, int even
     SetCtrlAttribute(panel, control, ATTR_LABEL_TEXT, "Stop");
     
     // Dim appropriate controls
-    DimCapacityExperimentControls(g_mainPanelHandle, panel, 1,
-                                  CAPACITY_NUM_CURRENT_THRESHOLD,
-                                  CAPACITY_NUM_INTERVAL,
-                                  CAPACITY_CHECKBOX_RETURN_50);
+    DimCapacityExperimentControls(g_mainPanelHandle, panel, 1, controls, numControls);
     
     // Start test thread
     int error = CmtScheduleThreadPoolFunction(g_threadPool, CapacityTestThread, 
@@ -157,10 +159,7 @@ int CVICALLBACK StartCapacityExperimentCallback(int panel, int control, int even
         // Failed to start thread
         g_testContext.state = CAPACITY_STATE_ERROR;
         SetCtrlAttribute(panel, control, ATTR_LABEL_TEXT, "Start");
-        DimCapacityExperimentControls(g_mainPanelHandle, panel, 0,
-                                      CAPACITY_NUM_CURRENT_THRESHOLD,
-                                      CAPACITY_NUM_INTERVAL,
-                                      CAPACITY_CHECKBOX_RETURN_50);
+        DimCapacityExperimentControls(g_mainPanelHandle, panel, 0, controls, numControls);
         
         CmtGetLock(g_busyLock);
         g_systemBusy = 0;
@@ -956,10 +955,7 @@ static int WriteResultsFile(CapacityTestContext *ctx) {
 
 static void RestoreUI(CapacityTestContext *ctx) {
     // Re-enable controls
-    DimCapacityExperimentControls(ctx->mainPanelHandle, ctx->tabPanelHandle, 0,
-                                  CAPACITY_NUM_CURRENT_THRESHOLD,
-                                  CAPACITY_NUM_INTERVAL,
-                                  CAPACITY_CHECKBOX_RETURN_50);
+    DimCapacityExperimentControls(ctx->mainPanelHandle, ctx->tabPanelHandle, 0, controls, numControls);
 }
 
 /******************************************************************************

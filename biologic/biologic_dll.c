@@ -1300,137 +1300,149 @@ int BL_UpdateTechnique(BL_TechniqueContext *context) {
             if (currentValues.State == KBIO_STATE_STOP) {
                 LogDebugEx(LOG_DEVICE_BIO, "Technique completed, retrieving data...");
                 
-                // Get final data
+                // Get data with timeout protection
                 TDataBuffer_t dataBuffer;
                 TDataInfos_t dataInfo;
                 
-                result = BL_GetData(context->deviceID, context->channel, 
-                                  &dataBuffer, &dataInfo, &currentValues);
+                // For impedance techniques, try to get the right process data
+                bool gotData = false;
+                int targetProcessIndex = -1;
                 
-                if (result == SUCCESS) {
-                    // Calculate data size and allocate memory
-                    int dataSize = dataInfo.NbRows * dataInfo.NbCols;
-                    
-                    // Free any existing raw data first (shouldn't happen, but be safe)
-                    if (context->rawData.rawData) {
-                        free(context->rawData.rawData);
-                        context->rawData.rawData = NULL;
+                // Determine target process based on technique type
+                if (context->config.type == BIO_TECHNIQUE_PEIS || 
+                    context->config.type == BIO_TECHNIQUE_SPEIS ||
+                    context->config.type == BIO_TECHNIQUE_GEIS || 
+                    context->config.type == BIO_TECHNIQUE_SGEIS) {
+                    targetProcessIndex = 1;  // Impedance data
+                } else {
+                    targetProcessIndex = 0;  // Default to process 0
+                }
+                
+                // Try to get data up to 3 times
+                for (int attempt = 0; attempt < 3; attempt++) {
+                    // Check if there's data available
+                    if (currentValues.MemFilled == 0) {
+                        LogWarningEx(LOG_DEVICE_BIO, "No data in device memory");
+                        break;
                     }
                     
-                    // Allocate new buffer for raw data
-                    context->rawData.rawData = malloc(dataSize * sizeof(unsigned int));
-                    
-                    if (context->rawData.rawData) {
-                        // Copy raw data
-                        memcpy(context->rawData.rawData, dataBuffer.data, 
-                               dataSize * sizeof(unsigned int));
-                        context->rawData.bufferSize = dataSize;
-                        context->rawData.numPoints = dataInfo.NbRows;
-                        context->rawData.numVariables = dataInfo.NbCols;
-                        context->rawData.techniqueID = dataInfo.TechniqueID;
-                        context->rawData.processIndex = dataInfo.ProcessIndex;
-                        
-                        LogDebugEx(LOG_DEVICE_BIO, "Retrieved %d data points with %d variables each",
-                                 dataInfo.NbRows, dataInfo.NbCols);
-                        
-                        // Process data if requested
-                        if (context->processData) {
-                            // Get channel type for conversion
-                            uint32_t channelType;
-                            result = BL_GetChannelBoardType(context->deviceID, context->channel, &channelType);
-                            
-                            if (result == SUCCESS) {
-                                float timebase = currentValues.TimeBase;
-                                
-                                // Free any existing converted data first
-                                if (context->convertedData) {
-                                    BL_FreeConvertedData(context->convertedData);
-                                    context->convertedData = NULL;
-                                }
-                                
-                                // Attempt to process the data
-                                result = BL_ProcessTechniqueData(&context->rawData, 
-                                                               dataInfo.TechniqueID,
-                                                               dataInfo.ProcessIndex,
-                                                               channelType,
-                                                               timebase,
-                                                               &context->convertedData);
-                                
-                                if (result == SUCCESS) {
-                                    LogDebugEx(LOG_DEVICE_BIO, "Data processed: %d variables converted",
-                                             context->convertedData->numVariables);
-                                } else {
-                                    LogWarningEx(LOG_DEVICE_BIO, "Failed to process data: %d", result);
-                                    // Note: We keep the raw data even if processing failed
-                                    // The technique is still considered successful if we got raw data
-                                }
-                            } else {
-                                LogWarningEx(LOG_DEVICE_BIO, "Failed to get channel type for data processing: %d", result);
-                            }
-                        }
-                        
-                        // Call data callback if set (regardless of processing success)
-                        if (context->dataCallback) {
-                            context->dataCallback(&dataInfo, context->userData);
-                        }
-                        
-                        // Mark as completed - we have raw data at minimum
-                        context->state = BIO_TECH_STATE_COMPLETED;
-                        
-                    } else {
-                        // Failed to allocate memory for raw data
-                        LogErrorEx(LOG_DEVICE_BIO, "Failed to allocate memory for raw data (%d bytes)", 
-                                 dataSize * sizeof(unsigned int));
-                        context->lastError = BL_ERR_FUNCTIONFAILED;
-                        context->state = BIO_TECH_STATE_ERROR;
-                    }
-                    
-                } else if (currentValues.OptErr != 0) {
-                    // Partial data with error - attempt to retrieve what we can
-                    LogWarningEx(LOG_DEVICE_BIO, "Technique stopped with error, attempting to retrieve partial data");
-                    
-                    // Try to get partial data
                     result = BL_GetData(context->deviceID, context->channel, 
                                       &dataBuffer, &dataInfo, &currentValues);
                     
-                    if (result == SUCCESS && dataInfo.NbRows > 0) {
-                        // We got some data, store it
-                        int dataSize = dataInfo.NbRows * dataInfo.NbCols;
+                    if (result == SUCCESS) {
+                        LogDebugEx(LOG_DEVICE_BIO, "Retrieved data - TechniqueID: %d, ProcessIndex: %d, Points: %d, Cols: %d",
+                                 dataInfo.TechniqueID, dataInfo.ProcessIndex, dataInfo.NbRows, dataInfo.NbCols);
                         
-                        // Free any existing raw data first
-                        if (context->rawData.rawData) {
-                            free(context->rawData.rawData);
-                            context->rawData.rawData = NULL;
+                        // Check if this is the process we want
+                        if (targetProcessIndex == -1 || dataInfo.ProcessIndex == targetProcessIndex) {
+                            // This is the data we want
+                            int dataSize = dataInfo.NbRows * dataInfo.NbCols;
+                            
+                            // Free any existing raw data first
+                            if (context->rawData.rawData) {
+                                free(context->rawData.rawData);
+                                context->rawData.rawData = NULL;
+                            }
+                            
+                            // Allocate new buffer for raw data
+                            context->rawData.rawData = malloc(dataSize * sizeof(unsigned int));
+                            
+                            if (context->rawData.rawData) {
+                                // Copy raw data
+                                memcpy(context->rawData.rawData, dataBuffer.data, 
+                                       dataSize * sizeof(unsigned int));
+                                context->rawData.bufferSize = dataSize;
+                                context->rawData.numPoints = dataInfo.NbRows;
+                                context->rawData.numVariables = dataInfo.NbCols;
+                                context->rawData.techniqueID = dataInfo.TechniqueID;
+                                context->rawData.processIndex = dataInfo.ProcessIndex;
+                                
+                                gotData = true;
+                                
+                                LogDebugEx(LOG_DEVICE_BIO, "Stored %d data points with %d variables (Process %d)",
+                                         dataInfo.NbRows, dataInfo.NbCols, dataInfo.ProcessIndex);
+                                
+                                // For single-process techniques, break after first data
+                                if (targetProcessIndex == 0) {
+                                    break;
+                                }
+                            }
+                        } else {
+                            LogDebugEx(LOG_DEVICE_BIO, "Skipping process %d data (looking for process %d)",
+                                     dataInfo.ProcessIndex, targetProcessIndex);
                         }
                         
-                        context->rawData.rawData = malloc(dataSize * sizeof(unsigned int));
+                        // For multi-process techniques, continue if we haven't found target process
+                        if (gotData && dataInfo.ProcessIndex == targetProcessIndex) {
+                            break;
+                        }
+                    } else if (result == BL_ERR_TECH_DATACORRUPTED) {
+                        LogWarningEx(LOG_DEVICE_BIO, "Data corrupted on attempt %d", attempt + 1);
+                        // Don't retry on data corruption
+                        break;
+                    } else {
+                        LogWarningEx(LOG_DEVICE_BIO, "Failed to get data on attempt %d: %s", 
+                                   attempt + 1, BL_GetErrorString(result));
+                        // For other errors, break immediately
+                        break;
+                    }
+                }
+                
+                // Process data if requested and we have data
+                if (context->processData && gotData && context->rawData.rawData && context->rawData.numPoints > 0) {
+                    // Get channel type for conversion
+                    uint32_t channelType;
+                    result = BL_GetChannelBoardType(context->deviceID, context->channel, &channelType);
+                    
+                    if (result == SUCCESS) {
+                        float timebase = currentValues.TimeBase;
                         
-                        if (context->rawData.rawData) {
-                            memcpy(context->rawData.rawData, dataBuffer.data, 
-                                   dataSize * sizeof(unsigned int));
-                            context->rawData.bufferSize = dataSize;
-                            context->rawData.numPoints = dataInfo.NbRows;
-                            context->rawData.numVariables = dataInfo.NbCols;
-                            context->rawData.techniqueID = dataInfo.TechniqueID;
-                            context->rawData.processIndex = dataInfo.ProcessIndex;
-                            
-                            LogDebugEx(LOG_DEVICE_BIO, "Retrieved %d partial data points", dataInfo.NbRows);
-                            
-                            // Don't attempt to process partial data
+                        // Free any existing converted data first
+                        if (context->convertedData) {
+                            BL_FreeConvertedData(context->convertedData);
                             context->convertedData = NULL;
                         }
+                        
+                        // Attempt to process the data
+                        result = BL_ProcessTechniqueData(&context->rawData, 
+                                                       context->rawData.techniqueID,
+                                                       context->rawData.processIndex,
+                                                       channelType,
+                                                       timebase,
+                                                       &context->convertedData);
+                        
+                        if (result == SUCCESS) {
+                            LogDebugEx(LOG_DEVICE_BIO, "Data processed: %d variables converted",
+                                     context->convertedData->numVariables);
+                        } else {
+                            LogWarningEx(LOG_DEVICE_BIO, "Failed to process data: %d", result);
+                        }
                     }
-                    
+                }
+                
+                // Call data callback if set
+                if (context->dataCallback && gotData) {
+                    TDataInfos_t info = {
+                        .NbRows = context->rawData.numPoints,
+                        .NbCols = context->rawData.numVariables,
+                        .TechniqueID = context->rawData.techniqueID,
+                        .ProcessIndex = context->rawData.processIndex
+                    };
+                    context->dataCallback(&info, context->userData);
+                }
+                
+                // Determine final state
+                if (gotData) {
+                    context->state = BIO_TECH_STATE_COMPLETED;
+                } else if (currentValues.OptErr != 0) {
                     context->lastError = currentValues.OptErr;
                     snprintf(context->errorMessage, sizeof(context->errorMessage),
                            "Technique stopped with OptErr=%d", currentValues.OptErr);
                     context->state = BIO_TECH_STATE_ERROR;
-                    
                 } else {
-                    // Failed to get any data
-                    context->lastError = result;
+                    context->lastError = BL_ERR_FUNCTIONFAILED;
                     snprintf(context->errorMessage, sizeof(context->errorMessage),
-                           "Failed to retrieve data: %s", BL_GetErrorString(result));
+                           "No data retrieved from technique");
                     context->state = BIO_TECH_STATE_ERROR;
                 }
             }

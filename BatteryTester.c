@@ -12,6 +12,7 @@
 #include "dtb4848_queue.h"
 #include "teensy_queue.h"
 #include "exp_capacity.h"
+#include "exp_soceis.h"
 #include "logging.h"
 #include "status.h"
 #include "controls.h"
@@ -262,14 +263,24 @@ int CVICALLBACK PanelCallback(int panel, int event, void *callbackData,
             LogMessage("========================================");
             
             // Check if capacity test is running and abort it
-            if (CapacityTest_IsRunning()) {
-                LogMessage("Aborting running capacity test...");
-                CapacityTest_Abort();
-                
-                // Give it a moment to clean up properly
-                ProcessSystemEvents();
-                Delay(0.5);
-            }
+			if (CapacityTest_IsRunning()) {
+			    LogMessage("Aborting running capacity test...");
+			    CapacityTest_Abort();
+			    
+			    // Give it a moment to clean up properly
+			    ProcessSystemEvents();
+			    Delay(0.5);
+			}
+
+			// Check if SOCEIS test is running and abort it
+			if (SOCEISTest_IsRunning()) {
+			    LogMessage("Aborting running SOCEIS test...");
+			    SOCEISTest_Abort();
+			    
+			    // Give it a moment to clean up properly
+			    ProcessSystemEvents();
+			    Delay(0.5);
+			}
             
             // Stop status monitoring first
             LogMessage("Stopping status monitoring...");
@@ -324,6 +335,10 @@ int CVICALLBACK PanelCallback(int panel, int event, void *callbackData,
             // Clean up capacity test module
             LogMessage("Cleaning up capacity test module...");
             CapacityTest_Cleanup();
+			
+			// Clean up SOCEIS test module
+			LogMessage("Cleaning up SOCEIS test module...");
+			SOCEISTest_Cleanup();
             
 			LogMessage("Stopping controls module...");
 			Controls_Cleanup();
