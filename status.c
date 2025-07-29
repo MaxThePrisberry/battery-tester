@@ -290,6 +290,10 @@ static void Status_TimerUpdate(void) {
                             // Log the initial remote mode state
                             LogMessageEx(LOG_DEVICE_PSB, "Initial remote mode state: %s", 
                                        status.remoteMode ? "ON" : "OFF");
+							
+							// Update status text with remote mode
+                            const char* modeText = status.remoteMode ? "PSB Connected - Remote Mode" : "PSB Connected - Local Mode";
+                            UpdateDeviceStatus(DEVICE_PSB, modeText);
                         }
                     }
                 } else if (!stats.isConnected) {
@@ -399,6 +403,15 @@ static void PSBStatusCallback(CommandID cmdId, PSBCommandType type,
             ledData->intValue = status->remoteMode;
             PostDeferredCall(DeferredLEDUpdate, ledData);
         }
+        
+        // Update PSB status LED color based on remote mode
+        // Green = Remote ON, Yellow = Remote OFF (local mode)
+        ConnectionState psbState = status->remoteMode ? CONN_STATE_CONNECTED : CONN_STATE_IDLE;
+        UpdateDeviceLED(DEVICE_PSB, psbState);
+        
+        // Update PSB status text to include remote mode state
+        const char* modeText = status->remoteMode ? "PSB Connected - Remote Mode" : "PSB Connected - Local Mode";
+        UpdateDeviceStatus(DEVICE_PSB, modeText);
         
         // ALSO update the toggle to match actual state
         UIUpdateData* toggleData = malloc(sizeof(UIUpdateData));
