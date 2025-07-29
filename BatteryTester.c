@@ -84,6 +84,23 @@ int main (int argc, char *argv[]) {
 	        PSB_QueueGetStats(g_psbQueueMgr, &stats);
 	        if (stats.isConnected) {
 	            LogMessage("PSB queue manager initialized and connected on COM%d", PSB_COM_PORT);
+	            
+	            // Initialize PSB to safe state
+	            LogMessage("Initializing PSB to safe state...");
+	            
+	            // First set safe limits
+	            int limitResult = PSB_SetSafeLimits(NULL);
+	            if (limitResult != PSB_SUCCESS) {
+	                LogWarning("Failed to set all PSB safe limits: %s", PSB_GetErrorString(limitResult));
+	            }
+	            
+	            // Then zero all values
+	            int zeroResult = PSB_ZeroAllValues(NULL);
+	            if (zeroResult != PSB_SUCCESS) {
+	                LogWarning("Failed to zero all PSB values: %s", PSB_GetErrorString(zeroResult));
+	            }
+	            
+	            LogMessage("PSB initialization complete");
 	        } else {
 	            LogWarning("PSB queue manager initialized but not connected on COM%d", PSB_COM_PORT);
 	        }

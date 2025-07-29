@@ -16,13 +16,6 @@
  * Test Configuration
  ******************************************************************************/
 
-// Wide limits for testing - set before and after test suite
-#define PSB_TEST_VOLTAGE_MIN_WIDE   0.0     // V
-#define PSB_TEST_VOLTAGE_MAX_WIDE   60.0    // V
-#define PSB_TEST_CURRENT_MIN_WIDE   0.0     // A
-#define PSB_TEST_CURRENT_MAX_WIDE   61.2    // A
-#define PSB_TEST_POWER_MAX_WIDE     1224.0  // W
-
 // Test voltage/current/power values (respecting PSB limits)
 // Voltage values (min limit is 0V)
 #define TEST_VOLTAGE_LOW        1.0     // V (above 0V minimum)

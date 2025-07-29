@@ -215,7 +215,6 @@ int CVICALLBACK TestPSBWorkerThread(void *functionData) {
  * Internal Helper Functions
  ******************************************************************************/
 
-static int SetWideLimitsQueued(PSB_Handle *handle);
 static int EnsureRemoteModeQueued(PSB_Handle *handle);
 static void GenerateTestSummary(TestSummary *summary, TestCase *tests, int numTests);
 
@@ -261,24 +260,6 @@ static int EnsureRemoteModeQueued(PSB_Handle *handle) {
     return PSB_SUCCESS;
 }
 
-// Helper function to set wide limits for testing using queued commands
-static int SetWideLimitsQueued(PSB_Handle *handle) {
-    LogDebugEx(LOG_DEVICE_PSB, "Setting wide limits for testing...");
-    
-    // Use the new helper function to safely set wide limits
-    // Note: PSB_TEST_*_WIDE constants would need to be updated to use PSB_SAFE_* constants
-    // or you can keep test-specific limits if they differ from the safe maximums
-    int result = PSB_InitializeSafeLimits(handle);
-    
-    if (result == PSB_SUCCESS) {
-        LogDebugEx(LOG_DEVICE_PSB, "Wide limits set successfully");
-    } else {
-        LogWarningEx(LOG_DEVICE_PSB, "Failed to set wide limits: %s", PSB_GetErrorString(result));
-    }
-    
-    return result;
-}
-
 /******************************************************************************
  * Test Suite Functions
  ******************************************************************************/
@@ -314,11 +295,11 @@ int PSB_TestSuite_Run(TestSuiteContext *context) {
     LogMessageEx(LOG_DEVICE_PSB, "Starting PSB Test Suite");
     UpdateTestProgress(context, "Starting PSB Test Suite...");
     
-    // Set wide limits for all tests
-    UpdateTestProgress(context, "Setting up test parameters...");
-    if (SetWideLimitsQueued(context->psbHandle) != PSB_SUCCESS) {
-        LogErrorEx(LOG_DEVICE_PSB, "Failed to set wide limits for testing");
-        UpdateTestProgress(context, "Failed to set test parameters");
+    // Zero out PSB values for safety
+    UpdateTestProgress(context, "Zeroing PSB values...");
+    if (PSB_ZeroAllValues(context->psbHandle) != PSB_SUCCESS) {
+        LogErrorEx(LOG_DEVICE_PSB, "Failed to zero out the PSB before suite execution!");
+        UpdateTestProgress(context, "Failed to zero out PSB");
         context->state = TEST_STATE_ERROR;
         return -1;
     }
@@ -395,13 +376,9 @@ void PSB_TestSuite_Cancel(TestSuiteContext *context) {
 void PSB_TestSuite_Cleanup(TestSuiteContext *context) {
     if (context) {
         // Ensure PSB is in safe state using queued commands
-        if (context->psbHandle && context->psbHandle->isConnected) {
-            // Restore wide limits
-            SetWideLimitsQueued(context->psbHandle);
-            
-            // Ensure output is off but keep remote mode ON
-            PSB_SetOutputEnableQueued(context->psbHandle, 0);
-            PSB_SetRemoteModeQueued(context->psbHandle, 1);
+        if (context->psbHandle && context->psbHandle->isConnected) {            
+            // Ensure output is off and set values to zero
+            PSB_ZeroAllValues(context->psbHandle);
         }
     }
 }
@@ -633,11 +610,11 @@ int Test_VoltageLimits(PSB_Handle *handle, char *errorMsg, int errorMsgSize) {
     result = PSB_SetVoltageQueued(handle, 10.0);  // Below min
     // This might succeed but be clamped to min
     
-    // Restore wide limits
-    LogDebugEx(LOG_DEVICE_PSB, "Restoring wide limits...");
-    result = PSB_SetVoltageLimitsQueued(handle, PSB_TEST_VOLTAGE_MIN_WIDE, PSB_TEST_VOLTAGE_MAX_WIDE);
+    // Restore safe limits
+    LogDebugEx(LOG_DEVICE_PSB, "Restoring safe voltage limits...");
+    result = PSB_SetVoltageLimitsQueued(handle, PSB_SAFE_VOLTAGE_MIN, PSB_SAFE_VOLTAGE_MAX);
     if (result != PSB_SUCCESS) {
-        LogWarningEx(LOG_DEVICE_PSB, "Failed to restore wide voltage limits");
+        LogWarningEx(LOG_DEVICE_PSB, "Failed to restore safe voltage limits");
     }
     
     return 1;
@@ -699,10 +676,10 @@ int Test_CurrentLimits(PSB_Handle *handle, char *errorMsg, int errorMsgSize) {
         return -1;
     }
     
-    // First set wide limits to ensure we have a clean state
-    result = SetWideLimitsQueued(handle);
+    // First zero all values to ensure clean state
+    result = PSB_ZeroAllValues(handle);
     if (result != PSB_SUCCESS) {
-        snprintf(errorMsg, errorMsgSize, "Failed to set wide limits: %s", 
+        snprintf(errorMsg, errorMsgSize, "Failed to zero values: %s", 
                 PSB_GetErrorString(result));
         return -1;
     }
@@ -744,17 +721,17 @@ int Test_CurrentLimits(PSB_Handle *handle, char *errorMsg, int errorMsgSize) {
     }
     
     LogDebugEx(LOG_DEVICE_PSB, "Testing current below min limit...");
-    result = PSB_SetCurrentQueued(handle, PSB_TEST_CURRENT_MIN_WIDE);  // 0A - should be clamped to 6A
+    result = PSB_SetCurrentQueued(handle, PSB_SAFE_CURRENT_MIN);  // 0A - should be clamped to 6A
     if (result != PSB_SUCCESS && result != PSB_ERROR_INVALID_PARAM) {
         LogWarningEx(LOG_DEVICE_PSB, "Unexpected error setting current below limit: %s", 
                     PSB_GetErrorString(result));
     }
     
-    // Restore wide limits
-    LogDebugEx(LOG_DEVICE_PSB, "Restoring wide current limits...");
-    result = PSB_SetCurrentLimitsQueued(handle, PSB_TEST_CURRENT_MIN_WIDE, PSB_TEST_CURRENT_MAX_WIDE);
+    // Restore safe limits
+    LogDebugEx(LOG_DEVICE_PSB, "Restoring safe current limits...");
+    result = PSB_SetCurrentLimitsQueued(handle, PSB_SAFE_CURRENT_MIN, PSB_SAFE_CURRENT_MAX);
     if (result != PSB_SUCCESS) {
-        LogWarningEx(LOG_DEVICE_PSB, "Failed to restore wide current limits: %s", 
+        LogWarningEx(LOG_DEVICE_PSB, "Failed to restore safe current limits: %s", 
                     PSB_GetErrorString(result));
     }
     
@@ -805,7 +782,7 @@ int Test_PowerControl(PSB_Handle *handle, char *errorMsg, int errorMsgSize) {
     result = PSB_SetPowerQueued(handle, TEST_POWER_INVALID);  // 1400W - beyond device limit
     if (result == PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Should have rejected power %.1fW (max is %.1fW)", 
-                TEST_POWER_INVALID, PSB_TEST_POWER_MAX_WIDE);
+                TEST_POWER_INVALID, PSB_SAFE_POWER_MAX);
         return -1;
     }
     LogDebugEx(LOG_DEVICE_PSB, "Correctly rejected invalid power: %s", PSB_GetErrorString(result));
@@ -869,11 +846,11 @@ int Test_PowerLimit(PSB_Handle *handle, char *errorMsg, int errorMsgSize) {
                   PSB_GetErrorString(result));
     }
     
-    // Restore maximum power limit
-    LogDebugEx(LOG_DEVICE_PSB, "Restoring maximum power limit (%.1fW)...", PSB_TEST_POWER_MAX_WIDE);
-    result = PSB_SetPowerLimitQueued(handle, PSB_TEST_POWER_MAX_WIDE);
+    // Restore safe power limit
+    LogDebugEx(LOG_DEVICE_PSB, "Restoring safe power limit (%.1fW)...", PSB_SAFE_POWER_MAX);
+    result = PSB_SetPowerLimitQueued(handle, PSB_SAFE_POWER_MAX);
     if (result != PSB_SUCCESS) {
-        LogWarningEx(LOG_DEVICE_PSB, "Failed to restore max power limit: %s", 
+        LogWarningEx(LOG_DEVICE_PSB, "Failed to restore safe power limit: %s", 
                     PSB_GetErrorString(result));
     }
     
@@ -882,7 +859,7 @@ int Test_PowerLimit(PSB_Handle *handle, char *errorMsg, int errorMsgSize) {
     result = PSB_SetPowerLimitQueued(handle, TEST_POWER_INVALID);  // 1400W - beyond max
     if (result == PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Should have rejected power limit %.1fW (max is %.1fW)", 
-                TEST_POWER_INVALID, PSB_TEST_POWER_MAX_WIDE);
+                TEST_POWER_INVALID, PSB_SAFE_POWER_MAX);
         return -1;
     }
     LogDebugEx(LOG_DEVICE_PSB, "Correctly rejected invalid power limit: %s", 
@@ -912,7 +889,7 @@ int Test_SinkCurrentControl(PSB_Handle *handle, char *errorMsg, int errorMsgSize
     
     // First, set output voltage low to allow sink mode activation
     LogDebugEx(LOG_DEVICE_PSB, "Setting output voltage to 0V to prepare for sink mode...");
-    result = PSB_SetVoltageQueued(handle, PSB_TEST_VOLTAGE_MIN_WIDE);
+    result = PSB_SetVoltageQueued(handle, PSB_SAFE_VOLTAGE_MIN);
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to set voltage to 0V: %s", 
                 PSB_GetErrorString(result));
@@ -975,7 +952,7 @@ int Test_SinkCurrentControl(PSB_Handle *handle, char *errorMsg, int errorMsgSize
     result = PSB_SetSinkCurrentQueued(handle, TEST_CURRENT_INVALID);
     if (result == PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Should have rejected sink current %.1fA (max is %.1fA)", 
-                TEST_CURRENT_INVALID, PSB_TEST_CURRENT_MAX_WIDE);
+                TEST_CURRENT_INVALID, PSB_SAFE_SINK_CURRENT_MAX);
         return -1;
     }
     LogDebugEx(LOG_DEVICE_PSB, "Correctly rejected excessive sink current: %s", 
@@ -1001,7 +978,7 @@ int Test_SinkPowerControl(PSB_Handle *handle, char *errorMsg, int errorMsgSize) 
     
     // Prepare for sink mode
     LogDebugEx(LOG_DEVICE_PSB, "Preparing for sink mode operation...");
-    result = PSB_SetVoltageQueued(handle, PSB_TEST_VOLTAGE_MIN_WIDE);
+    result = PSB_SetVoltageQueued(handle, PSB_SAFE_VOLTAGE_MIN);
     if (result != PSB_SUCCESS) {
         LogWarningEx(LOG_DEVICE_PSB, "Failed to set voltage to 0V: %s", 
                    PSB_GetErrorString(result));
@@ -1061,7 +1038,7 @@ int Test_SinkPowerControl(PSB_Handle *handle, char *errorMsg, int errorMsgSize) 
     result = PSB_SetSinkPowerQueued(handle, TEST_POWER_INVALID);
     if (result == PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Should have rejected sink power %.1fW (max is %.1fW)", 
-                TEST_POWER_INVALID, PSB_TEST_POWER_MAX_WIDE);
+                TEST_POWER_INVALID, PSB_SAFE_SINK_POWER_MAX);
         return -1;
     }
     LogDebugEx(LOG_DEVICE_PSB, "Correctly rejected excessive sink power: %s", 
@@ -1084,15 +1061,27 @@ int Test_SinkCurrentLimits(PSB_Handle *handle, char *errorMsg, int errorMsgSize)
         return -1;
     }
     
-    // First set wide sink limits to ensure clean state
-    LogDebugEx(LOG_DEVICE_PSB, "Setting wide sink current limits for baseline...");
-    result = PSB_SetSinkCurrentLimitsQueued(handle, PSB_TEST_CURRENT_MIN_WIDE, PSB_TEST_CURRENT_MAX_WIDE);
+    // First zero all values to ensure clean state
+    LogDebugEx(LOG_DEVICE_PSB, "Zeroing values for baseline...");
+    result = PSB_ZeroAllValues(handle);
     if (result != PSB_SUCCESS) {
-        snprintf(errorMsg, errorMsgSize, "Failed to set wide sink current limits: %s", 
+        snprintf(errorMsg, errorMsgSize, "Failed to zero values: %s", 
                 PSB_GetErrorString(result));
         return -1;
     }
     
+	Delay(TEST_DELAY_SHORT);
+    
+    // CRITICAL: Set sink current to a value within the new limits BEFORE setting limits
+    LogDebugEx(LOG_DEVICE_PSB, "Setting sink current to %.2fA (within new limits)...", 
+               TEST_SINK_CURRENT_LIMIT_TEST);
+    result = PSB_SetSinkCurrentQueued(handle, TEST_SINK_CURRENT_LIMIT_TEST); // 20A
+    if (result != PSB_SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Failed to set sink current before limits: %s", 
+                PSB_GetErrorString(result));
+        return -1;
+    }
+	
     Delay(TEST_DELAY_SHORT);
     
     // Test setting valid sink current limits
@@ -1157,7 +1146,7 @@ int Test_SinkCurrentLimits(PSB_Handle *handle, char *errorMsg, int errorMsgSize)
     
     // Test excessive maximum limit
     LogDebugEx(LOG_DEVICE_PSB, "Testing excessive maximum sink current limit (%.1fA)...", TEST_CURRENT_INVALID);
-    result = PSB_SetSinkCurrentLimitsQueued(handle, PSB_TEST_CURRENT_MIN_WIDE, TEST_CURRENT_INVALID);
+    result = PSB_SetSinkCurrentLimitsQueued(handle, PSB_SAFE_SINK_CURRENT_MIN, TEST_CURRENT_INVALID);
     if (result == PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Should have rejected excessive maximum sink current limit");
         return -1;
@@ -1165,11 +1154,11 @@ int Test_SinkCurrentLimits(PSB_Handle *handle, char *errorMsg, int errorMsgSize)
     LogDebugEx(LOG_DEVICE_PSB, "Correctly rejected excessive maximum limit: %s", 
               PSB_GetErrorString(result));
     
-    // Restore wide limits
-    LogDebugEx(LOG_DEVICE_PSB, "Restoring wide sink current limits...");
-    result = PSB_SetSinkCurrentLimitsQueued(handle, PSB_TEST_CURRENT_MIN_WIDE, PSB_TEST_CURRENT_MAX_WIDE);
+    // Restore safe limits
+    LogDebugEx(LOG_DEVICE_PSB, "Restoring safe sink current limits...");
+    result = PSB_SetSinkCurrentLimitsQueued(handle, PSB_SAFE_SINK_CURRENT_MIN, PSB_SAFE_SINK_CURRENT_MAX);
     if (result != PSB_SUCCESS) {
-        LogWarningEx(LOG_DEVICE_PSB, "Failed to restore wide sink current limits: %s", 
+        LogWarningEx(LOG_DEVICE_PSB, "Failed to restore safe sink current limits: %s", 
                     PSB_GetErrorString(result));
     }
     
@@ -1264,17 +1253,17 @@ int Test_SinkPowerLimit(PSB_Handle *handle, char *errorMsg, int errorMsgSize) {
     result = PSB_SetSinkPowerLimitQueued(handle, TEST_POWER_INVALID);
     if (result == PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Should have rejected sink power limit %.1fW (max is %.1fW)", 
-                TEST_POWER_INVALID, PSB_TEST_POWER_MAX_WIDE);
+                TEST_POWER_INVALID, PSB_SAFE_SINK_POWER_MAX);
         return -1;
     }
     LogDebugEx(LOG_DEVICE_PSB, "Correctly rejected excessive sink power limit: %s", 
               PSB_GetErrorString(result));
     
-    // Restore maximum power limit
-    LogDebugEx(LOG_DEVICE_PSB, "Restoring maximum sink power limit (%.1fW)...", PSB_TEST_POWER_MAX_WIDE);
-    result = PSB_SetSinkPowerLimitQueued(handle, PSB_TEST_POWER_MAX_WIDE);
+    // Restore safe power limit
+    LogDebugEx(LOG_DEVICE_PSB, "Restoring safe sink power limit (%.1fW)...", PSB_SAFE_SINK_POWER_MAX);
+    result = PSB_SetSinkPowerLimitQueued(handle, PSB_SAFE_SINK_POWER_MAX);
     if (result != PSB_SUCCESS) {
-        LogWarningEx(LOG_DEVICE_PSB, "Failed to restore max sink power limit: %s", 
+        LogWarningEx(LOG_DEVICE_PSB, "Failed to restore safe sink power limit: %s", 
                     PSB_GetErrorString(result));
     }
     
@@ -1438,7 +1427,7 @@ int Test_BoundaryConditions(PSB_Handle *handle, char *errorMsg, int errorMsgSize
     
     int result;
     
-    // Ensure remote mode and wide limits
+    // Ensure remote mode and zero values
     result = EnsureRemoteModeQueued(handle);
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to ensure remote mode: %s", 
@@ -1446,16 +1435,16 @@ int Test_BoundaryConditions(PSB_Handle *handle, char *errorMsg, int errorMsgSize
         return -1;
     }
     
-    result = SetWideLimitsQueued(handle);
+    result = PSB_ZeroAllValues(handle);
     if (result != PSB_SUCCESS) {
-        snprintf(errorMsg, errorMsgSize, "Failed to set wide limits: %s", 
+        snprintf(errorMsg, errorMsgSize, "Failed to zero values: %s", 
                 PSB_GetErrorString(result));
         return -1;
     }
     
     // Test minimum voltage using queued command
-    LogDebugEx(LOG_DEVICE_PSB, "Testing minimum voltage (%.2fV)...", PSB_TEST_VOLTAGE_MIN_WIDE);
-    result = PSB_SetVoltageQueued(handle, PSB_TEST_VOLTAGE_MIN_WIDE);
+    LogDebugEx(LOG_DEVICE_PSB, "Testing minimum voltage (%.2fV)...", PSB_SAFE_VOLTAGE_MIN);
+    result = PSB_SetVoltageQueued(handle, PSB_SAFE_VOLTAGE_MIN);
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to set minimum voltage: %s", 
                 PSB_GetErrorString(result));
@@ -1464,8 +1453,8 @@ int Test_BoundaryConditions(PSB_Handle *handle, char *errorMsg, int errorMsgSize
     LogDebugEx(LOG_DEVICE_PSB, "Minimum voltage accepted");
     
     // Test minimum current using queued command
-    LogDebugEx(LOG_DEVICE_PSB, "Testing minimum current (%.2fA)...", PSB_TEST_CURRENT_MIN_WIDE);
-    result = PSB_SetCurrentQueued(handle, PSB_TEST_CURRENT_MIN_WIDE);
+    LogDebugEx(LOG_DEVICE_PSB, "Testing minimum current (%.2fA)...", PSB_SAFE_CURRENT_MIN);
+    result = PSB_SetCurrentQueued(handle, PSB_SAFE_CURRENT_MIN);
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to set minimum current: %s", 
                 PSB_GetErrorString(result));
@@ -1491,8 +1480,8 @@ int Test_BoundaryConditions(PSB_Handle *handle, char *errorMsg, int errorMsgSize
     LogDebugEx(LOG_DEVICE_PSB, "Correctly rejected current below minimum");
     
     // Test maximum values using queued commands
-    LogDebugEx(LOG_DEVICE_PSB, "Testing maximum voltage (%.2fV)...", PSB_TEST_VOLTAGE_MAX_WIDE);
-    result = PSB_SetVoltageQueued(handle, PSB_TEST_VOLTAGE_MAX_WIDE);
+    LogDebugEx(LOG_DEVICE_PSB, "Testing maximum voltage (%.2fV)...", PSB_NOMINAL_VOLTAGE);  // 60V
+    result = PSB_SetVoltageQueued(handle, PSB_NOMINAL_VOLTAGE);
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to set max voltage: %s", 
                 PSB_GetErrorString(result));
@@ -1500,8 +1489,8 @@ int Test_BoundaryConditions(PSB_Handle *handle, char *errorMsg, int errorMsgSize
     }
     LogDebugEx(LOG_DEVICE_PSB, "Maximum voltage accepted");
     
-    LogDebugEx(LOG_DEVICE_PSB, "Testing maximum current (%.2fA)...", PSB_TEST_CURRENT_MAX_WIDE);
-    result = PSB_SetCurrentQueued(handle, PSB_TEST_CURRENT_MAX_WIDE);
+    LogDebugEx(LOG_DEVICE_PSB, "Testing maximum current (%.2fA)...", PSB_NOMINAL_CURRENT);  // 60A
+    result = PSB_SetCurrentQueued(handle, PSB_NOMINAL_CURRENT);
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to set max current: %s", 
                 PSB_GetErrorString(result));

@@ -29,6 +29,9 @@
 #define PSB_SAFE_CURRENT_MIN    0.0     // A
 #define PSB_SAFE_CURRENT_MAX    61.2    // A (102% of nominal)
 #define PSB_SAFE_POWER_MAX      1224.0  // W (102% of nominal)
+#define PSB_SAFE_SINK_CURRENT_MIN   0.0     // A
+#define PSB_SAFE_SINK_CURRENT_MAX   61.2    // A (102% of nominal)
+#define PSB_SAFE_SINK_POWER_MAX     1224.0  // W (102% of nominal)
 
 // PSB-specific error codes (using base from common.h)
 #define PSB_SUCCESS                 SUCCESS

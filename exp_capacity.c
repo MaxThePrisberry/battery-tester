@@ -234,8 +234,8 @@ static int CVICALLBACK CapacityTestThread(void *functionData) {
     }
     
     // Initialize PSB to safe state
-    LogMessage("Initializing PSB to safe state...");
-    result = PSB_InitializeSafeLimits(NULL);
+    LogMessage("Initializing PSB to zeroed state...");
+    result = PSB_ZeroAllValues(NULL);
     
     if (result != PSB_SUCCESS) {
         LogError("Failed to initialize PSB to safe state: %s", PSB_GetErrorString(result));
@@ -247,63 +247,6 @@ static int CVICALLBACK CapacityTestThread(void *functionData) {
     // Check for cancellation
     if (ctx->state == CAPACITY_STATE_CANCELLED) {
         LogMessage("Capacity test cancelled during initialization");
-        goto cleanup;
-    }
-    
-    // Configure test parameters
-    LogMessage("Configuring test parameters...");
-    
-    // Set voltage to midpoint
-    double midVoltage = (ctx->params.chargeVoltage + ctx->params.dischargeVoltage) / 2.0;
-    result = PSB_SetVoltageQueued(NULL, midVoltage);
-    if (result != PSB_SUCCESS) {
-        LogError("Failed to set voltage to %.2fV: %s", midVoltage, PSB_GetErrorString(result));
-        MessagePopup("Error", "Failed to set voltage.");
-        ctx->state = CAPACITY_STATE_ERROR;
-        goto cleanup;
-    }
-    
-    // Set voltage limits
-    result = PSB_SetVoltageLimitsQueued(NULL, ctx->params.dischargeVoltage, ctx->params.chargeVoltage);
-    if (result != PSB_SUCCESS) {
-        LogError("Failed to set voltage limits: %s", PSB_GetErrorString(result));
-        MessagePopup("Error", "Failed to set voltage limits.");
-        ctx->state = CAPACITY_STATE_ERROR;
-        goto cleanup;
-    }
-    
-    // Set current limits
-    double maxCurrent = MAX(ctx->params.chargeCurrent, ctx->params.dischargeCurrent);
-    result = PSB_SetCurrentLimitsQueued(NULL, 0.0, maxCurrent * 1.1);
-    if (result != PSB_SUCCESS) {
-        LogError("Failed to set current limits: %s", PSB_GetErrorString(result));
-        MessagePopup("Error", "Failed to set current limits.");
-        ctx->state = CAPACITY_STATE_ERROR;
-        goto cleanup;
-    }
-    
-    // Set sink current limits
-    result = PSB_SetSinkCurrentLimitsQueued(NULL, 0.0, ctx->params.dischargeCurrent * 1.1);
-    if (result != PSB_SUCCESS) {
-        LogWarning("Failed to set sink current limits: %s", PSB_GetErrorString(result));
-    }
-    
-    // Set power limits
-    result = PSB_SetPowerLimitQueued(NULL, CAPACITY_TEST_POWER_LIMIT_W);
-    if (result != PSB_SUCCESS) {
-        LogWarning("Failed to set power limit: %s", PSB_GetErrorString(result));
-    }
-    
-    result = PSB_SetSinkPowerLimitQueued(NULL, CAPACITY_TEST_POWER_LIMIT_W);
-    if (result != PSB_SUCCESS) {
-        LogWarning("Failed to set sink power limit: %s", PSB_GetErrorString(result));
-    }
-    
-    LogMessage("Test parameters configured successfully");
-    
-    // Check for cancellation
-    if (ctx->state == CAPACITY_STATE_CANCELLED) {
-        LogMessage("Capacity test cancelled after configuration");
         goto cleanup;
     }
     

@@ -58,7 +58,7 @@ static void PrintHexDump(const char *label, unsigned char *data, int length) {
 static int ConvertToDeviceUnits(double realValue, double nominalValue) {
     double percentage = (realValue / nominalValue) * 100.0;
     percentage = CLAMP(percentage, 0.0, 102.0);
-    return (int)((percentage / 102.0) * 53477);
+    return (int)((percentage / 102.0) * 53476);
 }
 
 static double ConvertFromDeviceUnits(int deviceValue, double nominalValue) {

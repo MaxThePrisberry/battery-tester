@@ -258,8 +258,8 @@ static int CVICALLBACK CDCTestThread(void *functionData) {
     }
     
     // Initialize PSB to safe state
-    LogMessage("Initializing PSB to safe state...");
-    result = PSB_InitializeSafeLimits(NULL);
+    LogMessage("Initializing PSB to zeroed state...");
+    result = PSB_ZeroAllValues(NULL);
     
     if (result != PSB_SUCCESS) {
         LogError("Failed to initialize PSB to safe state: %s", PSB_GetErrorString(result));
@@ -444,39 +444,6 @@ static int RunOperation(CDCTestContext *ctx) {
     GetCtrlVal(g_mainPanelHandle, PANEL_NUM_SET_CHARGE_I, &chargeCurrent);
     GetCtrlVal(g_mainPanelHandle, PANEL_NUM_SET_DISCHARGE_I, &dischargeCurrent);
     
-    // Set voltage to midpoint first (like in exp_capacity)
-    double midVoltage = (chargeVoltage + dischargeVoltage) / 2.0;
-    result = PSB_SetVoltageQueued(NULL, midVoltage);
-    if (result != PSB_SUCCESS) {
-        LogError("Failed to set voltage to %.2fV: %s", midVoltage, PSB_GetErrorString(result));
-        return result;
-    }
-    
-    // Now set voltage limits
-    result = PSB_SetVoltageLimitsQueued(NULL, dischargeVoltage, chargeVoltage);
-    if (result != PSB_SUCCESS) {
-        LogError("Failed to set voltage limits: %s", PSB_GetErrorString(result));
-        return result;
-    }
-    
-    LogMessage("Voltage limits set to %.2fV - %.2fV", dischargeVoltage, chargeVoltage);
-    
-    // Set source current limits (0 to charge current)
-    result = PSB_SetCurrentLimitsQueued(NULL, 0.0, chargeCurrent);
-    if (result != PSB_SUCCESS) {
-        LogError("Failed to set current limits: %s", PSB_GetErrorString(result));
-        return result;
-    }
-    
-    // Set sink current limits (0 to discharge current)
-    result = PSB_SetSinkCurrentLimitsQueued(NULL, 0.0, dischargeCurrent);
-    if (result != PSB_SUCCESS) {
-        LogError("Failed to set sink current limits: %s", PSB_GetErrorString(result));
-        return result;
-    }
-    
-    LogMessage("Current limits set - Source: 0-%.2fA, Sink: 0-%.2fA", chargeCurrent, dischargeCurrent);
-    
     // Set both source and sink current values
     result = PSB_SetCurrentQueued(NULL, chargeCurrent);
     if (result != PSB_SUCCESS) {
@@ -510,17 +477,6 @@ static int RunOperation(CDCTestContext *ctx) {
     result = PSB_SetSinkPowerQueued(NULL, CDC_POWER_LIMIT_W);
     if (result != PSB_SUCCESS) {
         LogWarning("Failed to set sink power: %s", PSB_GetErrorString(result));
-    }
-    
-    // Set power limits to avoid CP mode
-    result = PSB_SetPowerLimitQueued(NULL, CDC_POWER_LIMIT_W);
-    if (result != PSB_SUCCESS) {
-        LogWarning("Failed to set power limit: %s", PSB_GetErrorString(result));
-    }
-    
-    result = PSB_SetSinkPowerLimitQueued(NULL, CDC_POWER_LIMIT_W);
-    if (result != PSB_SUCCESS) {
-        LogWarning("Failed to set sink power limit: %s", PSB_GetErrorString(result));
     }
     
     // Enable PSB output
