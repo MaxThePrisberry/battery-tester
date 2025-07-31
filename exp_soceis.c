@@ -700,9 +700,9 @@ static int ConfigureGraphs(SOCEISTestContext *ctx) {
     SetCtrlAttribute(ctx->mainPanelHandle, ctx->graph2Handle, ATTR_XNAME, "SOC (%)");
     SetCtrlAttribute(ctx->mainPanelHandle, ctx->graph2Handle, ATTR_YNAME, "OCV (V)");
     
-    // Set axis ranges
+    // Set axis ranges - X-axis now goes to 150% to accommodate overcharge
     SetAxisScalingMode(ctx->mainPanelHandle, ctx->graph2Handle, VAL_BOTTOM_XAXIS, 
-                       VAL_MANUAL, 0.0, 100.0);
+                       VAL_MANUAL, 0.0, 150.0);  // Changed from 100.0 to 150.0
     SetAxisScalingMode(ctx->mainPanelHandle, ctx->graph2Handle, VAL_LEFT_YAXIS, 
                        VAL_MANUAL, ctx->params.dischargeVoltage * 0.9, 
                        ctx->params.chargeVoltage * 1.1);
@@ -725,7 +725,8 @@ static int ConfigureGraphs(SOCEISTestContext *ctx) {
 }
 
 static int CalculateTargetSOCs(SOCEISTestContext *ctx) {
-    // Always include 0% and 100%
+    // Initial allocation - start with expected targets up to 100%
+    // We'll grow this dynamically if needed
     ctx->numTargetSOCs = 2;  // Start with 0% and 100%
     
     // Add intermediate points based on interval
@@ -737,13 +738,14 @@ static int CalculateTargetSOCs(SOCEISTestContext *ctx) {
         }
     }
     
-    // Allocate array for target SOCs
-    ctx->targetSOCs = (double*)calloc(ctx->numTargetSOCs, sizeof(double));
+    // Allocate with extra space for potential growth
+    int initialCapacity = ctx->numTargetSOCs + 10;  // Extra space for >100% measurements
+    ctx->targetSOCs = (double*)calloc(initialCapacity, sizeof(double));
     if (!ctx->targetSOCs) {
         return ERR_OUT_OF_MEMORY;
     }
     
-    // Fill array
+    // Fill initial array
     int index = 0;
     ctx->targetSOCs[index++] = 0.0;  // Always start with 0%
     
@@ -755,19 +757,60 @@ static int CalculateTargetSOCs(SOCEISTestContext *ctx) {
         }
     }
     
-    ctx->targetSOCs[ctx->numTargetSOCs - 1] = 100.0;  // Always end with 100%
+    ctx->targetSOCs[ctx->numTargetSOCs - 1] = 100.0;  // Always include 100%
     
-    // Allocate measurement array
-    ctx->measurementCapacity = ctx->numTargetSOCs;
+    // Allocate measurement array with same extra capacity
+    ctx->measurementCapacity = initialCapacity;
     ctx->measurements = (EISMeasurement*)calloc(ctx->measurementCapacity, sizeof(EISMeasurement));
     if (!ctx->measurements) {
         return ERR_OUT_OF_MEMORY;
     }
     
-    LogMessage("Target SOC points: ");
+    LogMessage("Initial target SOC points: ");
     for (int i = 0; i < ctx->numTargetSOCs; i++) {
         LogMessage("  %.1f%%", ctx->targetSOCs[i]);
     }
+    
+    return SUCCESS;
+}
+
+static int AddDynamicTargetSOC(SOCEISTestContext *ctx, double targetSOC) {
+    // Check if we need to grow the arrays
+    if (ctx->numTargetSOCs >= ctx->measurementCapacity) {
+        // Grow by 10 more slots
+        int newCapacity = ctx->measurementCapacity + 10;
+        
+        // Reallocate targetSOCs array
+        double *newTargetSOCs = (double*)realloc(ctx->targetSOCs, newCapacity * sizeof(double));
+        if (!newTargetSOCs) {
+            LogError("Failed to grow targetSOCs array");
+            return ERR_OUT_OF_MEMORY;
+        }
+        ctx->targetSOCs = newTargetSOCs;
+        
+        // Reallocate measurements array
+        EISMeasurement *newMeasurements = (EISMeasurement*)realloc(ctx->measurements, 
+                                                                   newCapacity * sizeof(EISMeasurement));
+        if (!newMeasurements) {
+            LogError("Failed to grow measurements array");
+            return ERR_OUT_OF_MEMORY;
+        }
+        ctx->measurements = newMeasurements;
+        
+        // Initialize new measurement slots
+        for (int i = ctx->measurementCapacity; i < newCapacity; i++) {
+            memset(&ctx->measurements[i], 0, sizeof(EISMeasurement));
+        }
+        
+        ctx->measurementCapacity = newCapacity;
+        LogDebug("Grew measurement arrays to capacity %d", newCapacity);
+    }
+    
+    // Add the new target
+    ctx->targetSOCs[ctx->numTargetSOCs] = targetSOC;
+    ctx->numTargetSOCs++;
+    
+    LogMessage("Added dynamic target SOC: %.1f%%", targetSOC);
     
     return SUCCESS;
 }
@@ -1218,6 +1261,7 @@ static int RunChargingPhase(SOCEISTestContext *ctx) {
     PSBCommandResult cmdResult = {0};
     int result;
     int nextTargetIndex = 1;  // Skip 0% as we already measured it
+    int dynamicTargetsAdded = 0;  // Track if we've gone beyond 100%
     
     LogMessage("Starting charging phase...");
     
@@ -1283,7 +1327,7 @@ static int RunChargingPhase(SOCEISTestContext *ctx) {
     ctx->state = SOCEIS_STATE_CHARGING;
     SetCtrlVal(ctx->mainPanelHandle, PANEL_STR_PSB_STATUS, "Charging battery...");
     
-    // Main charging loop
+    // Main charging loop - continue until current threshold
     while (1) {
         // Check for cancellation
         if (ctx->state == SOCEIS_STATE_CANCELLED) {
@@ -1308,7 +1352,7 @@ static int RunChargingPhase(SOCEISTestContext *ctx) {
         
         PSB_Status *status = &statusResult.data.status;
         
-        // Update SOC tracking
+        // Update SOC tracking (no clamping to 100%)
         UpdateSOCTracking(ctx, status->voltage, status->current);
         
         // Log data if interval reached
@@ -1353,10 +1397,22 @@ static int RunChargingPhase(SOCEISTestContext *ctx) {
             
             nextTargetIndex++;
             
-            // Check if this was the last measurement
+            // Check if we've reached the last pre-calculated target
             if (nextTargetIndex >= ctx->numTargetSOCs) {
-                LogMessage("All EIS measurements completed");
-                break;
+                // Add a new dynamic target if SOC will continue rising
+                if (ctx->params.eisInterval > 0) {
+                    double nextTarget = ctx->targetSOCs[ctx->numTargetSOCs - 1] + ctx->params.eisInterval;
+                    result = AddDynamicTargetSOC(ctx, nextTarget);
+                    if (result != SUCCESS) {
+                        LogError("Failed to add dynamic target SOC");
+                        // Continue anyway, just won't take more measurements
+                    } else {
+                        dynamicTargetsAdded++;
+                        if (dynamicTargetsAdded == 1) {
+                            LogMessage("Battery capacity appears to be underestimated - continuing measurements beyond 100%%");
+                        }
+                    }
+                }
             }
             
             // Resume charging
@@ -1378,23 +1434,33 @@ static int RunChargingPhase(SOCEISTestContext *ctx) {
         if (fabs(status->current) < ctx->params.currentThreshold) {
             LogMessage("Charging completed - current below threshold (%.3f A < %.3f A)",
                       fabs(status->current), ctx->params.currentThreshold);
+            LogMessage("Final SOC: %.1f%%", ctx->currentSOC);
             
-            // Perform final measurement if not already at 100%
-            if (ctx->currentSOC < 99.0 && nextTargetIndex < ctx->numTargetSOCs) {
-                // Update SOC to 100%
-                ctx->currentSOC = 100.0;
-                SetCtrlVal(ctx->tabPanelHandle, ctx->socControl, ctx->currentSOC);
-                
-                // Disable output
-                params.outputEnable.enable = 0;
-                PSB_QueueCommandBlocking(PSB_GetGlobalQueueManager(), 
-                                       PSB_CMD_SET_OUTPUT_ENABLE,
-                                       &params, PSB_PRIORITY_HIGH, &cmdResult,
-                                       PSB_QUEUE_COMMAND_TIMEOUT_MS);
-                
-                // Perform final EIS measurement
+            // Perform final measurement at actual final SOC
+            params.outputEnable.enable = 0;
+            PSB_QueueCommandBlocking(PSB_GetGlobalQueueManager(), 
+                                   PSB_CMD_SET_OUTPUT_ENABLE,
+                                   &params, PSB_PRIORITY_HIGH, &cmdResult,
+                                   PSB_QUEUE_COMMAND_TIMEOUT_MS);
+            
+            // Add final measurement if not already at a target
+            int needFinalMeasurement = 1;
+            if (nextTargetIndex > 0 && nextTargetIndex <= ctx->numTargetSOCs) {
+                double lastMeasuredSOC = ctx->measurements[ctx->measurementCount - 1].actualSOC;
+                if (fabs(ctx->currentSOC - lastMeasuredSOC) < 1.0) {
+                    needFinalMeasurement = 0;  // Already have a measurement very close
+                }
+            }
+            
+            if (needFinalMeasurement) {
+                LogMessage("Taking final EIS measurement at %.1f%% SOC", ctx->currentSOC);
                 ctx->state = SOCEIS_STATE_MEASURING_EIS;
-                result = PerformEISMeasurement(ctx, 100.0);
+                
+                // Add this as a dynamic target
+                result = AddDynamicTargetSOC(ctx, ctx->currentSOC);
+                if (result == SUCCESS) {
+                    result = PerformEISMeasurement(ctx, ctx->currentSOC);
+                }
             }
             
             break;
@@ -1417,6 +1483,10 @@ static int RunChargingPhase(SOCEISTestContext *ctx) {
     ctx->currentLogFile = NULL;
     
     LogMessage("Charging phase completed");
+    if (dynamicTargetsAdded > 0) {
+        LogMessage("Note: Battery capacity was underestimated - took %d measurements beyond 100%% SOC", 
+                  dynamicTargetsAdded);
+    }
     
     return (ctx->state == SOCEIS_STATE_CANCELLED) ? ERR_CANCELLED : SUCCESS;
 }
@@ -1436,7 +1506,11 @@ static int UpdateSOCTracking(SOCEISTestContext *ctx, double voltage, double curr
         // Update SOC
         if (ctx->params.batteryCapacity_mAh > 0) {
             ctx->currentSOC = (ctx->accumulatedCapacity_mAh / ctx->params.batteryCapacity_mAh) * 100.0;
-            ctx->currentSOC = CLAMP(ctx->currentSOC, 0.0, 100.0);
+            
+            // Only clamp to minimum 0%
+            if (ctx->currentSOC < 0.0) {
+                ctx->currentSOC = 0.0;
+            }
         }
     }
     
