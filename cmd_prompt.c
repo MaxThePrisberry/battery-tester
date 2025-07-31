@@ -47,6 +47,22 @@ int CVICALLBACK CmdPromptSendCallback(int panel, int control, int event, void *c
 	return 0;
 }
 
+int CVICALLBACK CmdPromptInputCallback (int panel, int control, int event, void *callbackData, int eventData1, int eventData2){
+    if (event != EVENT_KEYPRESS || eventData1 != VAL_ENTER_VKEY) {
+		return 0;
+    }
+	
+	int threadID;
+	CmtScheduleThreadPoolFunction(g_threadPool, CmdPromptSendThread, NULL, &threadID);
+	
+	if (threadID == 0) {
+		LogPromptTextbox(CMD_ERROR, "There was an error scheduling the command send thread.");
+		return -1;
+	}
+	
+    return 1;
+}
+
 static void LogPromptTextbox(enum Status status, char *message) {
 	UIUpdateData *data = malloc(sizeof(UIUpdateData));
 	data->status = status;

@@ -55,7 +55,7 @@
 #define  PANEL_NUM_DTB_SETPOINT           40      /* control type: numeric, callback function: (none) */
 #define  PANEL_NUM_DTB_TEMPERATURE        41      /* control type: scale, callback function: (none) */
 #define  PANEL_TOGGLE_TEENSY              42      /* control type: binary, callback function: TestTeensyCallback */
-#define  PANEL_STR_CMD_PROMPT_INPUT       43      /* control type: string, callback function: (none) */
+#define  PANEL_STR_CMD_PROMPT_INPUT       43      /* control type: string, callback function: CmdPromptInputCallback */
 #define  PANEL_DEC_TMPCTRL                44      /* control type: deco, callback function: (none) */
 #define  PANEL_DEC_BIO_GRAPH              45      /* control type: deco, callback function: (none) */
 #define  PANEL_DECORATION                 46      /* control type: deco, callback function: (none) */
@@ -103,6 +103,7 @@
 
 int  CVICALLBACK CDCChargeCallback(int panel, int control, int event, void *callbackData, int eventData1, int eventData2);
 int  CVICALLBACK CDCDischargeCallback(int panel, int control, int event, void *callbackData, int eventData1, int eventData2);
+int  CVICALLBACK CmdPromptInputCallback(int panel, int control, int event, void *callbackData, int eventData1, int eventData2);
 int  CVICALLBACK CmdPromptSendCallback(int panel, int control, int event, void *callbackData, int eventData1, int eventData2);
 int  CVICALLBACK DTBRunStopCallback(int panel, int control, int event, void *callbackData, int eventData1, int eventData2);
 int  CVICALLBACK ImportSOCEISSettingsCallback(int panel, int control, int event, void *callbackData, int eventData1, int eventData2);
