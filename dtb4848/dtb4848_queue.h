@@ -77,6 +77,10 @@ typedef enum {
     // Alarm commands
     DTB_CMD_CLEAR_ALARM,
 	
+	// Front panel lock commands
+    DTB_CMD_SET_FRONT_PANEL_LOCK,
+    DTB_CMD_GET_FRONT_PANEL_LOCK,
+	
 	// Write access commands
 	DTB_CMD_ENABLE_WRITE_ACCESS,
 	DTB_CMD_DISABLE_WRITE_ACCESS,
@@ -99,6 +103,7 @@ typedef union {
     struct { double upperLimit; double lowerLimit; } alarmLimits;
     struct { DTB_Configuration config; } configure;
     struct { int pidNumber; } getPidParams;
+	struct { int lockMode; } frontPanelLock;
     struct { 
         unsigned char functionCode;
         unsigned short address;
@@ -117,6 +122,7 @@ typedef struct {
         double setpoint;
         DTB_PIDParams pidParams;
         int alarmActive;
+		int frontPanelLockMode;
 		int writeAccessEnabled;
         struct { unsigned char *rxData; int rxLength; } rawResponse;
     } data;
@@ -221,6 +227,12 @@ int DTB_GetAlarmStatusQueued(DTB_Handle *handle, int *alarmActive);
 
 // Alarm functions
 int DTB_ClearAlarmQueued(DTB_Handle *handle);
+
+// Front panel lock functions
+int DTB_SetFrontPanelLockQueued(DTB_Handle *handle, int lockMode);
+int DTB_GetFrontPanelLockQueued(DTB_Handle *handle, int *lockMode);
+int DTB_UnlockFrontPanelQueued(DTB_Handle *handle);
+int DTB_LockFrontPanelQueued(DTB_Handle *handle, int allowSetpointChange);
 
 // Write protection functions
 int DTB_EnableWriteAccessQueued(DTB_Handle *handle);

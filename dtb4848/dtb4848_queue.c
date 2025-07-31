@@ -33,6 +33,8 @@ static const char* g_commandTypeNames[] = {
     "GET_PID_PARAMS",
     "GET_ALARM_STATUS",
     "CLEAR_ALARM",
+	"SET_FRONT_PANEL_LOCK",
+	"GET_FRONT_PANEL_LOCK",
 	"ENABLE_WRITE_ACCESS",
 	"DISABLE_WRITE_ACCESS", 
 	"GET_WRITE_ACCESS_STATUS",
@@ -239,6 +241,16 @@ static int DTB_AdapterExecuteCommand(void *deviceContext, int commandType, void 
         case DTB_CMD_CLEAR_ALARM:
             cmdResult->errorCode = DTB_ClearAlarm(&ctx->handle);
             break;
+			
+		case DTB_CMD_SET_FRONT_PANEL_LOCK:
+		    cmdResult->errorCode = DTB_SetFrontPanelLock(&ctx->handle, 
+		        cmdParams->frontPanelLock.lockMode);
+		    break;
+		    
+		case DTB_CMD_GET_FRONT_PANEL_LOCK:
+		    cmdResult->errorCode = DTB_GetFrontPanelLock(&ctx->handle, 
+		        &cmdResult->data.frontPanelLockMode);
+		    break;
 			
 		case DTB_CMD_ENABLE_WRITE_ACCESS:
 		    cmdResult->errorCode = DTB_EnableWriteAccess(&ctx->handle);
@@ -704,6 +716,42 @@ int DTB_ClearAlarmQueued(DTB_Handle *handle) {
                                   DTB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
+int DTB_SetFrontPanelLockQueued(DTB_Handle *handle, int lockMode) {
+    if (!g_dtbQueueManager) return DTB_SetFrontPanelLock(handle, lockMode);
+    
+    DTBCommandParams params = {.frontPanelLock = {lockMode}};
+    DTBCommandResult result;
+    
+    return DTB_QueueCommandBlocking(g_dtbQueueManager, DTB_CMD_SET_FRONT_PANEL_LOCK,
+                                  &params, DTB_PRIORITY_HIGH, &result,
+                                  DTB_QUEUE_COMMAND_TIMEOUT_MS);
+}
+
+int DTB_GetFrontPanelLockQueued(DTB_Handle *handle, int *lockMode) {
+    if (!g_dtbQueueManager || !lockMode) return DTB_GetFrontPanelLock(handle, lockMode);
+    
+    DTBCommandParams params = {0};
+    DTBCommandResult result;
+    
+    int error = DTB_QueueCommandBlocking(g_dtbQueueManager, DTB_CMD_GET_FRONT_PANEL_LOCK,
+                                       &params, DTB_PRIORITY_NORMAL, &result,
+                                       DTB_QUEUE_COMMAND_TIMEOUT_MS);
+    
+    if (error == DTB_SUCCESS) {
+        *lockMode = result.data.frontPanelLockMode;
+    }
+    return error;
+}
+
+int DTB_UnlockFrontPanelQueued(DTB_Handle *handle) {
+    return DTB_SetFrontPanelLockQueued(handle, FRONT_PANEL_UNLOCKED);
+}
+
+int DTB_LockFrontPanelQueued(DTB_Handle *handle, int allowSetpointChange) {
+    int lockMode = allowSetpointChange ? FRONT_PANEL_LOCK_EXCEPT_SV : FRONT_PANEL_LOCK_ALL;
+    return DTB_SetFrontPanelLockQueued(handle, lockMode);
+}
+
 int DTB_EnableWriteAccessQueued(DTB_Handle *handle) {
     if (!g_dtbQueueManager) return DTB_EnableWriteAccess(handle);
     
@@ -774,6 +822,7 @@ int DTB_QueueGetCommandDelay(DTBCommandType type) {
             
         case DTB_CMD_SET_TEMPERATURE_LIMITS:
         case DTB_CMD_SET_ALARM_LIMITS:
+		case DTB_CMD_SET_FRONT_PANEL_LOCK:
             return DTB_DELAY_AFTER_WRITE_REGISTER;
             
         case DTB_CMD_FACTORY_RESET:
@@ -784,6 +833,7 @@ int DTB_QueueGetCommandDelay(DTBCommandType type) {
         case DTB_CMD_GET_SETPOINT:
         case DTB_CMD_GET_PID_PARAMS:
         case DTB_CMD_GET_ALARM_STATUS:
+		case DTB_CMD_GET_FRONT_PANEL_LOCK:
             return DTB_DELAY_AFTER_READ;
             
         case DTB_CMD_CLEAR_ALARM:

@@ -74,6 +74,7 @@
 #define BIT_OUTPUT1_STATUS          0x0801
 #define BIT_OUTPUT2_STATUS          0x0802
 #define BIT_ALARM1_STATUS           0x0803
+#define BIT_COMM_WRITE_ENABLE       0x0810
 #define BIT_TEMP_UNIT               0x0811
 #define BIT_DECIMAL_POINT           0x0812
 #define BIT_AUTO_TUNING             0x0813
@@ -124,6 +125,11 @@
 #define ALARM_ABSOLUTE_HIGH_LOW     5
 #define ALARM_ABSOLUTE_HIGH         6
 #define ALARM_ABSOLUTE_LOW          7
+
+// Front panel lock modes
+#define FRONT_PANEL_UNLOCKED        0    // All settings unlocked
+#define FRONT_PANEL_LOCK_ALL        1    // All settings locked
+#define FRONT_PANEL_LOCK_EXCEPT_SV  11   // Lock everything except setpoint (SV)
 
 /******************************************************************************
  * Data Structures
@@ -217,6 +223,12 @@ int DTB_SetControlMethod(DTB_Handle *handle, int method);
 int DTB_SetPIDMode(DTB_Handle *handle, int mode);
 int DTB_SetSensorType(DTB_Handle *handle, int sensorType);
 int DTB_SetTemperatureLimits(DTB_Handle *handle, double upperLimit, double lowerLimit);
+
+// Front Panel Lock Functions
+int DTB_SetFrontPanelLock(DTB_Handle *handle, int lockMode);
+int DTB_GetFrontPanelLock(DTB_Handle *handle, int *lockMode);
+int DTB_UnlockFrontPanel(DTB_Handle *handle);
+int DTB_LockFrontPanel(DTB_Handle *handle, int allowSetpointChange);
 
 // Write Protection Functions
 int DTB_EnableWriteAccess(DTB_Handle *handle);

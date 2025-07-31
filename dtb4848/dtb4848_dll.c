@@ -701,6 +701,97 @@ int DTB_SetTemperatureLimits(DTB_Handle *handle, double upperLimit, double lower
 }
 
 /******************************************************************************
+ * Front Panel Lock Functions
+ ******************************************************************************/
+
+int DTB_SetFrontPanelLock(DTB_Handle *handle, int lockMode) {
+    if (!handle || !handle->isConnected) return DTB_ERROR_NOT_CONNECTED;
+    
+    // Validate lock mode
+    if (lockMode != FRONT_PANEL_UNLOCKED && 
+        lockMode != FRONT_PANEL_LOCK_ALL && 
+        lockMode != FRONT_PANEL_LOCK_EXCEPT_SV) {
+        LogErrorEx(LOG_DEVICE_DTB, "Invalid front panel lock mode: %d", lockMode);
+        return DTB_ERROR_INVALID_PARAM;
+    }
+    
+    LogMessageEx(LOG_DEVICE_DTB, "Setting front panel lock mode: %d", lockMode);
+    
+    int result = DTB_WriteRegister(handle, REG_COMM_WRITE_ENABLE, (unsigned short)lockMode);
+    
+    if (result == DTB_SUCCESS) {
+        const char *modeStr = "UNKNOWN";
+        switch (lockMode) {
+            case FRONT_PANEL_UNLOCKED:
+                modeStr = "UNLOCKED";
+                break;
+            case FRONT_PANEL_LOCK_ALL:
+                modeStr = "LOCKED (all settings)";
+                break;
+            case FRONT_PANEL_LOCK_EXCEPT_SV:
+                modeStr = "LOCKED (except setpoint)";
+                break;
+        }
+        LogMessageEx(LOG_DEVICE_DTB, "Front panel lock set to: %s", modeStr);
+    } else {
+        LogErrorEx(LOG_DEVICE_DTB, "Failed to set front panel lock mode");
+    }
+    
+    return result;
+}
+
+int DTB_GetFrontPanelLock(DTB_Handle *handle, int *lockMode) {
+    if (!handle || !handle->isConnected || !lockMode) return DTB_ERROR_INVALID_PARAM;
+    
+    unsigned short lockStatus;
+    int result = DTB_ReadRegister(handle, REG_LOCK_STATUS, &lockStatus);
+    
+    if (result == DTB_SUCCESS) {
+        *lockMode = (int)lockStatus;
+        
+        const char *modeStr = "UNKNOWN";
+        switch (*lockMode) {
+            case FRONT_PANEL_UNLOCKED:
+                modeStr = "UNLOCKED";
+                break;
+            case FRONT_PANEL_LOCK_ALL:
+                modeStr = "LOCKED (all settings)";
+                break;
+            case FRONT_PANEL_LOCK_EXCEPT_SV:
+                modeStr = "LOCKED (except setpoint)";
+                break;
+            default:
+                modeStr = "CUSTOM";
+                break;
+        }
+        
+        LogMessageEx(LOG_DEVICE_DTB, "Front panel lock status: %s (value=%d)", 
+                     modeStr, *lockMode);
+    }
+    
+    return result;
+}
+
+int DTB_UnlockFrontPanel(DTB_Handle *handle) {
+    if (!handle || !handle->isConnected) return DTB_ERROR_NOT_CONNECTED;
+    
+    LogMessageEx(LOG_DEVICE_DTB, "Unlocking front panel...");
+    
+    return DTB_SetFrontPanelLock(handle, FRONT_PANEL_UNLOCKED);
+}
+
+int DTB_LockFrontPanel(DTB_Handle *handle, int allowSetpointChange) {
+    if (!handle || !handle->isConnected) return DTB_ERROR_NOT_CONNECTED;
+    
+    int lockMode = allowSetpointChange ? FRONT_PANEL_LOCK_EXCEPT_SV : FRONT_PANEL_LOCK_ALL;
+    
+    LogMessageEx(LOG_DEVICE_DTB, "Locking front panel (setpoint change %s)...",
+                 allowSetpointChange ? "allowed" : "blocked");
+    
+    return DTB_SetFrontPanelLock(handle, lockMode);
+}
+
+/******************************************************************************
  * Write Protection Functions
  ******************************************************************************/
 
@@ -709,20 +800,12 @@ int DTB_EnableWriteAccess(DTB_Handle *handle) {
     
     LogMessageEx(LOG_DEVICE_DTB, "Enabling write access...");
     
-    // Write 0x0000 to unlock write protection
-    int result = DTB_WriteRegister(handle, REG_COMM_WRITE_ENABLE, 0x0000);
+    // Write 1 to bit 0x0810 to enable write access
+    int result = DTB_WriteBit(handle, BIT_COMM_WRITE_ENABLE, 1);
     
     if (result == DTB_SUCCESS) {
         LogMessageEx(LOG_DEVICE_DTB, "Write access enabled");
-        
-        // Small delay to ensure it takes effect
         Delay(0.05);
-        
-        // Verify by reading lock status
-        unsigned short lockStatus;
-        if (DTB_ReadRegister(handle, REG_LOCK_STATUS, &lockStatus) == DTB_SUCCESS) {
-            LogMessageEx(LOG_DEVICE_DTB, "Lock status: 0x%04X", lockStatus);
-        }
     } else {
         LogErrorEx(LOG_DEVICE_DTB, "Failed to enable write access");
     }
@@ -735,8 +818,8 @@ int DTB_DisableWriteAccess(DTB_Handle *handle) {
     
     LogMessageEx(LOG_DEVICE_DTB, "Disabling write access...");
     
-    // Write 0x00FF to enable write protection
-    int result = DTB_WriteRegister(handle, REG_COMM_WRITE_ENABLE, 0x00FF);
+    // Write 0 to bit 0x0810 to disable write access
+    int result = DTB_WriteBit(handle, BIT_COMM_WRITE_ENABLE, 0);
     
     if (result == DTB_SUCCESS) {
         LogMessageEx(LOG_DEVICE_DTB, "Write access disabled");
@@ -750,14 +833,14 @@ int DTB_DisableWriteAccess(DTB_Handle *handle) {
 int DTB_GetWriteAccessStatus(DTB_Handle *handle, int *isEnabled) {
     if (!handle || !handle->isConnected || !isEnabled) return DTB_ERROR_INVALID_PARAM;
     
-    unsigned short lockStatus;
-    int result = DTB_ReadRegister(handle, REG_LOCK_STATUS, &lockStatus);
+    // Read bit 0x0810 to get write access status
+    int bitValue;
+    int result = DTB_ReadBit(handle, BIT_COMM_WRITE_ENABLE, &bitValue);
     
     if (result == DTB_SUCCESS) {
-        // 0x0000 means write enabled, anything else means write protected
-        *isEnabled = (lockStatus == 0x0000) ? 1 : 0;
-        LogMessageEx(LOG_DEVICE_DTB, "Write access status: %s (0x%04X)", 
-                     *isEnabled ? "ENABLED" : "DISABLED", lockStatus);
+        *isEnabled = bitValue;
+        LogMessageEx(LOG_DEVICE_DTB, "Write access status: %s", 
+                     *isEnabled ? "ENABLED" : "DISABLED");
     }
     
     return result;
