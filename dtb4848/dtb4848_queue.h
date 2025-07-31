@@ -63,6 +63,7 @@ typedef enum {
     DTB_CMD_SET_SENSOR_TYPE,
     DTB_CMD_SET_TEMPERATURE_LIMITS,
     DTB_CMD_SET_ALARM_LIMITS,
+	DTB_CMD_SET_HEATING_COOLING,
     DTB_CMD_CONFIGURE,
     DTB_CMD_CONFIGURE_DEFAULT,
     DTB_CMD_FACTORY_RESET,
@@ -104,6 +105,7 @@ typedef union {
     struct { DTB_Configuration config; } configure;
     struct { int pidNumber; } getPidParams;
 	struct { int lockMode; } frontPanelLock;
+	struct { int mode; } heatingCooling;
     struct { 
         unsigned char functionCode;
         unsigned short address;
@@ -214,6 +216,7 @@ int DTB_SetPIDModeQueued(DTB_Handle *handle, int mode);
 int DTB_SetSensorTypeQueued(DTB_Handle *handle, int sensorType);
 int DTB_SetTemperatureLimitsQueued(DTB_Handle *handle, double upperLimit, double lowerLimit);
 int DTB_SetAlarmLimitsQueued(DTB_Handle *handle, double upperLimit, double lowerLimit);
+int DTB_SetHeatingCoolingQueued(DTB_Handle *handle, int mode);
 int DTB_ConfigureQueued(DTB_Handle *handle, const DTB_Configuration *config);
 int DTB_ConfigureDefaultQueued(DTB_Handle *handle);
 int DTB_FactoryResetQueued(DTB_Handle *handle);

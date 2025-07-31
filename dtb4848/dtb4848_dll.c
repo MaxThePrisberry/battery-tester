@@ -376,6 +376,10 @@ int DTB_Configure(DTB_Handle *handle, const DTB_Configuration *config) {
     result = DTB_SetSensorType(handle, config->sensorType);
     if (result != DTB_SUCCESS) return result;
     
+    // Set heating/cooling mode
+    result = DTB_SetHeatingCooling(handle, config->heatingCoolingMode);
+    if (result != DTB_SUCCESS) return result;
+    
     // Set temperature limits
     result = DTB_SetTemperatureLimits(handle, config->upperTempLimit, config->lowerTempLimit);
     if (result != DTB_SUCCESS) return result;
@@ -409,6 +413,7 @@ int DTB_ConfigureDefault(DTB_Handle *handle) {
         .sensorType = SENSOR_TYPE_K,
         .controlMethod = CONTROL_METHOD_PID,
         .pidMode = PID_MODE_AUTO,
+        .heatingCoolingMode = HEATING_COOLING_COOL_HEAT,
         .upperTempLimit = K_TYPE_MAX_TEMP,
         .lowerTempLimit = K_TYPE_MIN_TEMP,
         .alarmType = ALARM_DISABLED,
@@ -698,6 +703,15 @@ int DTB_SetTemperatureLimits(DTB_Handle *handle, double upperLimit, double lower
     result = DTB_WriteRegister(handle, REG_LOWER_LIMIT_TEMP, (unsigned short)lowerValue);
     
     return result;
+}
+
+int DTB_SetHeatingCooling(DTB_Handle *handle, int mode) {
+    if (!handle || !handle->isConnected) return DTB_ERROR_NOT_CONNECTED;
+    if (mode < 0 || mode > 3) return DTB_ERROR_INVALID_PARAM;
+    
+    LogMessageEx(LOG_DEVICE_DTB, "Setting heating/cooling mode: %d", mode);
+    
+    return DTB_WriteRegister(handle, REG_HEATING_COOLING, (unsigned short)mode);
 }
 
 /******************************************************************************

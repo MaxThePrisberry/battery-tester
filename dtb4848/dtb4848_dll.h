@@ -131,6 +131,12 @@
 #define FRONT_PANEL_LOCK_ALL        1    // All settings locked
 #define FRONT_PANEL_LOCK_EXCEPT_SV  11   // Lock everything except setpoint (SV)
 
+// Heating/Cooling modes
+#define HEATING_COOLING_HEATING         0   // Heating only
+#define HEATING_COOLING_COOLING         1   // Cooling only  
+#define HEATING_COOLING_HEAT_COOL       2   // Heating/Cooling
+#define HEATING_COOLING_COOL_HEAT       3   // Cooling/Heating
+
 /******************************************************************************
  * Data Structures
  ******************************************************************************/
@@ -176,11 +182,11 @@ typedef struct {
     double firmwareVersion;
 } DTB_DiscoveryResult;
 
-// Configuration structure for one-shot setup
 typedef struct {
     int sensorType;             // Sensor type (default: K-type)
     int controlMethod;          // Control method (default: PID)
     int pidMode;                // PID selection mode (default: AUTO)
+    int heatingCoolingMode;     // Heating/cooling mode (default: Cooling/Heating)
     double upperTempLimit;      // Upper temperature limit
     double lowerTempLimit;      // Lower temperature limit
     int alarmType;              // Alarm configuration
@@ -223,6 +229,7 @@ int DTB_SetControlMethod(DTB_Handle *handle, int method);
 int DTB_SetPIDMode(DTB_Handle *handle, int mode);
 int DTB_SetSensorType(DTB_Handle *handle, int sensorType);
 int DTB_SetTemperatureLimits(DTB_Handle *handle, double upperLimit, double lowerLimit);
+int DTB_SetHeatingCooling(DTB_Handle *handle, int mode);
 
 // Front Panel Lock Functions
 int DTB_SetFrontPanelLock(DTB_Handle *handle, int lockMode);

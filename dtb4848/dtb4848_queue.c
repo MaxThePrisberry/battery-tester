@@ -24,6 +24,7 @@ static const char* g_commandTypeNames[] = {
     "SET_SENSOR_TYPE",
     "SET_TEMPERATURE_LIMITS",
     "SET_ALARM_LIMITS",
+	"SET_HEATING_COOLING",
     "CONFIGURE",
     "CONFIGURE_DEFAULT",
     "FACTORY_RESET",
@@ -203,6 +204,10 @@ static int DTB_AdapterExecuteCommand(void *deviceContext, int commandType, void 
                 cmdParams->alarmLimits.upperLimit,
                 cmdParams->alarmLimits.lowerLimit);
             break;
+		
+		case DTB_CMD_SET_HEATING_COOLING:
+		    cmdResult->errorCode = DTB_SetHeatingCooling(&ctx->handle, cmdParams->heatingCooling.mode);
+		    break;
             
         case DTB_CMD_CONFIGURE:
             cmdResult->errorCode = DTB_Configure(&ctx->handle, &cmdParams->configure.config);
@@ -592,6 +597,17 @@ int DTB_SetAlarmLimitsQueued(DTB_Handle *handle, double upperLimit, double lower
                                   DTB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
+int DTB_SetHeatingCoolingQueued(DTB_Handle *handle, int mode) {
+    if (!g_dtbQueueManager) return DTB_SetHeatingCooling(handle, mode);
+    
+    DTBCommandParams params = {.heatingCooling = {mode}};
+    DTBCommandResult result;
+    
+    return DTB_QueueCommandBlocking(g_dtbQueueManager, DTB_CMD_SET_HEATING_COOLING,
+                                  &params, DTB_PRIORITY_HIGH, &result,
+                                  DTB_QUEUE_COMMAND_TIMEOUT_MS);
+}
+
 int DTB_ConfigureQueued(DTB_Handle *handle, const DTB_Configuration *config) {
     if (!g_dtbQueueManager) return DTB_Configure(handle, config);
     
@@ -816,6 +832,7 @@ int DTB_QueueGetCommandDelay(DTBCommandType type) {
         case DTB_CMD_SET_CONTROL_METHOD:
         case DTB_CMD_SET_PID_MODE:
         case DTB_CMD_SET_SENSOR_TYPE:
+		case DTB_CMD_SET_HEATING_COOLING:
         case DTB_CMD_CONFIGURE:
         case DTB_CMD_CONFIGURE_DEFAULT:
             return DTB_DELAY_CONFIG_CHANGE;
@@ -892,30 +909,39 @@ int DTB_ConfigureAtomic(DTB_Handle *handle, const DTB_Configuration *config,
     result = DTB_QueueAddToTransaction(queueMgr, txn, DTB_CMD_SET_SENSOR_TYPE, &params);
     if (result != SUCCESS) goto cleanup;
     
-    // 2. Set temperature limits
+    // 2. Set heating/cooling mode
+    params.heatingCooling.mode = config->heatingCoolingMode;
+    result = DTB_QueueAddToTransaction(queueMgr, txn, DTB_CMD_SET_HEATING_COOLING, &params);
+    if (result != SUCCESS) goto cleanup;
+    
+    // 3. Set temperature limits
     params.temperatureLimits.upperLimit = config->upperTempLimit;
     params.temperatureLimits.lowerLimit = config->lowerTempLimit;
     result = DTB_QueueAddToTransaction(queueMgr, txn, DTB_CMD_SET_TEMPERATURE_LIMITS, &params);
     if (result != SUCCESS) goto cleanup;
     
-    // 3. Set control method
+    // 4. Set control method
     params.controlMethod.method = config->controlMethod;
     result = DTB_QueueAddToTransaction(queueMgr, txn, DTB_CMD_SET_CONTROL_METHOD, &params);
     if (result != SUCCESS) goto cleanup;
     
-    // 4. Set PID mode (if using PID control)
+    // 5. Set PID mode (if using PID control)
     if (config->controlMethod == CONTROL_METHOD_PID) {
         params.pidMode.mode = config->pidMode;
         result = DTB_QueueAddToTransaction(queueMgr, txn, DTB_CMD_SET_PID_MODE, &params);
         if (result != SUCCESS) goto cleanup;
     }
     
-    // 5. Configure alarm if enabled
+    // 6. Configure alarm if enabled
     if (config->alarmType != ALARM_DISABLED) {
         params.alarmLimits.upperLimit = config->alarmUpperLimit;
         params.alarmLimits.lowerLimit = config->alarmLowerLimit;
         result = DTB_QueueAddToTransaction(queueMgr, txn, DTB_CMD_SET_ALARM_LIMITS, &params);
         if (result != SUCCESS) goto cleanup;
+        
+        // Note: Setting alarm type requires a direct register write
+        // This would need to be added as a separate command type if needed
+        // For now, alarm type setting is not included in the atomic transaction
     }
     
     // Commit transaction
