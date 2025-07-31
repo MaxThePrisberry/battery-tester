@@ -9,7 +9,9 @@
 #include "common.h"
 #include "cmd_prompt.h"
 #include "logging.h"
+#include "controls.h"
 #include "teensy_queue.h"
+#include "dtb4848_queue.h"
 
 typedef struct {
 	enum Status {
@@ -30,6 +32,8 @@ static void LogPromptTextbox(enum Status status, char *message);
 static void DeferredPromptTextboxUpdate(void *data);
 static int DeviceSelect(CommandContext *ctx);
 static int TeensyCommandManager(CommandContext *ctx);
+static int DTBCommandManager(CommandContext *ctx);
+static int ControlsCommandManager(CommandContext *ctx);
 
 int CVICALLBACK CmdPromptSendCallback(int panel, int control, int event, void *callbackData, int eventData1, int eventData2){
 	if (event != EVENT_COMMIT) {
@@ -148,6 +152,14 @@ static int DeviceSelect(CommandContext *ctx) {
 		case ('T' << 16 | 'N' << 8 | 'Y'):
 			TeensyCommandManager(ctx);
 			break;
+		
+		case ('D' << 16 | 'T' << 8 | 'B'):
+			DTBCommandManager(ctx);
+			break;
+			
+		case ('C' << 16 | 'T' << 8 | 'L'):
+			ControlsCommandManager(ctx);
+			break;
 			
 		default:
 			LogPromptTextbox(CMD_ERROR, "No such device.");
@@ -156,7 +168,7 @@ static int DeviceSelect(CommandContext *ctx) {
 	return 0;
 }
 
-int TeensyCommandManager(CommandContext *ctx) {
+static int TeensyCommandManager(CommandContext *ctx) {
 	if (strlen(ctx->command) != 4) {
 		LogPromptTextbox(CMD_ERROR, "Teensy serial commands must be exactly 4 characters.");
 		return 0;
@@ -174,6 +186,67 @@ int TeensyCommandManager(CommandContext *ctx) {
 	}
 	
 	LogPromptTextbox(CMD_OUTPUT, response);
+	
+	return 0;
+}
+
+static int DTBCommandManager(CommandContext *ctx) {
+	if (strcmp(ctx->command, "RESET") == 0) {
+		int error = DTB_FactoryResetQueued(NULL);
+		
+		if (error != SUCCESS) {
+			char message[1024];
+			snprintf(message, 1024, "Reset command failed: %d : %s", error, GetErrorString(error));
+			LogPromptTextbox(CMD_ERROR, message);
+			return -1;
+		}
+		
+		LogPromptTextbox(CMD_OUTPUT, "Reset command success.");
+	} else if (strcmp(ctx->command, "SETUP") == 0) {
+		int error = DTB_EnableWriteAccessQueued(NULL);
+		
+		if (error != SUCCESS) {
+			char message[1024];
+			snprintf(message, 1024, "Write access command failed: %d : %s", error, GetErrorString(error));
+			LogPromptTextbox(CMD_ERROR, message);
+			return -1;
+		}
+		
+		error = DTB_ConfigureDefaultQueued(NULL);
+		
+		if (error != SUCCESS) {
+			char message[1024];
+			snprintf(message, 1024, "Configure command failed: %d : %s", error, GetErrorString(error));
+			LogPromptTextbox(CMD_ERROR, message);
+			return -1;
+		}
+		
+		LogPromptTextbox(CMD_OUTPUT, "Setup command success.");
+	} else if (strcmp(ctx->command, "AT") == 0) {
+		int error = DTB_StartAutoTuningQueued(NULL);
+		
+		if (error != SUCCESS) {
+			char message[1024];
+			snprintf(message, 1024, "Autotune command failed: %d : %s", error, GetErrorString(error));
+			LogPromptTextbox(CMD_ERROR, message);
+			return -1;
+		}
+		
+		LogPromptTextbox(CMD_OUTPUT, "Autotune command success.");
+	} else {
+		LogPromptTextbox(CMD_ERROR, "Invalid DTB command.");
+	}
+	
+	return 0;
+}
+
+static int ControlsCommandManager(CommandContext *ctx) {
+	if (strcmp(ctx->command, "LOAD") == 0) {
+		Controls_UpdateFromDeviceStates();		
+		LogPromptTextbox(CMD_OUTPUT, "Update request completed.");
+	} else {
+		LogPromptTextbox(CMD_ERROR, "Invalid controls command.");
+	}
 	
 	return 0;
 }

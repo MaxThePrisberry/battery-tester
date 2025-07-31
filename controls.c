@@ -151,17 +151,14 @@ void Controls_UpdateFromDeviceStates(void) {
                 DTB_Status status;
                 if (DTB_GetStatusQueued(dtbHandle, &status) == DTB_SUCCESS) {
                     int stateChanged = (status.outputEnabled != g_controls.lastKnownDTBRunState);
-                    int setpointChanged = (fabs(status.setPoint - g_controls.lastKnownDTBSetpoint) > 0.1);
+                    int setpointChanged = (fabs(status.setPoint - g_controls.lastKnownDTBSetpoint) >= 0.1);
                     
                     if (stateChanged) {
                         g_controls.lastKnownDTBRunState = status.outputEnabled;
                         UpdateDTBButtonState(status.outputEnabled);
                     }
                     
-                    // Update setpoint display only if it's significantly different
-                    // This happens on initial sync or if device setpoint was changed externally
-                    if (setpointChanged && g_controls.lastKnownDTBSetpoint == 0.0) {
-                        // Initial sync - update the display
+                    if (setpointChanged) {
                         SetCtrlVal(g_controls.panelHandle, PANEL_NUM_DTB_SETPOINT, status.setPoint);
                     }
                     
