@@ -13,19 +13,9 @@
 #include "teensy_queue.h"
 #include "dtb4848_queue.h"
 
-typedef struct {
-	enum Status {
-		CMD_ERROR = 0,
-		CMD_INPUT,
-		CMD_OUTPUT
-	} status;
-	char *message;
-} UIUpdateData;
-
-typedef struct {
-	char *command;
-	int commandLength;
-} CommandContext;
+/******************************************************************************
+ * Static Functions
+ ******************************************************************************/
 
 static int CmdPromptSendThread();
 static void LogPromptTextbox(enum Status status, char *message);
@@ -35,11 +25,16 @@ static int TeensyCommandManager(CommandContext *ctx);
 static int DTBCommandManager(CommandContext *ctx);
 static int ControlsCommandManager(CommandContext *ctx);
 
+/******************************************************************************
+ * UI panel CVICALLBACKS
+ ******************************************************************************/
+
 int CVICALLBACK CmdPromptSendCallback(int panel, int control, int event, void *callbackData, int eventData1, int eventData2){
 	if (event != EVENT_COMMIT) {
 		return 0;
 	}
 	
+	// Schedule the prompt processing thread
 	int threadID;
 	CmtScheduleThreadPoolFunction(g_threadPool, CmdPromptSendThread, NULL, &threadID);
 	
@@ -56,6 +51,7 @@ int CVICALLBACK CmdPromptInputCallback (int panel, int control, int event, void 
 		return 0;
     }
 	
+	// Schedule the prompt processing thread
 	int threadID;
 	CmtScheduleThreadPoolFunction(g_threadPool, CmdPromptSendThread, NULL, &threadID);
 	
@@ -67,6 +63,11 @@ int CVICALLBACK CmdPromptInputCallback (int panel, int control, int event, void 
     return 1;
 }
 
+/******************************************************************************
+ * Helper functions
+ ******************************************************************************/
+
+// Function to print out a message to the prompt textbox
 static void LogPromptTextbox(enum Status status, char *message) {
 	UIUpdateData *data = malloc(sizeof(UIUpdateData));
 	data->status = status;
@@ -74,6 +75,7 @@ static void LogPromptTextbox(enum Status status, char *message) {
 	PostDeferredCall(DeferredPromptTextboxUpdate, data);
 }
 
+// Callback function for the main UI thread to update the textbox
 static void DeferredPromptTextboxUpdate(void *callbackData) {
 	UIUpdateData *data = (UIUpdateData*)callbackData;
 	
@@ -104,21 +106,30 @@ static void DeferredPromptTextboxUpdate(void *callbackData) {
 	}
 }
 
+/******************************************************************************
+ * Main prompt processing thread
+ ******************************************************************************/
+
 static int CmdPromptSendThread() {
+	// Create command context
 	CommandContext *ctx = malloc(sizeof(CommandContext));
 	memset(ctx, 0, sizeof(CommandContext));
 	
+	// Get the current string control content length
 	int commandLength;
 	GetCtrlAttribute(g_mainPanelHandle, PANEL_STR_CMD_PROMPT_INPUT, ATTR_STRING_TEXT_LENGTH, &commandLength);
 	
+	// Dynamically allocate memory for the command, trim it, store it in the context
 	char *raw = malloc(commandLength + 1);
 	GetCtrlVal(g_mainPanelHandle, PANEL_STR_CMD_PROMPT_INPUT, raw);
 	char *trimmed = TrimWhitespace(raw);
 	ctx->command = my_strdup(trimmed);
 	free(raw);
 	
+	// Clear the control for the next command
 	SetCtrlVal(g_mainPanelHandle, PANEL_STR_CMD_PROMPT_INPUT, "");
 	
+	// Check to see if the command is the appropriate length
 	commandLength = strlen(ctx->command);
 	if (commandLength < 4) {
 		goto cleanup;
@@ -127,8 +138,10 @@ static int CmdPromptSendThread() {
 		goto cleanup;
 	}
 	
+	// Log the input to the textbox so the user can see the send/response log
 	LogPromptTextbox(CMD_INPUT, ctx->command);
 	
+	// Pass the command to the device selector
 	DeviceSelect(ctx);
 	
 cleanup:
@@ -139,6 +152,7 @@ cleanup:
 }
 
 static int DeviceSelect(CommandContext *ctx) {
+	// The first three letters of the command delineate which manager should handle the command
 	int deviceCode = (ctx->command[0] << 16 | ctx->command[1] << 8 | ctx->command[2]);
 	
 	// Remove first three characters specifying device
@@ -148,6 +162,7 @@ static int DeviceSelect(CommandContext *ctx) {
 	ctx->command = trimmed;
 	ctx->commandLength -= 3;
 	
+	// Pass the command to the appropriate device manager
 	switch (deviceCode) {
 		case ('T' << 16 | 'N' << 8 | 'Y'):
 			TeensyCommandManager(ctx);
@@ -167,6 +182,10 @@ static int DeviceSelect(CommandContext *ctx) {
 	
 	return 0;
 }
+
+/******************************************************************************
+ * Device command managers
+ ******************************************************************************/
 
 static int TeensyCommandManager(CommandContext *ctx) {
 	if (strlen(ctx->command) != 4) {
@@ -242,6 +261,7 @@ static int DTBCommandManager(CommandContext *ctx) {
 
 static int ControlsCommandManager(CommandContext *ctx) {
 	if (strcmp(ctx->command, "LOAD") == 0) {
+		// Try to reload the PSB and DTB values
 		Controls_UpdateFromDeviceStates();		
 		LogPromptTextbox(CMD_OUTPUT, "Update request completed.");
 	} else {
