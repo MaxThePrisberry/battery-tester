@@ -8,6 +8,8 @@
 #include "utils.h"
 #include "biologic_dll.h"  // For BL_GetErrorString
 #include "psb10000_dll.h"  // For PSB_GetErrorString
+#include "teensy_dll.h"    // For TNY_GetErrorString
+#include "dtb4848_dll.h"   // FOr DTB_GetErrorString
 #include "BatteryTester.h" // For UI control IDs
 #include "logging.h"       // For LogWarning
 #include <errno.h>  // For errno
@@ -45,13 +47,14 @@ const char* GetErrorString(int errorCode) {
         case ERR_NOT_SUPPORTED: return "Operation not supported";
         case ERR_INVALID_STATE: return "Invalid state";
         case ERR_COMM_FAILED: return "Communication failed";
+        case ERR_NOT_CONNECTED: return "Device not connected";
         
         // Queue-specific errors
         case ERR_QUEUE_FULL: return "Command queue is full";
         case ERR_QUEUE_EMPTY: return "Command queue is empty";
         case ERR_QUEUE_TIMEOUT: return "Queue operation timed out";
         case ERR_QUEUE_NOT_INIT: return "Queue not initialized";
-		case ERR_CANCELLED: return "Operation was cancelled";
+        case ERR_CANCELLED: return "Operation was cancelled";
         
         // UI errors (-5000 range)
         case ERR_UI: return "UI error";
@@ -68,8 +71,28 @@ const char* GetErrorString(int errorCode) {
     }
     
     // Check if it's a PSB error (-3000 range)
-    if (errorCode <= ERR_BASE_PSB && errorCode > (ERR_BASE_PSB - 100)) {
+    if (errorCode <= ERR_BASE_PSB && errorCode > (ERR_BASE_PSB - 1000)) {
         return PSB_GetErrorString(errorCode);
+    }
+    
+    // Check if it's a DTB error (-8000 range)
+    if (errorCode <= ERR_BASE_DTB && errorCode > (ERR_BASE_DTB - 1000)) {
+        return DTB_GetErrorString(errorCode);
+    }
+    
+    // Check if it's a TNY (Teensy) error (-9000 range)
+    if (errorCode <= ERR_BASE_TNY && errorCode > (ERR_BASE_TNY - 1000)) {
+        return TNY_GetErrorString(errorCode);
+    }
+    
+    // Check if it's a Test error (-4000 range)
+    if (errorCode <= ERR_BASE_TEST && errorCode > (ERR_BASE_TEST - 1000)) {
+        return "Test execution error";
+    }
+    
+    // Check if it's a File error (-6000 range)
+    if (errorCode <= ERR_BASE_FILE && errorCode > (ERR_BASE_FILE - 1000)) {
+        return "File operation error";
     }
     
     // Default
@@ -151,6 +174,51 @@ int ParseInt(const char *str, int *value) {
     
     *value = (int)temp;
     return SUCCESS;
+}
+
+char* my_strdup(const char* s) {
+    if (s == NULL) {
+        return NULL;
+    }
+    
+    size_t len = strlen(s) + 1;
+    char* new_s = (char*)malloc(len);
+    if (new_s == NULL) {
+        return NULL;
+    }
+    
+    memcpy(new_s, s, len);
+    return new_s;
+}
+
+char *my_strtok_r(char *s, const char *delim, char **saveptr) {
+    char *token;
+
+    if (s == NULL) {
+        s = *saveptr;
+    }
+
+    // Skip leading delimiters
+    s += strspn(s, delim);
+
+    if (*s == '\0') {
+        *saveptr = s;
+        return NULL;
+    }
+
+    token = s;
+
+    // Find the end of the token
+    s = strpbrk(token, delim);
+
+    if (s == NULL) {
+        *saveptr = token + strlen(token);
+    } else {
+        *s = '\0';
+        *saveptr = s + 1;
+    }
+
+    return token;
 }
 
 /******************************************************************************

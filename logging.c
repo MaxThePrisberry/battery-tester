@@ -82,54 +82,6 @@ static void CleanupLogging(void);
 static void CVICALLBACK DeferredTextBoxUpdate(void *callbackData);
 
 /******************************************************************************
- * String Utility Functions (made static)
- ******************************************************************************/
-static char* my_strdup(const char* s) {
-    if (s == NULL) {
-        return NULL;
-    }
-    
-    size_t len = strlen(s) + 1;
-    char* new_s = (char*)malloc(len);
-    if (new_s == NULL) {
-        return NULL;
-    }
-    
-    memcpy(new_s, s, len);
-    return new_s;
-}
-
-static char *my_strtok_r(char *s, const char *delim, char **saveptr) {
-    char *token;
-
-    if (s == NULL) {
-        s = *saveptr;
-    }
-
-    // Skip leading delimiters
-    s += strspn(s, delim);
-
-    if (*s == '\0') {
-        *saveptr = s;
-        return NULL;
-    }
-
-    token = s;
-
-    // Find the end of the token
-    s = strpbrk(token, delim);
-
-    if (s == NULL) {
-        *saveptr = token + strlen(token);
-    } else {
-        *s = '\0';
-        *saveptr = s + 1;
-    }
-
-    return token;
-}
-
-/******************************************************************************
  * Deferred UI Update Callback
  ******************************************************************************/
 static void CVICALLBACK DeferredTextBoxUpdate(void *callbackData) {

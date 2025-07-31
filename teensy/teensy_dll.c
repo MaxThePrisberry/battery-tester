@@ -132,8 +132,8 @@ int TNY_TestConnection(TNY_Handle *handle) {
     
     PrintDebug("Testing connection by setting pin 0 low");
     
-    // Set pin 0 low as a test
-    return TNY_SetPin(handle, 0, TNY_PIN_STATE_LOW);
+    // Set pin 13 low as a test (the LED pin)
+    return TNY_SetPin(handle, 13, TNY_PIN_STATE_LOW);
 }
 
 /******************************************************************************

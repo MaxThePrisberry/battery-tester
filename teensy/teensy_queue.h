@@ -49,6 +49,9 @@ typedef enum {
     // Pin control commands
     TNY_CMD_SET_PIN,
     TNY_CMD_SET_MULTIPLE_PINS,
+	
+	// Raw interaction command
+	TNY_CMD_SEND_RAW_COMMAND,
     
     // Test command
     TNY_CMD_TEST_CONNECTION,
@@ -69,6 +72,11 @@ typedef union {
         int count;
     } setMultiplePins;
     
+	struct {
+		char *command;
+		char *response;
+		int responseSize;
+	} sendRawCommand;	
 } TNYCommandParams;
 
 // Command result structure
@@ -155,12 +163,16 @@ int TNY_QueueCommitTransaction(TNYQueueManager *mgr, TransactionHandle txn,
 int TNY_QueueCancelTransaction(TNYQueueManager *mgr, TransactionHandle txn);
 
 /******************************************************************************
- * Wrapper Functions (Direct replacements for existing Teensy functions)
+ * Wrapper Functions (the handle parameter is only used to send the raw command
+ * in the case that queue doesn't exist - pass NULL in the majority of cases)
  ******************************************************************************/
 
 // Pin control functions
 int TNY_SetPinQueued(TNY_Handle *handle, int pin, int state);
 int TNY_SetMultiplePinsQueued(TNY_Handle *handle, const int *pins, const int *states, int count);
+
+// Send raw command (Should only be used by cmd_prompt.c/h)
+int TNY_SendRawCommandQueued(TNY_Handle *handle, char *command, char *response, int responseSize);
 
 // Test function
 int TNY_TestConnectionQueued(TNY_Handle *handle);

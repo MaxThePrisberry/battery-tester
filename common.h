@@ -89,11 +89,11 @@
 #define ERR_NOT_CONNECTED       (ERR_BASE_SYSTEM - 11)
 
 // Queue-specific errors
-#define ERR_QUEUE_FULL          (ERR_BASE_SYSTEM - 11)
-#define ERR_QUEUE_EMPTY         (ERR_BASE_SYSTEM - 12)
-#define ERR_QUEUE_TIMEOUT       (ERR_BASE_SYSTEM - 13)
-#define ERR_QUEUE_NOT_INIT      (ERR_BASE_SYSTEM - 14)
-#define ERR_CANCELLED           (ERR_BASE_SYSTEM - 15)
+#define ERR_QUEUE_FULL          (ERR_BASE_SYSTEM - 20)
+#define ERR_QUEUE_EMPTY         (ERR_BASE_SYSTEM - 21)
+#define ERR_QUEUE_TIMEOUT       (ERR_BASE_SYSTEM - 22)
+#define ERR_QUEUE_NOT_INIT      (ERR_BASE_SYSTEM - 23)
+#define ERR_CANCELLED           (ERR_BASE_SYSTEM - 24)
 
 // UI errors (-5000 to -5999)
 #define ERR_UI                  (ERR_BASE_UI - 1)
@@ -380,6 +380,8 @@ void SetLastErrorMessage(int errorCode, const char *format, ...);  // Renamed to
 char* TrimWhitespace(char *str);
 int ParseDouble(const char *str, double *value);
 int ParseInt(const char *str, int *value);
+char* my_strdup(const char* s);
+char *my_strtok_r(char *s, const char *delim, char **saveptr);
 
 // Time utilities  
 double GetTimestamp(void);  // Renamed to avoid Windows GetCurrentTime macro conflict

@@ -93,7 +93,7 @@ int TNY_Initialize(TNY_Handle *handle, int comPort, int baudRate);
 int TNY_Close(TNY_Handle *handle);
 
 /**
- * Test connection by setting pin 0 low
+ * Test connection by setting pin 13 low
  * @param handle - Teensy handle
  * @return TNY_SUCCESS or error code
  */

@@ -17,6 +17,7 @@ static const char* g_commandTypeNames[] = {
     "NONE",
     "SET_PIN",
     "SET_MULTIPLE_PINS",
+    "SEND_RAW_COMMAND",
     "TEST_CONNECTION"
 };
 
@@ -147,6 +148,14 @@ static int TNY_AdapterExecuteCommand(void *deviceContext, int commandType, void 
                                                       cmdParams->setMultiplePins.states,
                                                       cmdParams->setMultiplePins.count);
             break;
+			
+		case TNY_CMD_SEND_RAW_COMMAND:
+			cmdResult->errorCode = TNY_SendCommand(&ctx->handle,
+												   cmdParams->sendRawCommand.command,
+												   cmdParams->sendRawCommand.response,
+												   cmdParams->sendRawCommand.responseSize);
+			
+			break;
             
         case TNY_CMD_TEST_CONNECTION:
             cmdResult->errorCode = TNY_TestConnection(&ctx->handle);
@@ -387,6 +396,17 @@ int TNY_SetMultiplePinsQueued(TNY_Handle *handle, const int *pins, const int *st
                                   TNY_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
+int TNY_SendRawCommandQueued(TNY_Handle *handle, char *command, char *response, int responseSize) {
+	if (!g_tnyQueueManager) return TNY_SendCommand(handle, command, response, responseSize);
+	
+	TNYCommandParams params = {.sendRawCommand = {command, response, responseSize}};
+	TNYCommandResult result;
+	
+	return TNY_QueueCommandBlocking(g_tnyQueueManager, TNY_CMD_SEND_RAW_COMMAND, 
+									&params, TNY_PRIORITY_HIGH, &result, 
+									TNY_QUEUE_COMMAND_TIMEOUT_MS);
+}
+
 int TNY_TestConnectionQueued(TNY_Handle *handle) {
     if (!g_tnyQueueManager) return TNY_TestConnection(handle);
     
@@ -413,6 +433,7 @@ int TNY_QueueGetCommandDelay(TNYCommandType type) {
     switch (type) {
         case TNY_CMD_SET_PIN:
         case TNY_CMD_SET_MULTIPLE_PINS:
+		case TNY_CMD_SEND_RAW_COMMAND:
             return TNY_DELAY_AFTER_PIN_SET;
             
         case TNY_CMD_TEST_CONNECTION:

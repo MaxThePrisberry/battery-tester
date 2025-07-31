@@ -23,8 +23,6 @@ typedef enum {
 // Public Function Declarations
 //==============================================================================
 
-// Note: Core logging functions are declared in Common.h
-// This header provides additional logging-specific functionality
 
 /******************************************************************************
  * Enhanced Logging Functions with Device Support

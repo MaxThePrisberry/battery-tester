@@ -201,20 +201,6 @@ void ConvertUnicodeToAscii(const char* unicode, char* ascii, int unicodeLen) {
     ascii[j] = '\0';
 }
 
-static char* my_strdup(const char* s) {
-    size_t len;
-    char* copy;
-    
-    if (s == NULL) return NULL;
-    
-    len = strlen(s) + 1;
-    copy = (char*)malloc(len);
-    if (copy != NULL) {
-        memcpy(copy, s, len);
-    }
-    return copy;
-}
-
 // ============================================================================
 // Auto-initialization wrapper
 // ============================================================================
