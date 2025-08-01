@@ -19,12 +19,303 @@
  * Public Function Implementations
  ******************************************************************************/
 
+double Battery_CalculateCoulombicEfficiency(double chargeCapacity_mAh, double dischargeCapacity_mAh) {
+    if (dischargeCapacity_mAh <= 0) return 0.0;
+    return (chargeCapacity_mAh / dischargeCapacity_mAh) * 100.0;
+}
+
+double Battery_CalculateEnergyEfficiency(double chargeEnergy_Wh, double dischargeEnergy_Wh) {
+    if (chargeEnergy_Wh <= 0) return 0.0;
+    return (dischargeEnergy_Wh / chargeEnergy_Wh) * 100.0;
+}
+
 double Battery_CalculateCapacityIncrement(double current1_A, double current2_A, 
                                          double deltaTime_s) {
     // Trapezoidal rule: average current * time
     // Convert from A*s to mAh: A * s * 1000 / 3600 = A * s / 3.6
     double averageCurrent = (current1_A + current2_A) / 2.0;
     return averageCurrent * deltaTime_s * 1000.0 / 3600.0;
+}
+
+double Battery_CalculateEnergyIncrement(double voltage1_V, double current1_A,
+                                       double voltage2_V, double current2_A,
+                                       double deltaTime_s) {
+    // Calculate average power using trapezoidal rule
+    // P = V * I, so average power = average of (V1*I1 + V2*I2)
+    double power1_W = voltage1_V * fabs(current1_A);
+    double power2_W = voltage2_V * fabs(current2_A);
+    double averagePower_W = (power1_W + power2_W) / 2.0;
+    
+    // Convert from W*s to Wh: W * s / 3600 = Wh
+    return averagePower_W * deltaTime_s / 3600.0;
+}
+
+int Battery_GoToVoltage(PSB_Handle *psbHandle, VoltageTargetParams *params) {
+    if (!params) return ERR_INVALID_PARAMETER;
+    
+    // Validate input parameters
+    if (params->targetVoltage_V <= 0 || 
+        params->maxCurrent_A <= 0 ||
+        params->currentThreshold_A < 0 ||
+        params->timeoutSeconds <= 0) {
+        LogError("Battery_GoToVoltage: Invalid parameters");
+        return ERR_INVALID_PARAMETER;
+    }
+    
+    // Ensure minimum update interval
+    if (params->updateIntervalMs < MIN_UPDATE_INTERVAL_MS) {
+        params->updateIntervalMs = MIN_UPDATE_INTERVAL_MS;
+    }
+    
+    // Get queue manager if no handle provided
+    PSBQueueManager *queueMgr = NULL;
+    if (!psbHandle) {
+        queueMgr = PSB_GetGlobalQueueManager();
+        if (!queueMgr) {
+            LogError("Battery_GoToVoltage: No PSB handle or queue manager");
+            return PSB_ERROR_NOT_CONNECTED;
+        }
+        psbHandle = PSB_QueueGetHandle(queueMgr);
+        if (!psbHandle) {
+            LogError("Battery_GoToVoltage: Failed to get PSB handle from queue");
+            return PSB_ERROR_NOT_CONNECTED;
+        }
+    }
+    
+    // Initialize results
+    params->actualCapacity_mAh = 0.0;
+    params->actualEnergy_Wh = 0.0;
+    params->elapsedTime_s = 0.0;
+    params->startVoltage_V = 0.0;
+    params->finalVoltage_V = 0.0;
+    params->result = BATTERY_OP_ERROR;
+    params->wasCharging = 0;
+    
+    int result;
+    PSBCommandParams cmdParams = {0};
+    PSBCommandResult cmdResult = {0};
+    
+    // Update status
+    if (params->statusCallback) {
+        params->statusCallback("Reading battery voltage...");
+    }
+    if (params->panelHandle > 0 && params->statusControl > 0) {
+        SetCtrlVal(params->panelHandle, params->statusControl, 
+                   "Reading battery voltage...");
+    }
+    
+    // Get current battery voltage to determine direction
+    PSB_Status initialStatus;
+    result = PSB_GetStatusQueued(psbHandle, &initialStatus);
+    if (result != PSB_SUCCESS) {
+        LogError("Failed to read initial status: %s", PSB_GetErrorString(result));
+        return result;
+    }
+    
+    params->startVoltage_V = initialStatus.voltage;
+    
+    // Determine if we need to charge or discharge
+    double voltageDiff = params->targetVoltage_V - initialStatus.voltage;
+    params->wasCharging = (voltageDiff > 0) ? 1 : 0;
+    
+    LogMessage("Battery voltage: %.3f V, Target: %.3f V - Will %s", 
+               initialStatus.voltage, params->targetVoltage_V,
+               params->wasCharging ? "CHARGE" : "DISCHARGE");
+    
+    // Check if already at target
+    if (fabs(voltageDiff) < 0.05) {  // 50mV tolerance
+        LogMessage("Battery already at target voltage");
+        params->finalVoltage_V = initialStatus.voltage;
+        params->result = BATTERY_OP_SUCCESS;
+        params->elapsedTime_s = 0.0;
+        return SUCCESS;
+    }
+    
+    // Update status
+    if (params->statusCallback) {
+        params->statusCallback(params->wasCharging ? "Configuring charge parameters..." : 
+                                                     "Configuring discharge parameters...");
+    }
+    
+    // Set voltage
+    result = PSB_SetVoltageQueued(psbHandle, params->targetVoltage_V);
+    if (result != PSB_SUCCESS) {
+        LogError("Failed to set voltage: %s", PSB_GetErrorString(result));
+        return result;
+    }
+    
+    // Set current based on direction
+    if (params->wasCharging) {
+        result = PSB_SetCurrentQueued(psbHandle, params->maxCurrent_A);
+    } else {
+        result = PSB_SetSinkCurrentQueued(psbHandle, params->maxCurrent_A);
+    }
+    if (result != PSB_SUCCESS) {
+        LogError("Failed to set current: %s", PSB_GetErrorString(result));
+        return result;
+    }
+    
+    // Enable output
+    cmdParams.outputEnable.enable = 1;
+    result = PSB_QueueCommandBlocking(queueMgr ? queueMgr : PSB_GetGlobalQueueManager(), 
+                                    PSB_CMD_SET_OUTPUT_ENABLE,
+                                    &cmdParams, PSB_PRIORITY_HIGH, &cmdResult,
+                                    PSB_QUEUE_COMMAND_TIMEOUT_MS);
+    if (result != PSB_SUCCESS) {
+        LogError("Failed to enable output: %s", PSB_GetErrorString(result));
+        return result;
+    }
+    
+    // Wait for output to stabilize
+    LogMessage("Waiting for output to stabilize...");
+    Delay(DISCHARGE_STABILIZE_TIME);
+    
+    // Initialize timing and coulomb counting
+    double startTime = Timer();
+    double lastUpdateTime = startTime;
+    double lastLogTime = startTime;
+    double accumulatedCapacity_mAh = 0.0;
+    double accumulatedEnergy_Wh = 0.0;
+    double lastCurrent = 0.0;
+    double lastVoltage = 0.0;
+    double lastTime = 0.0;
+    int firstReading = 1;
+    
+    // Update status
+    if (params->statusCallback) {
+        params->statusCallback(params->wasCharging ? "Charging..." : "Discharging...");
+    }
+    
+    // Main control loop
+    while (1) {
+        double currentTime = Timer();
+        double elapsedTime = currentTime - startTime;
+        
+        // Check timeout
+        if (elapsedTime > params->timeoutSeconds) {
+            LogWarning("Voltage target timeout reached after %.1f seconds", elapsedTime);
+            params->result = BATTERY_OP_TIMEOUT;
+            break;
+        }
+        
+        // Check if update needed
+        if ((currentTime - lastUpdateTime) * 1000.0 >= params->updateIntervalMs) {
+            lastUpdateTime = currentTime;
+            
+            // Get current status
+            PSB_Status status;
+            result = PSB_GetStatusQueued(psbHandle, &status);
+            if (result != PSB_SUCCESS) {
+                LogError("Failed to read status: %s", PSB_GetErrorString(result));
+                params->result = BATTERY_OP_ERROR;
+                break;
+            }
+            
+            // Store final voltage
+            params->finalVoltage_V = status.voltage;
+            
+            // Check completion criteria
+            double currentVoltageDiff = fabs(status.voltage - params->targetVoltage_V);
+            bool voltageAtTarget = currentVoltageDiff < 0.05; // 50mV tolerance
+            bool currentBelowThreshold = fabs(status.current) < params->currentThreshold_A;
+            
+            if (voltageAtTarget && currentBelowThreshold) {
+                LogMessage("Target voltage reached (%.3f V) and current below threshold (%.3f A < %.3f A)",
+                          status.voltage, fabs(status.current), params->currentThreshold_A);
+                params->result = BATTERY_OP_SUCCESS;
+                break;
+            }
+            
+            // Calculate increments (skip first reading)
+            if (!firstReading) {
+                double deltaTime = elapsedTime - lastTime;
+                
+                // Capacity increment
+                double capacityIncrement = Battery_CalculateCapacityIncrement(
+                    fabs(lastCurrent), fabs(status.current), deltaTime);
+                
+                // Sign based on charge/discharge
+                if (!params->wasCharging) {
+                    capacityIncrement = -capacityIncrement;
+                }
+                accumulatedCapacity_mAh += capacityIncrement;
+                
+                // Energy increment
+                double energyIncrement = Battery_CalculateEnergyIncrement(
+                    lastVoltage, lastCurrent, status.voltage, status.current, deltaTime);
+                
+                // Sign based on charge/discharge
+                if (!params->wasCharging) {
+                    energyIncrement = -energyIncrement;
+                }
+                accumulatedEnergy_Wh += energyIncrement;
+                
+                // Update progress
+                if (params->progressCallback) {
+                    params->progressCallback(status.voltage, status.current, accumulatedCapacity_mAh);
+                }
+                
+                // Log progress periodically (every 5 seconds)
+                if ((currentTime - lastLogTime) >= 5.0) {
+                    LogMessage("%s progress: V=%.3f, I=%.3f A, Capacity=%.2f mAh", 
+                              params->wasCharging ? "Charge" : "Discharge",
+                              status.voltage, status.current, fabs(accumulatedCapacity_mAh));
+                    
+                    // Update status message
+                    if (params->panelHandle > 0 && params->statusControl > 0) {
+                        char statusMsg[256];
+                        SAFE_SPRINTF(statusMsg, sizeof(statusMsg), 
+                                   "%s: %.3f V, %.3f A (%.2f mAh)", 
+                                   params->wasCharging ? "Charging" : "Discharging",
+                                   status.voltage, status.current, fabs(accumulatedCapacity_mAh));
+                        SetCtrlVal(params->panelHandle, params->statusControl, statusMsg);
+                    }
+                    
+                    lastLogTime = currentTime;
+                }
+            }
+            
+            // Store for next calculation
+            lastCurrent = status.current;
+            lastVoltage = status.voltage;
+            lastTime = elapsedTime;
+            firstReading = 0;
+        }
+        
+        // Process events and brief delay
+        ProcessSystemEvents();
+        Delay(0.05);  // 50ms
+    }
+    
+    // Store final results
+    params->actualCapacity_mAh = accumulatedCapacity_mAh;
+    params->actualEnergy_Wh = accumulatedEnergy_Wh;
+    params->elapsedTime_s = Timer() - startTime;
+    
+    // Disable output
+    cmdParams.outputEnable.enable = 0;
+    PSB_QueueCommandBlocking(queueMgr ? queueMgr : PSB_GetGlobalQueueManager(), 
+                           PSB_CMD_SET_OUTPUT_ENABLE,
+                           &cmdParams, PSB_PRIORITY_HIGH, &cmdResult,
+                           PSB_QUEUE_COMMAND_TIMEOUT_MS);
+    
+    // Final status update
+    char finalMsg[256];
+    SAFE_SPRINTF(finalMsg, sizeof(finalMsg), "%s complete: %.2f mAh, %.2f Wh in %.1f minutes", 
+               params->wasCharging ? "Charge" : "Discharge",
+               fabs(params->actualCapacity_mAh), fabs(params->actualEnergy_Wh), 
+               params->elapsedTime_s / 60.0);
+    
+    if (params->statusCallback) {
+        params->statusCallback(finalMsg);
+    }
+    if (params->panelHandle > 0 && params->statusControl > 0) {
+        SetCtrlVal(params->panelHandle, params->statusControl, finalMsg);
+    }
+    
+    LogMessage("%s", finalMsg);
+    
+    return (params->result == BATTERY_OP_SUCCESS) ? SUCCESS : ERR_OPERATION_FAILED;
 }
 
 int Battery_DischargeCapacity(PSB_Handle *psbHandle, DischargeParams *params) {
@@ -81,14 +372,10 @@ int Battery_DischargeCapacity(PSB_Handle *psbHandle, DischargeParams *params) {
                    "Configuring discharge parameters...");
     }
     
-    // Pause status monitoring
-    Status_Pause();
-    
     // Set discharge voltage
     result = PSB_SetVoltageQueued(psbHandle, params->dischargeVoltage_V);
     if (result != PSB_SUCCESS) {
         LogError("Failed to set discharge voltage: %s", PSB_GetErrorString(result));
-        Status_Resume();
         return result;
     }
     
@@ -96,7 +383,6 @@ int Battery_DischargeCapacity(PSB_Handle *psbHandle, DischargeParams *params) {
     result = PSB_SetSinkCurrentQueued(psbHandle, params->dischargeCurrent_A);
     if (result != PSB_SUCCESS) {
         LogError("Failed to set sink current: %s", PSB_GetErrorString(result));
-        Status_Resume();
         return result;
     }
     
@@ -108,7 +394,6 @@ int Battery_DischargeCapacity(PSB_Handle *psbHandle, DischargeParams *params) {
                                     PSB_QUEUE_COMMAND_TIMEOUT_MS);
     if (result != PSB_SUCCESS) {
         LogError("Failed to enable output: %s", PSB_GetErrorString(result));
-        Status_Resume();
         return result;
     }
     
@@ -233,9 +518,6 @@ int Battery_DischargeCapacity(PSB_Handle *psbHandle, DischargeParams *params) {
                            PSB_CMD_SET_OUTPUT_ENABLE,
                            &cmdParams, PSB_PRIORITY_HIGH, &cmdResult,
                            PSB_QUEUE_COMMAND_TIMEOUT_MS);
-    
-    // Resume status monitoring
-    Status_Resume();
     
     // Final status update
     char finalMsg[256];

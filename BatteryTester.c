@@ -25,12 +25,6 @@
 #define PSB_TARGET_SERIAL       "2872380001"  // Target PSB serial number
 
 /******************************************************************************
- * Function Prototypes
- ******************************************************************************/
-static int CVICALLBACK UpdateThread(void *functionData);
-void PSB_SetGlobalQueueManager(PSBQueueManager *mgr);
-
-/******************************************************************************
  * Global Variables (defined here, declared extern in common.h)
  ******************************************************************************/
 int g_mainPanelHandle = 0;

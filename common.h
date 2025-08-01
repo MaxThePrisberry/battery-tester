@@ -107,15 +107,12 @@
 // Common Type Definitions
 //==============================================================================
 
-// Boolean type for older C standards
+// Boolean type for old C standards
 #ifndef __cplusplus
     typedef int bool;
     #define true    1
     #define false   0
 #endif
-
-// Result type for functions that return error codes
-typedef int Result;
 
 // Device connection states
 typedef enum {
@@ -137,15 +134,6 @@ typedef enum {
     TEST_STATE_ABORTED,
     TEST_STATE_ERROR
 } TestState;
-
-// Generic callback function types
-typedef void (*ProgressCallback)(const char *message, double progress);
-typedef void (*ErrorCallback)(int errorCode, const char *errorMessage);
-typedef void (*DataCallback)(double timestamp, double voltage, double current);
-
-// Callback type definitions for worker threads
-typedef int (CVICALLBACK *WorkerThreadFunc)(void *functionData);
-typedef void (CVICALLBACK *DeferredUICallback)(void *callbackData);
 
 // Time measurement structure
 typedef struct {
@@ -185,25 +173,6 @@ extern int g_systemBusy;
 // Utility Macros
 //==============================================================================
 
-// Safe memory allocation
-#define SAFE_MALLOC(ptr, type, count) \
-    do { \
-        (ptr) = (type*)calloc((count), sizeof(type)); \
-        if (!(ptr)) { \
-            LogError("Memory allocation failed: %s, line %d", __FILE__, __LINE__); \
-            return ERR_OUT_OF_MEMORY; \
-        } \
-    } while(0)
-
-// Safe memory free
-#define SAFE_FREE(ptr) \
-    do { \
-        if (ptr) { \
-            free(ptr); \
-            (ptr) = NULL; \
-        } \
-    } while(0)
-
 // Min/Max macros
 #ifndef MIN
     #define MIN(a, b) (((a) < (b)) ? (a) : (b))
@@ -215,19 +184,6 @@ extern int g_systemBusy;
 
 // Clamp value between min and max
 #define CLAMP(val, min, max) (MAX(MIN((val), (max)), (min)))
-
-// Check if value is within range (inclusive)
-#define IN_RANGE(val, min, max) (((val) >= (min)) && ((val) <= (max)))
-
-// Convert between units
-#define V_TO_MV(v) ((v) * 1000.0)
-#define MV_TO_V(mv) ((mv) / 1000.0)
-#define A_TO_MA(a) ((a) * 1000.0)
-#define MA_TO_A(ma) ((ma) / 1000.0)
-
-// Time conversion
-#define MS_TO_S(ms) ((ms) / 1000.0)
-#define S_TO_MS(s) ((s) * 1000.0)
 
 // Array size macro
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
@@ -242,33 +198,10 @@ extern int g_systemBusy;
 #define SAFE_SPRINTF(buffer, size, ...) \
     snprintf((buffer), (size), __VA_ARGS__)
 
-// Thread-safe operation macros for queue system
-#define CHECK_AND_SET_BUSY(lock, flag, action_if_busy) \
-    do { \
-        CmtGetLock(lock); \
-        if (flag) { \
-            CmtReleaseLock(lock); \
-            action_if_busy; \
-        } else { \
-            flag = 1; \
-            CmtReleaseLock(lock); \
-        } \
-    } while(0)
-
-#define CLEAR_BUSY(lock, flag) \
-    do { \
-        CmtGetLock(lock); \
-        flag = 0; \
-        CmtReleaseLock(lock); \
-    } while(0)
-
 //==============================================================================
 // UI Update Notes
 //==============================================================================
 /*
- * Note: The UPDATE_UI_STRING and UPDATE_UI_NUMERIC macros have been removed
- * because PostDeferredCall in LabWindows/CVI only accepts 2 parameters.
- * 
  * To update UI from background threads:
  * 1. Use the logging module's built-in thread-safe UI update
  * 2. Create a custom structure to pass multiple parameters through PostDeferredCall
@@ -282,56 +215,39 @@ extern int g_systemBusy;
  */
 
 /******************************************************************************
- * Directory Utilities
- ******************************************************************************/
-
-/**
- * Create a timestamped directory
- * @param baseDir - Base directory path
- * @param prefix - Optional prefix for the timestamp (can be NULL)
- * @param resultPath - Buffer to receive the created directory path
- * @param resultPathSize - Size of resultPath buffer
- * @return SUCCESS or error code
- */
-int CreateTimestampedDirectory(const char *baseDir, const char *prefix, 
-                              char *resultPath, int resultPathSize);
-
-/******************************************************************************
- * Battery Calculation Utilities
- ******************************************************************************/
-
-/**
- * Calculate coulombic efficiency (charge efficiency)
- * @param chargeCapacity_mAh - Capacity during charge
- * @param dischargeCapacity_mAh - Capacity during discharge
- * @return Efficiency percentage (0-100)
- */
-double CalculateCoulombicEfficiency(double chargeCapacity_mAh, double dischargeCapacity_mAh);
-
-/**
- * Calculate round-trip energy efficiency
- * @param chargeEnergy_Wh - Energy consumed during charge
- * @param dischargeEnergy_Wh - Energy delivered during discharge
- * @return Efficiency percentage (0-100)
- */
-double CalculateEnergyEfficiency(double chargeEnergy_Wh, double dischargeEnergy_Wh);
-
-/**
- * Calculate state of charge percentage
- * @param currentCapacity_mAh - Current capacity
- * @param totalCapacity_mAh - Total/nominal capacity
- * @return State of charge percentage (0-100)
- */
-double CalculateStateOfCharge(double currentCapacity_mAh, double totalCapacity_mAh);
-
-/******************************************************************************
  * Graph Utility Functions
  ******************************************************************************/
 
-// Graph utility functions
+/**
+ * Clear all plots from multiple graphs
+ * @param panel - Panel handle containing the graphs
+ * @param graphs - Array of graph control IDs to clear
+ * @param numGraphs - Number of graphs in the array
+ */
 void ClearAllGraphs(int panel, const int graphs[], int numGraphs);
+
+/**
+ * Configure a graph with title and axis labels
+ * @param panel - Panel handle containing the graph
+ * @param graph - Graph control ID
+ * @param title - Graph title text
+ * @param xLabel - X-axis label text
+ * @param yLabel - Y-axis label text
+ * @param yMin - Minimum Y-axis value
+ * @param yMax - Maximum Y-axis value
+ */
 void ConfigureGraph(int panel, int graph, const char *title, const char *xLabel, 
                    const char *yLabel, double yMin, double yMax);
+
+/**
+ * Plot a single data point on a graph
+ * @param panel - Panel handle containing the graph
+ * @param graph - Graph control ID
+ * @param x - X-coordinate of the point
+ * @param y - Y-coordinate of the point
+ * @param style - Point style (e.g., VAL_SOLID_CIRCLE)
+ * @param color - Point color (e.g., VAL_RED)
+ */
 void PlotDataPoint(int panel, int graph, double x, double y, int style, int color);
 
 /******************************************************************************
@@ -370,35 +286,94 @@ int WriteINIDouble(FILE *file, const char *key, double value, int precision);
 // Common Utility Functions
 //==============================================================================
 
-// Error handling
-const char* GetErrorString(int errorCode);          // Central error string function in utils.c
-void ClearLastError(void);
-void SetLastErrorMessage(int errorCode, const char *format, ...);  // Renamed to avoid Windows conflict
+/**
+ * Get human-readable error string for an error code
+ * @param errorCode - Error code from any module in the system
+ * @return Pointer to static error string (do not free)
+ */
+const char* GetErrorString(int errorCode);
 
-// String utilities
+/**
+ * Trim leading and trailing whitespace from a string in-place
+ * @param str - String to trim (modified in-place)
+ * @return Pointer to the trimmed string (same as input or advanced past leading spaces)
+ */
 char* TrimWhitespace(char *str);
-int ParseDouble(const char *str, double *value);
-int ParseInt(const char *str, int *value);
+
+/**
+ * Duplicate a string (portable version of strdup)
+ * @param s - String to duplicate
+ * @return Newly allocated copy of the string, or NULL on failure (caller must free)
+ */
 char* my_strdup(const char* s);
+
+/**
+ * Thread-safe tokenizer (portable version of strtok_r)
+ * @param s - String to tokenize (NULL to continue previous tokenization)
+ * @param delim - Delimiter characters
+ * @param saveptr - Pointer to maintain tokenization state between calls
+ * @return Next token or NULL if no more tokens
+ */
 char *my_strtok_r(char *s, const char *delim, char **saveptr);
 
-// Time utilities  
-double GetTimestamp(void);  // Renamed to avoid Windows GetCurrentTime macro conflict
+/**
+ * Get current timestamp using high-resolution timer
+ * @return Current time in seconds since an arbitrary reference point
+ */
+double GetTimestamp(void);
+
+/**
+ * Format elapsed time as HH:MM:SS string
+ * @param seconds - Elapsed time in seconds
+ * @param buffer - Output buffer for formatted string
+ * @param bufferSize - Size of output buffer
+ */
 void FormatTimeString(double seconds, char *buffer, int bufferSize);
+
+/**
+ * Format a time_t timestamp as a human-readable string
+ * @param timestamp - Unix timestamp to format
+ * @param buffer - Output buffer for formatted string
+ * @param bufferSize - Size of output buffer
+ */
 void FormatTimestamp(time_t timestamp, char *buffer, int bufferSize);
 
-// File utilities
+/**
+ * Check if a file exists
+ * @param filename - Path to the file to check
+ * @return 1 if file exists, 0 if not
+ */
 int FileExists(const char *filename);
-int CreateDirectoryPath(const char *path);  // Renamed to avoid Windows conflict
+
+/**
+ * Create a directory path (including parent directories if needed)
+ * @param path - Directory path to create
+ * @return SUCCESS or error code
+ */
+int CreateDirectoryPath(const char *path);
+
+/**
+ * Get the directory containing the executable
+ * @param path - Buffer to receive the directory path
+ * @param pathSize - Size of the path buffer
+ * @return SUCCESS or error code
+ */
 int GetExecutableDirectory(char *path, int pathSize);
 
+/**
+ * Create a timestamped directory
+ * @param baseDir - Base directory path
+ * @param prefix - Optional prefix for the timestamp (can be NULL)
+ * @param resultPath - Buffer to receive the created directory path
+ * @param resultPathSize - Size of resultPath buffer
+ * @return SUCCESS or error code
+ */
+int CreateTimestampedDirectory(const char *baseDir, const char *prefix, 
+                              char *resultPath, int resultPathSize);
+
 /******************************************************************************
- * UI Helper Functions (implemented in a UI utility module)
+ * UI Helper Functions (implemented in utils.c)
  ******************************************************************************/
-void UpdateUIString(void *panel, void *control, void *text);
-void UpdateUINumeric(void *panel, void *control, void *value);
-void EnablePanel(int panel, int enable);
-void ShowBusyCursor(int show);
 
 /**
  * Dim/enable all controls in a control array
@@ -423,43 +398,15 @@ void DimControlArray(int panel, int arrayID, int dim);
  */
 void DimCapacityExperimentControls(int mainPanel, int tabPanel, int dim, int *controls, int numControls);
 
-// Thread synchronization helpers
-int WaitForCondition(int (*condition)(void), double timeoutSeconds);
-
-// Queue system integration points
-void InitializeQueueManagers(void);
-void ShutdownQueueManagers(void);
-int CheckSystemBusy(const char *operation);
-void SetSystemBusy(int busy);
-
 //==============================================================================
 // Common Constants
 //==============================================================================
-
-// Default timeouts (in seconds)
-#define DEFAULT_COMM_TIMEOUT    5.0
-#define DEFAULT_CONNECT_TIMEOUT 10.0
-#define DEFAULT_TEST_TIMEOUT    3600.0  // 1 hour
 
 // Buffer sizes
 #define SMALL_BUFFER_SIZE       64
 #define MEDIUM_BUFFER_SIZE      256
 #define LARGE_BUFFER_SIZE       1024
 #define HUGE_BUFFER_SIZE        4096
-
-// UI update rates
-#define UI_UPDATE_RATE_FAST     0.1     // 100ms
-#define UI_UPDATE_RATE_NORMAL   0.5     // 500ms
-#define UI_UPDATE_RATE_SLOW     1.0     // 1s
-
-// File extensions
-#define DATA_FILE_EXT           ".csv"
-#define CONFIG_FILE_EXT         ".ini"
-#define LOG_FILE_EXT            ".log"
-
-#ifndef OPT_TL_EVENT_UNICAST
-#define OPT_TL_EVENT_UNICAST    0x00000001
-#endif
 
 #ifndef TSQ_INFINITE_TIMEOUT
 #define TSQ_INFINITE_TIMEOUT    -1

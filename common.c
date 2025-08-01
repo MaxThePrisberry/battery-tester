@@ -1,35 +1,38 @@
 /******************************************************************************
- * utils.c
+ * common.c
  * 
  * Implementation of common utility functions declared in common.h
  ******************************************************************************/
 
 #include "common.h"
-#include "utils.h"
 #include "biologic_dll.h"  // For BL_GetErrorString
 #include "psb10000_dll.h"  // For PSB_GetErrorString
 #include "teensy_dll.h"    // For TNY_GetErrorString
-#include "dtb4848_dll.h"   // FOr DTB_GetErrorString
+#include "dtb4848_dll.h"   // For DTB_GetErrorString
 #include "BatteryTester.h" // For UI control IDs
 #include "logging.h"       // For LogWarning
-#include <errno.h>  // For errno
-#include <limits.h> // For INT_MAX, INT_MIN
-#include <ctype.h>  // For isspace
-#include <stdint.h> // For intptr_t
+#include <errno.h>         // For errno
+#include <limits.h>        // For INT_MAX, INT_MIN
+#include <ctype.h>         // For isspace
+#include <stdint.h>        // For intptr_t
+
+//==============================================================================
+// Platform-specific includes (formerly in utils.h)
+//==============================================================================
+#ifdef _CVI_
+    // LabWindows/CVI has its own directory functions
+    // No additional includes needed
+#elif defined(_WIN32)
+    #include <direct.h>    // For _mkdir
+    #include <io.h>        // For _access
+#else
+    #include <unistd.h>    // For access, getcwd
+    #include <sys/stat.h>  // For mkdir
+#endif
 
 /******************************************************************************
  * Error Handling
  ******************************************************************************/
-
-/******************************************************************************
- * Error Handling
- ******************************************************************************/
-
-// Thread-local storage for last error
-// Note: __thread might not be supported in all compilers
-// Using static for now - not thread-safe but compatible
-static int g_lastErrorCode = SUCCESS;
-static char g_lastErrorMessage[MAX_ERROR_MSG_LENGTH] = {0};
 
 const char* GetErrorString(int errorCode) {
     // Handle common/system errors first
@@ -99,25 +102,6 @@ const char* GetErrorString(int errorCode) {
     return "Unknown error";
 }
 
-void ClearLastError(void) {
-    g_lastErrorCode = SUCCESS;
-    g_lastErrorMessage[0] = '\0';
-}
-
-void SetLastErrorMessage(int errorCode, const char *format, ...) {
-    g_lastErrorCode = errorCode;
-    
-    if (format) {
-        va_list args;
-        va_start(args, format);
-        vsnprintf(g_lastErrorMessage, sizeof(g_lastErrorMessage), format, args);
-        va_end(args);
-    } else {
-        // GetErrorString is provided by biologic_dll module
-        SAFE_STRCPY(g_lastErrorMessage, GetErrorString(errorCode), sizeof(g_lastErrorMessage));
-    }
-}
-
 /******************************************************************************
  * String Utilities
  ******************************************************************************/
@@ -139,41 +123,6 @@ char* TrimWhitespace(char *str) {
     end[1] = '\0';
     
     return str;
-}
-
-int ParseDouble(const char *str, double *value) {
-    if (!str || !value) return ERR_NULL_POINTER;
-    
-    char *endptr;
-    errno = 0;
-    
-    *value = strtod(str, &endptr);
-    
-    if (errno != 0 || endptr == str || *endptr != '\0') {
-        return ERR_INVALID_PARAMETER;
-    }
-    
-    return SUCCESS;
-}
-
-int ParseInt(const char *str, int *value) {
-    if (!str || !value) return ERR_NULL_POINTER;
-    
-    char *endptr;
-    errno = 0;
-    
-    long temp = strtol(str, &endptr, 10);
-    
-    if (errno != 0 || endptr == str || *endptr != '\0') {
-        return ERR_INVALID_PARAMETER;
-    }
-    
-    if (temp > INT_MAX || temp < INT_MIN) {
-        return ERR_INVALID_PARAMETER;
-    }
-    
-    *value = (int)temp;
-    return SUCCESS;
 }
 
 char* my_strdup(const char* s) {
@@ -341,48 +290,6 @@ int GetExecutableDirectory(char *path, int pathSize) {
 }
 
 /******************************************************************************
- * UI Helper Functions (Deferred Call Implementations)
- ******************************************************************************/
-
-void UpdateUIString(void *panel, void *control, void *text) {
-    int panelHandle = (int)(intptr_t)panel;
-    int controlID = (int)(intptr_t)control;
-    char *textStr = (char*)text;
-    
-    if (panelHandle > 0 && controlID > 0 && textStr) {
-        // For text boxes, the logging module handles them specifically
-        // For other controls, just set the value
-        SetCtrlVal(panelHandle, controlID, textStr);
-        
-        // Free the allocated string
-        free(textStr);
-    }
-}
-
-void UpdateUINumeric(void *panel, void *control, void *value) {
-    int panelHandle = (int)(intptr_t)panel;
-    int controlID = (int)(intptr_t)control;
-    double *numValue = (double*)value;
-    
-    if (panelHandle > 0 && controlID > 0 && numValue) {
-        SetCtrlVal(panelHandle, controlID, *numValue);
-        
-        // Free the allocated value
-        free(numValue);
-    }
-}
-
-void EnablePanel(int panel, int enable) {
-    if (panel > 0) {
-        SetPanelAttribute(panel, ATTR_DIMMED, !enable);
-    }
-}
-
-void ShowBusyCursor(int show) {
-    SetWaitCursor(show);
-}
-
-/******************************************************************************
  * UI Control Array Dimming Functions
  ******************************************************************************/
 
@@ -441,32 +348,11 @@ void DimCapacityExperimentControls(int mainPanel, int tabPanel, int dim, int *co
     }
     
     // Dim specific controls
-	for (int i = 0; i < numControls; i++) {
-		if (controls[i] > 0) {
-			SetCtrlAttribute(tabPanel, controls[i], ATTR_DIMMED, dim);
-		}
-	}
-}
-
-/******************************************************************************
- * Thread Synchronization Helpers
- ******************************************************************************/
-
-int WaitForCondition(int (*condition)(void), double timeoutSeconds) {
-    if (!condition) return ERR_NULL_POINTER;
-    
-    double startTime = Timer();
-    
-    while (!condition()) {
-        if ((Timer() - startTime) > timeoutSeconds) {
-            return ERR_TIMEOUT;
+    for (int i = 0; i < numControls; i++) {
+        if (controls[i] > 0) {
+            SetCtrlAttribute(tabPanel, controls[i], ATTR_DIMMED, dim);
         }
-        
-        ProcessSystemEvents();
-        Delay(0.01);  // 10ms polling interval
     }
-    
-    return SUCCESS;
 }
 
 /******************************************************************************
@@ -498,25 +384,6 @@ int CreateTimestampedDirectory(const char *baseDir, const char *prefix,
     
     // Create the directory
     return CreateDirectoryPath(resultPath);
-}
-
-/******************************************************************************
- * Battery Calculation Utilities
- ******************************************************************************/
-
-double CalculateCoulombicEfficiency(double chargeCapacity_mAh, double dischargeCapacity_mAh) {
-    if (dischargeCapacity_mAh <= 0) return 0.0;
-    return (chargeCapacity_mAh / dischargeCapacity_mAh) * 100.0;
-}
-
-double CalculateEnergyEfficiency(double chargeEnergy_Wh, double dischargeEnergy_Wh) {
-    if (chargeEnergy_Wh <= 0) return 0.0;
-    return (dischargeEnergy_Wh / chargeEnergy_Wh) * 100.0;
-}
-
-double CalculateStateOfCharge(double currentCapacity_mAh, double totalCapacity_mAh) {
-    if (totalCapacity_mAh <= 0) return 0.0;
-    return CLAMP((currentCapacity_mAh / totalCapacity_mAh) * 100.0, 0.0, 100.0);
 }
 
 /******************************************************************************

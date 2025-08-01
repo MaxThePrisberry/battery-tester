@@ -44,8 +44,6 @@ static int CreateTestDirectory(CapacityTestContext *ctx);
 static int WriteResultsFile(CapacityTestContext *ctx);
 static void UpdatePhaseResults(CapacityTestContext *ctx, PhaseResults *results, 
                                CapacityDataPoint *point, double capacityIncrement, double energyIncrement);
-static double CalculateCoulombicEfficiency(double chargeCapacity, double dischargeCapacity);
-static double CalculateEnergyEfficiency(double chargeEnergy, double dischargeEnergy);
 
 /******************************************************************************
  * Public Functions Implementation
@@ -880,9 +878,9 @@ static int WriteResultsFile(CapacityTestContext *ctx) {
     fprintf(file, "\n");
     
     // Calculated Metrics
-    double coulombicEff = CalculateCoulombicEfficiency(ctx->chargeResults.capacity_mAh, 
+    double coulombicEff = Battery_CalculateCoulombicEfficiency(ctx->chargeResults.capacity_mAh, 
                                                        ctx->dischargeResults.capacity_mAh);
-    double energyEff = CalculateEnergyEfficiency(ctx->chargeResults.energy_Wh,
+    double energyEff = Battery_CalculateEnergyEfficiency(ctx->chargeResults.energy_Wh,
                                                ctx->dischargeResults.energy_Wh);
     
     WriteINISection(file, "Calculated_Metrics");

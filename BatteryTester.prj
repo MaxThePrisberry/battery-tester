@@ -11,7 +11,7 @@ IVI Standard Root Dir = "/c/Program Files/IVI Foundation/IVI"
 VXIplug&play Framework Dir = "/C/Program Files (x86)/IVI Foundation/VISA/winnt"
 IVI Standard Root 64-bit Dir = "/C/Program Files/IVI Foundation/IVI"
 VXIplug&play Framework 64-bit Dir = "/C/Program Files/IVI Foundation/VISA/win64"
-Number of Files = 47
+Number of Files = 46
 Target Type = "Executable"
 Flags = 2064
 Copied From Locked InstrDrv Directory = False
@@ -335,20 +335,8 @@ Folder = "Include Files"
 Folder Id = 1
 
 [File 0025]
-File Type = "Include"
-Res Id = 25
-Path Is Rel = True
-Path Rel To = "Project"
-Path Rel Path = "utils.h"
-Path = "/c/Users/CV166/Documents/LabWindowsCVI/BatteryTester/battery-tester/utils.h"
-Exclude = False
-Project Flags = 0
-Folder = "Include Files"
-Folder Id = 1
-
-[File 0026]
 File Type = "CSource"
-Res Id = 26
+Res Id = 25
 Path Is Rel = True
 Path Rel To = "Project"
 Path Rel Path = "battery_utils.c"
@@ -360,9 +348,9 @@ Project Flags = 0
 Folder = "Source Files"
 Folder Id = 2
 
-[File 0027]
+[File 0026]
 File Type = "CSource"
-Res Id = 27
+Res Id = 26
 Path Is Rel = True
 Path Rel To = "Project"
 Path Rel Path = "BatteryTester.c"
@@ -374,9 +362,9 @@ Project Flags = 0
 Folder = "Source Files"
 Folder Id = 2
 
-[File 0028]
+[File 0027]
 File Type = "CSource"
-Res Id = 28
+Res Id = 27
 Path Is Rel = True
 Path Rel To = "Project"
 Path Rel Path = "biologic/biologic_dll.c"
@@ -388,9 +376,9 @@ Project Flags = 0
 Folder = "Source Files"
 Folder Id = 2
 
-[File 0029]
+[File 0028]
 File Type = "CSource"
-Res Id = 29
+Res Id = 28
 Path Is Rel = True
 Path Rel To = "Project"
 Path Rel Path = "biologic/biologic_queue.c"
@@ -402,9 +390,9 @@ Project Flags = 0
 Folder = "Source Files"
 Folder Id = 2
 
-[File 0030]
+[File 0029]
 File Type = "CSource"
-Res Id = 30
+Res Id = 29
 Path Is Rel = True
 Path Rel To = "Project"
 Path Rel Path = "tests/biologic_test.c"
@@ -416,13 +404,26 @@ Project Flags = 0
 Folder = "Source Files"
 Folder Id = 2
 
+[File 0030]
+File Type = "CSource"
+Res Id = 30
+Path Is Rel = True
+Path Rel To = "Project"
+Path Rel Path = "cmd_prompt.c"
+Path = "/c/Users/CV166/Documents/LabWindowsCVI/BatteryTester/battery-tester/cmd_prompt.c"
+Exclude = False
+Compile Into Object File = False
+Project Flags = 0
+Folder = "Source Files"
+Folder Id = 2
+
 [File 0031]
 File Type = "CSource"
 Res Id = 31
 Path Is Rel = True
 Path Rel To = "Project"
-Path Rel Path = "cmd_prompt.c"
-Path = "/c/Users/CV166/Documents/LabWindowsCVI/BatteryTester/battery-tester/cmd_prompt.c"
+Path Rel Path = "common.c"
+Path = "/c/Users/CV166/Documents/LabWindowsCVI/BatteryTester/battery-tester/common.c"
 Exclude = False
 Compile Into Object File = False
 Project Flags = 0
@@ -628,19 +629,6 @@ Path Rel To = "Project"
 Path Rel Path = "teensy/teensy_queue.c"
 Path Line0001 = "/c/Users/CV166/Documents/LabWindowsCVI/BatteryTester/battery-tester/teensy/teens"
 Path Line0002 = "y_queue.c"
-Exclude = False
-Compile Into Object File = False
-Project Flags = 0
-Folder = "Source Files"
-Folder Id = 2
-
-[File 0047]
-File Type = "CSource"
-Res Id = 47
-Path Is Rel = True
-Path Rel To = "Project"
-Path Rel Path = "utils.c"
-Path = "/c/Users/CV166/Documents/LabWindowsCVI/BatteryTester/battery-tester/utils.c"
 Exclude = False
 Compile Into Object File = False
 Project Flags = 0
