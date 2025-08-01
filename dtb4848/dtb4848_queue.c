@@ -105,11 +105,7 @@ static const DeviceAdapter g_dtbAdapter = {
     // Utility functions
     .getCommandTypeName = (const char* (*)(int))DTB_QueueGetCommandTypeName,
     .getCommandDelay = DTB_QueueGetCommandDelay,
-    .getErrorString = GetErrorString,
-    
-    // Raw command support
-    .supportsRawCommands = NULL,
-    .executeRawCommand = NULL
+    .getErrorString = GetErrorString
 };
 
 /******************************************************************************
@@ -269,9 +265,131 @@ static int DTB_AdapterExecuteCommand(void *deviceContext, int commandType, void 
 		    break;
             
         case DTB_CMD_RAW_MODBUS:
-            // TODO: Implement raw Modbus command execution
-            cmdResult->errorCode = DTB_ERROR_NOT_SUPPORTED;
-            break;
+	        // Validate parameters
+	        if (!cmdParams->rawModbus.rxBuffer && cmdParams->rawModbus.rxBufferSize > 0) {
+	            cmdResult->errorCode = DTB_ERROR_INVALID_PARAM;
+	            break;
+	        }
+	        
+	        // Route based on Modbus function code
+	        switch (cmdParams->rawModbus.functionCode) {
+	            case MODBUS_READ_REGISTERS:  // 0x03
+	                {
+	                    unsigned short value;
+	                    cmdResult->errorCode = DTB_ReadRegister(&ctx->handle, 
+	                                                           cmdParams->rawModbus.address, 
+	                                                           &value);
+	                    
+	                    if (cmdResult->errorCode == DTB_SUCCESS) {
+	                        // Store the value in the result
+	                        // For raw response, we need to allocate and format the data
+	                        cmdResult->data.rawResponse.rxLength = 2;  // 2 bytes for register value
+	                        cmdResult->data.rawResponse.rxData = malloc(2);
+	                        if (cmdResult->data.rawResponse.rxData) {
+	                            // Store as big-endian (Modbus standard)
+	                            cmdResult->data.rawResponse.rxData[0] = (value >> 8) & 0xFF;
+	                            cmdResult->data.rawResponse.rxData[1] = value & 0xFF;
+	                        } else {
+	                            cmdResult->errorCode = DTB_ERROR_RESPONSE;
+	                        }
+	                    }
+	                }
+	                break;
+	                
+	            case MODBUS_WRITE_REGISTER:  // 0x06
+	                {
+	                    cmdResult->errorCode = DTB_WriteRegister(&ctx->handle,
+	                                                           cmdParams->rawModbus.address,
+	                                                           cmdParams->rawModbus.data);
+	                    
+	                    if (cmdResult->errorCode == DTB_SUCCESS) {
+	                        // For write register, response echoes the address and data
+	                        cmdResult->data.rawResponse.rxLength = 4;  // 2 bytes address + 2 bytes data
+	                        cmdResult->data.rawResponse.rxData = malloc(4);
+	                        if (cmdResult->data.rawResponse.rxData) {
+	                            // Address (big-endian)
+	                            cmdResult->data.rawResponse.rxData[0] = (cmdParams->rawModbus.address >> 8) & 0xFF;
+	                            cmdResult->data.rawResponse.rxData[1] = cmdParams->rawModbus.address & 0xFF;
+	                            // Data (big-endian)
+	                            cmdResult->data.rawResponse.rxData[2] = (cmdParams->rawModbus.data >> 8) & 0xFF;
+	                            cmdResult->data.rawResponse.rxData[3] = cmdParams->rawModbus.data & 0xFF;
+	                        } else {
+	                            cmdResult->errorCode = DTB_ERROR_RESPONSE;
+	                        }
+	                    }
+	                }
+	                break;
+	                
+	            case MODBUS_READ_BITS:  // 0x02
+	                {
+	                    int bitValue;
+	                    cmdResult->errorCode = DTB_ReadBit(&ctx->handle,
+	                                                     cmdParams->rawModbus.address,
+	                                                     &bitValue);
+	                    
+	                    if (cmdResult->errorCode == DTB_SUCCESS) {
+	                        // For read bits, response is 1 byte containing the bit value
+	                        cmdResult->data.rawResponse.rxLength = 1;
+	                        cmdResult->data.rawResponse.rxData = malloc(1);
+	                        if (cmdResult->data.rawResponse.rxData) {
+	                            cmdResult->data.rawResponse.rxData[0] = bitValue ? 0x01 : 0x00;
+	                        } else {
+	                            cmdResult->errorCode = DTB_ERROR_RESPONSE;
+	                        }
+	                    }
+	                }
+	                break;
+	                
+	            case MODBUS_WRITE_BIT:  // 0x05
+	                {
+	                    // For write bit, data field should be 0xFF00 for ON, 0x0000 for OFF
+	                    int bitValue = (cmdParams->rawModbus.data == 0xFF00) ? 1 : 0;
+	                    
+	                    cmdResult->errorCode = DTB_WriteBit(&ctx->handle,
+	                                                      cmdParams->rawModbus.address,
+	                                                      bitValue);
+	                    
+	                    if (cmdResult->errorCode == DTB_SUCCESS) {
+	                        // For write bit, response echoes the address and data
+	                        cmdResult->data.rawResponse.rxLength = 4;  // 2 bytes address + 2 bytes data
+	                        cmdResult->data.rawResponse.rxData = malloc(4);
+	                        if (cmdResult->data.rawResponse.rxData) {
+	                            // Address (big-endian)
+	                            cmdResult->data.rawResponse.rxData[0] = (cmdParams->rawModbus.address >> 8) & 0xFF;
+	                            cmdResult->data.rawResponse.rxData[1] = cmdParams->rawModbus.address & 0xFF;
+	                            // Data (big-endian) - echo what was sent
+	                            cmdResult->data.rawResponse.rxData[2] = (cmdParams->rawModbus.data >> 8) & 0xFF;
+	                            cmdResult->data.rawResponse.rxData[3] = cmdParams->rawModbus.data & 0xFF;
+	                        } else {
+	                            cmdResult->errorCode = DTB_ERROR_RESPONSE;
+	                        }
+	                    }
+	                }
+	                break;
+	                
+	            default:
+	                LogErrorEx(LOG_DEVICE_DTB, "Unsupported Modbus function code: 0x%02X", 
+	                         cmdParams->rawModbus.functionCode);
+	                cmdResult->errorCode = DTB_ERROR_NOT_SUPPORTED;
+	                break;
+	        }
+	        
+	        // If requested, copy data to the provided buffer
+	        if (cmdResult->errorCode == DTB_SUCCESS && 
+	            cmdParams->rawModbus.rxBuffer && 
+	            cmdParams->rawModbus.rxBufferSize > 0 &&
+	            cmdResult->data.rawResponse.rxData) {
+	            
+	            int copyLen = cmdResult->data.rawResponse.rxLength;
+	            if (copyLen > cmdParams->rawModbus.rxBufferSize) {
+	                copyLen = cmdParams->rawModbus.rxBufferSize;
+	            }
+	            
+	            memcpy(cmdParams->rawModbus.rxBuffer, 
+	                   cmdResult->data.rawResponse.rxData, 
+	                   copyLen);
+			}
+		    break;
             
         default:
             cmdResult->errorCode = DTB_ERROR_INVALID_PARAM;
@@ -315,6 +433,10 @@ static void* DTB_AdapterCreateCommandParams(int commandType, void *sourceParams)
         DTBCommandParams *src = (DTBCommandParams*)sourceParams;
         if (src->rawModbus.rxBuffer && src->rawModbus.rxBufferSize > 0) {
             params->rawModbus.rxBuffer = malloc(src->rawModbus.rxBufferSize);
+            // Initialize the buffer to avoid garbage data
+            if (params->rawModbus.rxBuffer) {
+                memset(params->rawModbus.rxBuffer, 0, src->rawModbus.rxBufferSize);
+            }
         }
     }
     
@@ -804,6 +926,66 @@ int DTB_GetWriteAccessStatusQueued(DTB_Handle *handle, int *isEnabled) {
     return error;
 }
 
+int DTB_SendRawModbusQueued(DTB_Handle *handle, unsigned char functionCode,
+                       unsigned short address, unsigned short data,
+                       unsigned char *rxBuffer, int rxBufferSize) {
+    if (!g_dtbQueueManager) {
+        // Fall back to direct calls if no queue manager
+        switch (functionCode) {
+            case MODBUS_READ_REGISTERS:
+                if (rxBuffer && rxBufferSize >= 2) {
+                    unsigned short value;
+                    int result = DTB_ReadRegister(handle, address, &value);
+                    if (result == DTB_SUCCESS) {
+                        rxBuffer[0] = (value >> 8) & 0xFF;
+                        rxBuffer[1] = value & 0xFF;
+                    }
+                    return result;
+                }
+                return DTB_ERROR_INVALID_PARAM;
+                
+            case MODBUS_WRITE_REGISTER:
+                return DTB_WriteRegister(handle, address, data);
+                
+            case MODBUS_READ_BITS:
+                if (rxBuffer && rxBufferSize >= 1) {
+                    int bitValue;
+                    int result = DTB_ReadBit(handle, address, &bitValue);
+                    if (result == DTB_SUCCESS) {
+                        rxBuffer[0] = bitValue ? 0x01 : 0x00;
+                    }
+                    return result;
+                }
+                return DTB_ERROR_INVALID_PARAM;
+                
+            case MODBUS_WRITE_BIT:
+                return DTB_WriteBit(handle, address, (data == 0xFF00) ? 1 : 0);
+                
+            default:
+                return DTB_ERROR_NOT_SUPPORTED;
+        }
+    }
+    
+    DTBCommandParams params = {
+        .rawModbus = {
+            .functionCode = functionCode,
+            .address = address,
+            .data = data,
+            .rxBuffer = rxBuffer,
+            .rxBufferSize = rxBufferSize
+        }
+    };
+    DTBCommandResult result;
+    
+    int error = DTB_QueueCommandBlocking(g_dtbQueueManager, DTB_CMD_RAW_MODBUS,
+                                       &params, DTB_PRIORITY_NORMAL, &result,
+                                       DTB_QUEUE_COMMAND_TIMEOUT_MS);
+    
+    // Response data is already copied to rxBuffer in DTB_AdapterExecuteCommand
+    
+    return error;
+}
+
 /******************************************************************************
  * Utility Functions
  ******************************************************************************/
@@ -853,7 +1035,10 @@ int DTB_QueueGetCommandDelay(DTBCommandType type) {
             
         case DTB_CMD_CLEAR_ALARM:
             return DTB_DELAY_AFTER_WRITE_BIT;
-            
+        
+		case DTB_CMD_RAW_MODBUS:
+    		return DTB_DELAY_RECOVERY;
+
         default:
             return DTB_DELAY_RECOVERY;
     }

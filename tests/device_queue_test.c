@@ -262,9 +262,7 @@ static const DeviceAdapter g_mockAdapter = {
     .copyCommandResult = Mock_CopyCommandResult,
     .getCommandTypeName = Mock_GetCommandTypeName,
     .getCommandDelay = Mock_GetCommandDelay,
-    .getErrorString = GetErrorString,
-    .supportsRawCommands = NULL,
-    .executeRawCommand = NULL
+    .getErrorString = GetErrorString
 };
 
 /******************************************************************************

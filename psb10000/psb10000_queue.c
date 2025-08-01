@@ -97,11 +97,7 @@ static const DeviceAdapter g_psbAdapter = {
     // Utility functions
     .getCommandTypeName = (const char* (*)(int))PSB_QueueGetCommandTypeName,
     .getCommandDelay = PSB_QueueGetCommandDelay,
-    .getErrorString = GetErrorString,
-    
-    // Raw command support
-    .supportsRawCommands = NULL,
-    .executeRawCommand = NULL
+    .getErrorString = GetErrorString
 };
 
 /******************************************************************************
@@ -209,9 +205,35 @@ static int PSB_AdapterExecuteCommand(void *deviceContext, int commandType, void 
             break;
             
         case PSB_CMD_RAW_MODBUS:
-            // TODO: Implement raw Modbus command execution using PSB_SendRawModbus
-            cmdResult->errorCode = PSB_ERROR_NOT_SUPPORTED;
-            break;
+		    if (!cmdParams->rawModbus.txBuffer || !cmdParams->rawModbus.rxBuffer) {
+		        cmdResult->errorCode = PSB_ERROR_INVALID_PARAM;
+		        break;
+		    }
+		    
+		    // Allocate space for response data
+		    cmdResult->data.rawResponse.rxData = malloc(cmdParams->rawModbus.rxBufferSize);
+		    if (!cmdResult->data.rawResponse.rxData) {
+		        cmdResult->errorCode = PSB_ERROR_INVALID_PARAM;
+		        break;
+		    }
+		    
+		    // Execute the raw command
+		    cmdResult->errorCode = PSB_SendRawModbus(&ctx->handle, 
+		                                           cmdParams->rawModbus.txBuffer,
+		                                           cmdParams->rawModbus.txLength,
+		                                           cmdResult->data.rawResponse.rxData,
+		                                           cmdParams->rawModbus.rxBufferSize,
+		                                           cmdParams->rawModbus.expectedRxLength);
+		    
+		    if (cmdResult->errorCode == PSB_SUCCESS) {
+		        cmdResult->data.rawResponse.rxLength = cmdParams->rawModbus.expectedRxLength;
+		    } else {
+		        // Clean up on failure
+		        free(cmdResult->data.rawResponse.rxData);
+		        cmdResult->data.rawResponse.rxData = NULL;
+		        cmdResult->data.rawResponse.rxLength = 0;
+		    }
+		    break;
 			
 		case PSB_CMD_SET_SINK_CURRENT:
 		    cmdResult->errorCode = PSB_SetSinkCurrent(&ctx->handle, cmdParams->setSinkCurrent.current);
@@ -294,9 +316,10 @@ static void PSB_AdapterFreeCommandResult(int commandType, void *result) {
     PSBCommandResult *cmdResult = (PSBCommandResult*)result;
     
     // Free any allocated result data
-    if (commandType == PSB_CMD_RAW_MODBUS && cmdResult->data.rawResponse.rxData) {
-        free(cmdResult->data.rawResponse.rxData);
-    }
+	if (commandType == PSB_CMD_RAW_MODBUS && cmdResult->data.rawResponse.rxData) {
+	    free(cmdResult->data.rawResponse.rxData);
+	    cmdResult->data.rawResponse.rxData = NULL;
+	}
     
     free(result);
 }
@@ -725,6 +748,40 @@ int PSB_ZeroAllValues(PSB_Handle *handle) {
     }
     
     return overallResult;
+}
+
+int PSB_SendRawModbusQueued(PSB_Handle *handle, unsigned char *txBuffer, int txLength,
+                            unsigned char *rxBuffer, int rxBufferSize, int expectedRxLength) {
+    if (!g_psbQueueManager) return PSB_SendRawModbus(handle, txBuffer, txLength, 
+                                                     rxBuffer, rxBufferSize, expectedRxLength);
+    
+    if (!txBuffer || !rxBuffer || txLength <= 0 || rxBufferSize <= 0) {
+        return PSB_ERROR_INVALID_PARAM;
+    }
+    
+    PSBCommandParams params = {0};
+    PSBCommandResult result = {0};
+    
+    // Set up the raw Modbus parameters
+    params.rawModbus.txBuffer = txBuffer;
+    params.rawModbus.txLength = txLength;
+    params.rawModbus.rxBuffer = rxBuffer;
+    params.rawModbus.rxBufferSize = rxBufferSize;
+    params.rawModbus.expectedRxLength = expectedRxLength;
+    
+    int error = PSB_QueueCommandBlocking(g_psbQueueManager, PSB_CMD_RAW_MODBUS,
+                                       &params, PSB_PRIORITY_NORMAL, &result,
+                                       PSB_QUEUE_COMMAND_TIMEOUT_MS);
+    
+    if (error == PSB_SUCCESS && result.data.rawResponse.rxData) {
+        // Copy the response data back to the caller's buffer
+        memcpy(rxBuffer, result.data.rawResponse.rxData, result.data.rawResponse.rxLength);
+        
+        // Free the allocated response data
+        free(result.data.rawResponse.rxData);
+    }
+    
+    return error;
 }
 
 /******************************************************************************

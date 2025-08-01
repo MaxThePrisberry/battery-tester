@@ -171,4 +171,8 @@ unsigned short PSB_CalculateCRC(unsigned char *data, int length);
 // Debug Functions
 void PSB_PrintStatus(PSB_Status *status);
 
+// Raw Command Support
+int PSB_SendRawModbus(PSB_Handle *handle, unsigned char *txBuffer, int txLength,
+                      unsigned char *rxBuffer, int rxBufferSize, int expectedRxLength);
+
 #endif // PSB10000_H

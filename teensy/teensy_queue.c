@@ -82,11 +82,7 @@ static const DeviceAdapter g_tnyAdapter = {
     // Utility functions
     .getCommandTypeName = (const char* (*)(int))TNY_QueueGetCommandTypeName,
     .getCommandDelay = TNY_QueueGetCommandDelay,
-    .getErrorString = GetErrorString,
-    
-    // Raw command support
-    .supportsRawCommands = NULL,
-    .executeRawCommand = NULL
+    .getErrorString = GetErrorString
 };
 
 /******************************************************************************

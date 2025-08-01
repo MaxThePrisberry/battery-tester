@@ -242,6 +242,11 @@ int DTB_EnableWriteAccessQueued(DTB_Handle *handle);
 int DTB_DisableWriteAccessQueued(DTB_Handle *handle);
 int DTB_GetWriteAccessStatusQueued(DTB_Handle *handle, int *isEnabled);
 
+// Raw command support
+int DTB_SendRawModbusQueued(DTB_Handle *handle, unsigned char functionCode,
+                       unsigned short address, unsigned short data,
+                       unsigned char *rxBuffer, int rxBufferSize);
+
 /******************************************************************************
  * Utility Functions
  ******************************************************************************/

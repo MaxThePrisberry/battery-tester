@@ -199,6 +199,8 @@ int PSB_SetSinkCurrentLimitsQueued(PSB_Handle *handle, double minCurrent, double
 int PSB_SetSinkPowerLimitQueued(PSB_Handle *handle, double maxPower);
 int PSB_GetStatusQueued(PSB_Handle *handle, PSB_Status *status);
 int PSB_GetActualValuesQueued(PSB_Handle *handle, double *voltage, double *current, double *power);
+int PSB_SendRawModbusQueued(PSB_Handle *handle, unsigned char *txBuffer, int txLength,
+                            unsigned char *rxBuffer, int rxBufferSize, int expectedRxLength);
 
 /******************************************************************************
  * Utility Functions

@@ -88,11 +88,7 @@ static const DeviceAdapter g_bioAdapter = {
     // Utility functions
     .getCommandTypeName = (const char* (*)(int))BIO_QueueGetCommandTypeName,
     .getCommandDelay = BIO_QueueGetCommandDelay,
-    .getErrorString = GetErrorString,
-    
-    // Raw command support
-    .supportsRawCommands = NULL,
-    .executeRawCommand = NULL
+    .getErrorString = GetErrorString
 };
 
 /******************************************************************************

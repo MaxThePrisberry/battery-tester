@@ -100,10 +100,6 @@ typedef struct DeviceAdapter {
     const char* (*getCommandTypeName)(int commandType);
     int (*getCommandDelay)(int commandType);
     const char* (*getErrorString)(int errorCode);
-    
-    // Optional: Raw command support
-    bool (*supportsRawCommands)(void);
-    int (*executeRawCommand)(void *deviceContext, void *rawParams, void *rawResult);
 } DeviceAdapter;
 
 /******************************************************************************
