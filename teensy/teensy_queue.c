@@ -471,7 +471,12 @@ int TNY_QueueCancelTransaction(TNYQueueManager *mgr, TransactionHandle txn) {
 int TNY_SetPinsAtomic(TNY_Handle *handle, const TNYPinState *pinStates, int count,
                      TNYTransactionCallback callback, void *userData) {
     TNYQueueManager *queueMgr = TNY_GetGlobalQueueManager();
-    if (!queueMgr || !pinStates || count <= 0) {
+	
+    if (!queueMgr) {
+        LogErrorEx(LOG_DEVICE_TNY, "Queue manager not initialized for atomic pin set");
+        return ERR_QUEUE_NOT_INIT;
+    }
+    if (!pinStates || count <= 0) {
         return TNY_ERROR_INVALID_PARAM;
     }
     
@@ -479,7 +484,7 @@ int TNY_SetPinsAtomic(TNY_Handle *handle, const TNYPinState *pinStates, int coun
     TransactionHandle txn = TNY_QueueBeginTransaction(queueMgr);
     if (txn == 0) {
         LogErrorEx(LOG_DEVICE_TNY, "Failed to begin atomic pin set transaction");
-        return ERR_OPERATION_FAILED;
+        return ERR_QUEUE_NOT_INIT;
     }
     
     // Set transaction to high priority for atomic operations
@@ -518,13 +523,15 @@ int TNY_InitializePins(TNY_Handle *handle,
                       const int *lowPins, int lowCount,
                       const int *highPins, int highCount) {
     TNYQueueManager *queueMgr = TNY_GetGlobalQueueManager();
+	
     if (!queueMgr) {
-        return TNY_ERROR_INVALID_PARAM;
+        LogErrorEx(LOG_DEVICE_TNY, "Queue manager not initialized for pin initialization");
+        return ERR_QUEUE_NOT_INIT;
     }
     
     int totalPins = (lowPins ? lowCount : 0) + (highPins ? highCount : 0);
     if (totalPins == 0) {
-        return SUCCESS;  // Nothing to do
+        return SUCCESS;
     }
     
     LogMessageEx(LOG_DEVICE_TNY, "Initializing %d pins (%d low, %d high)", 
@@ -534,8 +541,8 @@ int TNY_InitializePins(TNY_Handle *handle,
     TransactionHandle txn = TNY_QueueBeginTransaction(queueMgr);
     if (txn == 0) {
         LogErrorEx(LOG_DEVICE_TNY, "Failed to begin pin initialization transaction");
-        return ERR_OPERATION_FAILED;
-    }
+        return ERR_QUEUE_NOT_INIT;
+	}
     
     // Set high priority for initialization
     DeviceQueue_SetTransactionPriority(queueMgr, txn, TNY_PRIORITY_HIGH);

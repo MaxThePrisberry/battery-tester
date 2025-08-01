@@ -328,12 +328,11 @@ double CalculateStateOfCharge(double currentCapacity_mAh, double totalCapacity_m
  * Graph Utility Functions
  ******************************************************************************/
 
-/**
- * Clear all plots from a graph control
- * @param panel - Panel handle
- * @param graph - Graph control ID
- */
-void ClearAllGraphPlots(int panel, int graph);
+// Graph utility functions
+void ClearAllGraphs(int panel, const int graphs[], int numGraphs);
+void ConfigureGraph(int panel, int graph, const char *title, const char *xLabel, 
+                   const char *yLabel, double yMin, double yMax);
+void PlotDataPoint(int panel, int graph, double x, double y, int style, int color);
 
 /******************************************************************************
  * File Writing Utilities

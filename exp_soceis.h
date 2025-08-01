@@ -163,7 +163,6 @@ int CVICALLBACK ImportSOCEISSettingsCallback(int panel, int control, int event,
                                             int eventData2);
 
 // Module management
-int SOCEISTest_Initialize(void);
 void SOCEISTest_Cleanup(void);
 int SOCEISTest_IsRunning(void);
 int SOCEISTest_Abort(void);

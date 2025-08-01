@@ -139,9 +139,6 @@ int CVICALLBACK StartCapacityExperimentCallback(int panel, int control, int even
                                                void *callbackData, int eventData1, 
                                                int eventData2);
 
-// Initialize capacity test module (called from main if needed)
-int CapacityTest_Initialize(void);
-
 // Cleanup capacity test module
 void CapacityTest_Cleanup(void);
 

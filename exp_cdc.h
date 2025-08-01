@@ -28,14 +28,6 @@
 // Power limit to avoid CP mode (Watts)
 #define CDC_POWER_LIMIT_W              20.0     // 20W limit prevents CP mode
 
-// Status update messages
-#define CDC_STATUS_CHARGING            "Charging battery..."
-#define CDC_STATUS_DISCHARGING         "Discharging battery..."
-#define CDC_STATUS_CHARGE_COMPLETE     "Charge complete"
-#define CDC_STATUS_DISCHARGE_COMPLETE  "Discharge complete"
-#define CDC_STATUS_CANCELLED           "Operation cancelled"
-#define CDC_STATUS_FAILED              "Operation failed"
-
 /******************************************************************************
  * Type Definitions
  ******************************************************************************/

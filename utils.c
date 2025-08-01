@@ -523,10 +523,23 @@ double CalculateStateOfCharge(double currentCapacity_mAh, double totalCapacity_m
  * Graph Utility Functions
  ******************************************************************************/
 
-void ClearAllGraphPlots(int panel, int graph) {
-    if (panel > 0 && graph > 0) {
-        DeleteGraphPlot(panel, graph, -1, VAL_IMMEDIATE_DRAW);
+void ClearAllGraphs(int panel, const int graphs[], int numGraphs) {
+    for (int i = 0; i < numGraphs; i++) {
+        DeleteGraphPlot(panel, graphs[i], -1, VAL_DELAYED_DRAW);
     }
+}
+
+void ConfigureGraph(int panel, int graph, const char *title, const char *xLabel, 
+                   const char *yLabel, double yMin, double yMax) {
+    SetCtrlAttribute(panel, graph, ATTR_LABEL_TEXT, title);
+    SetCtrlAttribute(panel, graph, ATTR_XNAME, xLabel);
+    SetCtrlAttribute(panel, graph, ATTR_YNAME, yLabel);
+    SetAxisScalingMode(panel, graph, VAL_LEFT_YAXIS, VAL_MANUAL, yMin, yMax);
+    SetAxisScalingMode(panel, graph, VAL_BOTTOM_XAXIS, VAL_AUTOSCALE, 0.0, 0.0);
+}
+
+void PlotDataPoint(int panel, int graph, double x, double y, int style, int color) {
+    PlotPoint(panel, graph, x, y, style, color);
 }
 
 /******************************************************************************

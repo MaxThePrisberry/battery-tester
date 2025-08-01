@@ -115,20 +115,13 @@ typedef struct {
  ******************************************************************************/
 
 /**
- * Initialize the queue manager with auto-discovery for a PSB device
- * @param targetSerial - Serial number of the PSB to find (e.g., "2872380001")
- * @return Queue manager instance or NULL on failure
- */
-PSBQueueManager* PSB_QueueInit(const char *targetSerial);
-
-/**
  * Initialize the queue manager with specific connection parameters
  * @param comPort - COM port number (1-16)
  * @param slaveAddress - Modbus slave address
  * @param baudRate - Baud rate (e.g., 115200)
  * @return Queue manager instance or NULL on failure
  */
-PSBQueueManager* PSB_QueueInitSpecific(int comPort, int slaveAddress, int baudRate);
+PSBQueueManager* PSB_QueueInit(int comPort, int slaveAddress, int baudRate);
 
 /**
  * Get the PSB handle from the queue manager

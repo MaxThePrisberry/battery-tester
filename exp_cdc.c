@@ -33,10 +33,9 @@ static const int g_numCdcControls = sizeof(g_cdcControls) / sizeof(g_cdcControls
  * Internal Function Prototypes
  ******************************************************************************/
 
-static int CVICALLBACK CDCTestThread(void *functionData);
+static int CDCExperimentThread(void *functionData);
 static int StartCDCOperation(int panel, int control, CDCOperationMode mode);
 static int VerifyBatteryState(CDCTestContext *ctx);
-static int ConfigureGraph(CDCTestContext *ctx);
 static int RunOperation(CDCTestContext *ctx);
 static void UpdateGraph(CDCTestContext *ctx, double current, double time);
 static void ClearGraph(CDCTestContext *ctx);
@@ -195,7 +194,7 @@ static int StartCDCOperation(int panel, int control, CDCOperationMode mode) {
                                   controlsToDim, dimCount);
     
     // Start test thread
-    int error = CmtScheduleThreadPoolFunction(g_threadPool, CDCTestThread, 
+    int error = CmtScheduleThreadPoolFunction(g_threadPool, CDCExperimentThread, 
                                             &g_testContext, &g_testThreadId);
     if (error != 0) {
         // Failed to start thread
@@ -220,7 +219,7 @@ static int StartCDCOperation(int panel, int control, CDCOperationMode mode) {
  * Test Thread Implementation
  ******************************************************************************/
 
-static int CVICALLBACK CDCTestThread(void *functionData) {
+static int CDCExperimentThread(void *functionData) {
     CDCTestContext *ctx = (CDCTestContext*)functionData;
     char message[LARGE_BUFFER_SIZE];
     int result = SUCCESS;
@@ -284,12 +283,17 @@ static int CVICALLBACK CDCTestThread(void *functionData) {
     }
     
     // Configure graph
-    ConfigureGraph(ctx);
+    ConfigureGraph(ctx->mainPanelHandle, ctx->graphHandle, 
+           "Current vs Time", "Time (s)", "Current (A)", 
+           0.0, ctx->params.targetCurrent * 1.1);
+	
+	// Clear any existing plots
+	DeleteGraphPlot(ctx->mainPanelHandle, ctx->graphHandle, -1, VAL_DELAYED_DRAW);
     
     // Run the operation
     LogMessage("Starting %s operation...", GetModeName(ctx->mode));
     SetCtrlVal(ctx->mainPanelHandle, PANEL_STR_PSB_STATUS, 
-               ctx->mode == CDC_MODE_CHARGE ? CDC_STATUS_CHARGING : CDC_STATUS_DISCHARGING);
+               ctx->mode == CDC_MODE_CHARGE ? "Charging battery..." : "Discharging battery...");
     
     result = RunOperation(ctx);
     if (result != SUCCESS || ctx->state == CDC_STATE_CANCELLED) {
@@ -314,12 +318,12 @@ cleanup:
     // Update status based on final state
     if (ctx->state == CDC_STATE_COMPLETED) {
         SetCtrlVal(ctx->mainPanelHandle, PANEL_STR_PSB_STATUS, 
-                   ctx->mode == CDC_MODE_CHARGE ? CDC_STATUS_CHARGE_COMPLETE : 
-                                                  CDC_STATUS_DISCHARGE_COMPLETE);
+                   ctx->mode == CDC_MODE_CHARGE ? "Charge complete" : 
+                                                  "Discharge complete");
     } else if (ctx->state == CDC_STATE_CANCELLED) {
-        SetCtrlVal(ctx->mainPanelHandle, PANEL_STR_PSB_STATUS, CDC_STATUS_CANCELLED);
+        SetCtrlVal(ctx->mainPanelHandle, PANEL_STR_PSB_STATUS, "Operation cancelled");
     } else {
-        SetCtrlVal(ctx->mainPanelHandle, PANEL_STR_PSB_STATUS, CDC_STATUS_FAILED);
+        SetCtrlVal(ctx->mainPanelHandle, PANEL_STR_PSB_STATUS, "Operation failed");
     }
     
     // Restore button text
@@ -400,24 +404,6 @@ static int VerifyBatteryState(CDCTestContext *ctx) {
     }
     
     LogMessage("Battery state verified");
-    return SUCCESS;
-}
-
-static int ConfigureGraph(CDCTestContext *ctx) {
-    // Configure Graph 1 - Current vs Time
-    SetCtrlAttribute(ctx->mainPanelHandle, ctx->graphHandle, ATTR_LABEL_TEXT, "Current vs Time");
-    SetCtrlAttribute(ctx->mainPanelHandle, ctx->graphHandle, ATTR_XNAME, "Time (s)");
-    SetCtrlAttribute(ctx->mainPanelHandle, ctx->graphHandle, ATTR_YNAME, "Current (A)");
-    
-    // Set Y-axis range for current
-    SetAxisScalingMode(ctx->mainPanelHandle, ctx->graphHandle, VAL_LEFT_YAXIS, 
-                       VAL_MANUAL, 0.0, ctx->params.targetCurrent * 1.1);
-    SetAxisScalingMode(ctx->mainPanelHandle, ctx->graphHandle, VAL_BOTTOM_XAXIS, 
-                       VAL_AUTOSCALE, 0.0, 0.0);
-    
-    // Clear any existing plots
-    DeleteGraphPlot(ctx->mainPanelHandle, ctx->graphHandle, -1, VAL_DELAYED_DRAW);
-    
     return SUCCESS;
 }
 
@@ -609,7 +595,8 @@ static void UpdateGraph(CDCTestContext *ctx, double current, double time) {
 }
 
 static void ClearGraph(CDCTestContext *ctx) {
-    ClearAllGraphPlots(ctx->mainPanelHandle, ctx->graphHandle);
+    int graphs[] = {ctx->graphHandle};
+    ClearAllGraphs(ctx->mainPanelHandle, graphs, 1);
 }
 
 static void RestoreUI(CDCTestContext *ctx) {

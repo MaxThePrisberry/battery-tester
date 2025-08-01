@@ -51,7 +51,6 @@ static DTBQueueManager *g_dtbQueueManager = NULL;
 
 typedef struct {
     DTB_Handle handle;
-    bool autoDiscovery;
     int specificPort;
     int specificBaudRate;
     int specificSlaveAddress;
@@ -128,7 +127,6 @@ static int DTB_AdapterConnect(void *deviceContext, void *connectionParams) {
                           params->slaveAddress, params->baudRate);
     
     if (result == DTB_SUCCESS) {
-        ctx->autoDiscovery = false;
         ctx->specificPort = params->comPort;
         ctx->specificBaudRate = params->baudRate;
         ctx->specificSlaveAddress = params->slaveAddress;
@@ -888,7 +886,11 @@ int DTB_QueueCancelTransaction(DTBQueueManager *mgr, TransactionHandle txn) {
 int DTB_ConfigureAtomic(DTB_Handle *handle, const DTB_Configuration *config,
                        DTBTransactionCallback callback, void *userData) {
     DTBQueueManager *queueMgr = DTB_GetGlobalQueueManager();
-    if (!queueMgr || !config) {
+    if (!queueMgr) {
+        LogErrorEx(LOG_DEVICE_DTB, "Queue manager not initialized for atomic configuration");
+        return ERR_QUEUE_NOT_INIT;
+    }
+    if (!config) {
         return DTB_ERROR_INVALID_PARAM;
     }
     
@@ -896,7 +898,7 @@ int DTB_ConfigureAtomic(DTB_Handle *handle, const DTB_Configuration *config,
     TransactionHandle txn = DTB_QueueBeginTransaction(queueMgr);
     if (txn == 0) {
         LogErrorEx(LOG_DEVICE_DTB, "Failed to begin configuration transaction");
-        return ERR_OPERATION_FAILED;
+        return ERR_QUEUE_NOT_INIT;
     }
     
     DTBCommandParams params;
@@ -960,8 +962,10 @@ cleanup:
 int DTB_SetControlMethodWithParams(DTB_Handle *handle, int method, int pidMode,
                                   const DTB_PIDParams *pidParams) {
     DTBQueueManager *queueMgr = DTB_GetGlobalQueueManager();
+    // Add explicit check
     if (!queueMgr) {
-        return DTB_ERROR_INVALID_PARAM;
+        LogErrorEx(LOG_DEVICE_DTB, "Queue manager not initialized for control method change");
+        return ERR_QUEUE_NOT_INIT;
     }
     
     // For non-PID methods, just set the control method
@@ -973,7 +977,7 @@ int DTB_SetControlMethodWithParams(DTB_Handle *handle, int method, int pidMode,
     TransactionHandle txn = DTB_QueueBeginTransaction(queueMgr);
     if (txn == 0) {
         LogErrorEx(LOG_DEVICE_DTB, "Failed to begin control method transaction");
-        return ERR_OPERATION_FAILED;
+        return ERR_QUEUE_NOT_INIT;
     }
     
     DTBCommandParams params;

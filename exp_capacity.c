@@ -32,7 +32,7 @@ static const int controls[numControls] = {CAPACITY_NUM_CURRENT_THRESHOLD,
  * Internal Function Prototypes
  ******************************************************************************/
 
-static int CVICALLBACK CapacityTestThread(void *functionData);
+static int CapacityExperimentThread(void *functionData);
 static int VerifyBatteryCharged(CapacityTestContext *ctx);
 static int ConfigureGraphs(CapacityTestContext *ctx);
 static int RunTestPhase(CapacityTestContext *ctx, CapacityTestPhase phase);
@@ -153,7 +153,7 @@ int CVICALLBACK StartCapacityExperimentCallback(int panel, int control, int even
     DimCapacityExperimentControls(g_mainPanelHandle, panel, 1, controls, numControls);
     
     // Start test thread
-    int error = CmtScheduleThreadPoolFunction(g_threadPool, CapacityTestThread, 
+    int error = CmtScheduleThreadPoolFunction(g_threadPool, CapacityExperimentThread, 
                                             &g_testContext, &g_testThreadId);
     if (error != 0) {
         // Failed to start thread
@@ -183,7 +183,7 @@ int CapacityTest_IsRunning(void) {
  * Test Thread Implementation
  ******************************************************************************/
 
-static int CVICALLBACK CapacityTestThread(void *functionData) {
+static int CapacityExperimentThread(void *functionData) {
     CapacityTestContext *ctx = (CapacityTestContext*)functionData;
     char message[LARGE_BUFFER_SIZE];
     int result = SUCCESS;
@@ -807,8 +807,8 @@ static void UpdateGraphs(CapacityTestContext *ctx, CapacityDataPoint *point) {
 }
 
 static void ClearGraphs(CapacityTestContext *ctx) {
-    ClearAllGraphPlots(ctx->mainPanelHandle, ctx->graph1Handle);
-    ClearAllGraphPlots(ctx->mainPanelHandle, ctx->graph2Handle);
+    int graphs[] = {ctx->graph1Handle, ctx->graph2Handle};
+    ClearAllGraphs(ctx->mainPanelHandle, graphs, 2);
 }
 
 static int WriteResultsFile(CapacityTestContext *ctx) {
@@ -904,12 +904,6 @@ static void RestoreUI(CapacityTestContext *ctx) {
 /******************************************************************************
  * Module Management Functions
  ******************************************************************************/
-
-int CapacityTest_Initialize(void) {
-    memset(&g_testContext, 0, sizeof(g_testContext));
-    g_testContext.state = CAPACITY_STATE_IDLE;
-    return SUCCESS;
-}
 
 void CapacityTest_Cleanup(void) {
     if (CapacityTest_IsRunning()) {

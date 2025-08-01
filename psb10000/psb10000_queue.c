@@ -42,7 +42,6 @@ static PSBQueueManager *g_psbQueueManager = NULL;
 typedef struct {
     PSB_Handle handle;
     char targetSerial[64];
-    bool autoDiscovery;
     int specificPort;
     int specificBaudRate;
     int specificSlaveAddress;
@@ -120,7 +119,6 @@ static int PSB_AdapterConnect(void *deviceContext, void *connectionParams) {
                                   params->slaveAddress, params->baudRate);
     
     if (result == PSB_SUCCESS) {
-        ctx->autoDiscovery = false;
         ctx->specificPort = params->comPort;
         ctx->specificBaudRate = params->baudRate;
         ctx->specificSlaveAddress = params->slaveAddress;
@@ -326,45 +324,7 @@ static void PSB_AdapterCopyCommandResult(int commandType, void *dest, void *src)
  * Queue Manager Functions
  ******************************************************************************/
 
-PSBQueueManager* PSB_QueueInit(const char *targetSerial) {
-    if (!targetSerial || strlen(targetSerial) == 0) {
-        LogErrorEx(LOG_DEVICE_PSB, "PSB_QueueInit: No target serial number provided");
-        return NULL;
-    }
-    
-    // Create device context
-    PSBDeviceContext *context = calloc(1, sizeof(PSBDeviceContext));
-    if (!context) {
-        LogErrorEx(LOG_DEVICE_PSB, "PSB_QueueInit: Failed to allocate device context");
-        return NULL;
-    }
-    
-    // Create connection parameters
-    PSBConnectionParams *connParams = calloc(1, sizeof(PSBConnectionParams));
-    if (!connParams) {
-        free(context);
-        LogErrorEx(LOG_DEVICE_PSB, "PSB_QueueInit: Failed to allocate connection params");
-        return NULL;
-    }
-    
-    SAFE_STRCPY(connParams->targetSerial, targetSerial, sizeof(connParams->targetSerial));
-    
-    // Create the generic device queue
-    PSBQueueManager *mgr = DeviceQueue_Create(&g_psbAdapter, context, connParams, 0);
-    
-    if (!mgr) {
-        free(context);
-        free(connParams);
-        return NULL;
-    }
-    
-    // Set logging device
-    DeviceQueue_SetLogDevice(mgr, LOG_DEVICE_PSB);
-    
-    return mgr;
-}
-
-PSBQueueManager* PSB_QueueInitSpecific(int comPort, int slaveAddress, int baudRate) {
+PSBQueueManager* PSB_QueueInit(int comPort, int slaveAddress, int baudRate) {
     // Create device context
     PSBDeviceContext *context = calloc(1, sizeof(PSBDeviceContext));
     if (!context) {
@@ -651,7 +611,8 @@ int PSB_SetSinkPowerLimitQueued(PSB_Handle *handle, double maxPower) {
 int PSB_SetSafeLimits(PSB_Handle *handle) {
     PSBQueueManager *queueMgr = PSB_GetGlobalQueueManager();
     if (!queueMgr && !handle) {
-        return PSB_ERROR_NOT_CONNECTED;
+        LogErrorEx(LOG_DEVICE_PSB, "Neither queue manager nor handle available for setting safe limits");
+        return ERR_NOT_CONNECTED;
     }
     
     int result;
@@ -706,7 +667,8 @@ int PSB_SetSafeLimits(PSB_Handle *handle) {
 int PSB_ZeroAllValues(PSB_Handle *handle) {
     PSBQueueManager *queueMgr = PSB_GetGlobalQueueManager();
     if (!queueMgr && !handle) {
-        return PSB_ERROR_NOT_CONNECTED;
+        LogErrorEx(LOG_DEVICE_PSB, "Neither queue manager nor handle available for zeroing values");
+        return ERR_NOT_CONNECTED;
     }
     
     int result;

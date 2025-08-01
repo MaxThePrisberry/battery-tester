@@ -35,7 +35,7 @@ static const int controls[numControls] = {SOCEIS_NUM_CURRENT_THRESHOLD,
  * Internal Function Prototypes
  ******************************************************************************/
 
-static int CVICALLBACK SOCEISTestThread(void *functionData);
+static int CVICALLBACK SOCEISExperimentThread(void *functionData);
 static int VerifyBatteryDischarged(SOCEISTestContext *ctx);
 static int ConfigureGraphs(SOCEISTestContext *ctx);
 static int CreateTestDirectory(SOCEISTestContext *ctx);
@@ -200,7 +200,7 @@ int CVICALLBACK StartSOCEISExperimentCallback(int panel, int control, int event,
     DimCapacityExperimentControls(g_mainPanelHandle, panel, 1, controls, numControls);
     
     // Start test thread
-    int error = CmtScheduleThreadPoolFunction(g_threadPool, SOCEISTestThread, 
+    int error = CmtScheduleThreadPoolFunction(g_threadPool, SOCEISExperimentThread, 
                                             &g_testContext, &g_testThreadId);
     if (error != 0) {
         // Failed to start thread
@@ -379,7 +379,7 @@ int SOCEISTest_IsRunning(void) {
  * Test Thread Implementation
  ******************************************************************************/
 
-static int CVICALLBACK SOCEISTestThread(void *functionData) {
+static int SOCEISExperimentThread(void *functionData) {
     SOCEISTestContext *ctx = (SOCEISTestContext*)functionData;
     char message[LARGE_BUFFER_SIZE];
     int result = SUCCESS;
@@ -1680,9 +1680,8 @@ static void RestoreUI(SOCEISTestContext *ctx) {
 }
 
 static void ClearGraphs(SOCEISTestContext *ctx) {
-    ClearAllGraphPlots(ctx->mainPanelHandle, ctx->graph1Handle);
-    ClearAllGraphPlots(ctx->mainPanelHandle, ctx->graph2Handle);
-    ClearAllGraphPlots(ctx->mainPanelHandle, ctx->graphBiologicHandle);
+    int graphs[] = {ctx->graph1Handle, ctx->graph2Handle, ctx->graphBiologicHandle};
+    ClearAllGraphs(ctx->mainPanelHandle, graphs, 3);
 }
 
 static int DischargeToFiftyPercent(SOCEISTestContext *ctx) {
@@ -1742,12 +1741,6 @@ static int DischargeToFiftyPercent(SOCEISTestContext *ctx) {
 /******************************************************************************
  * Module Management Functions
  ******************************************************************************/
-
-int SOCEISTest_Initialize(void) {
-    memset(&g_testContext, 0, sizeof(g_testContext));
-    g_testContext.state = SOCEIS_STATE_IDLE;
-    return SUCCESS;
-}
 
 void SOCEISTest_Cleanup(void) {
     if (SOCEISTest_IsRunning()) {

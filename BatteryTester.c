@@ -74,7 +74,7 @@ int main (int argc, char *argv[]) {
     // Initialize PSB queue manager with specific port
 	if (ENABLE_PSB) {
 	    LogMessage("Initializing PSB queue manager on COM%d...", PSB_COM_PORT);
-	    g_psbQueueMgr = PSB_QueueInitSpecific(PSB_COM_PORT, PSB_SLAVE_ADDRESS, PSB_BAUD_RATE);
+	    g_psbQueueMgr = PSB_QueueInit(PSB_COM_PORT, PSB_SLAVE_ADDRESS, PSB_BAUD_RATE);
 	    
 	    if (g_psbQueueMgr) {
 	        PSB_SetGlobalQueueManager(g_psbQueueMgr);
@@ -194,8 +194,8 @@ int main (int argc, char *argv[]) {
 	            LogMessage("Teensy queue manager initialized and connected on COM%d", TNY_COM_PORT);
 	            
 	            // Optional: Initialize pins to known state
-	            int lowPins[] = {0, 1, 2, 3, 4};
-	            TNY_InitializePins(NULL, lowPins, 5, NULL, 0);
+	            int lowPins[] = {0, 1};
+	            TNY_InitializePins(NULL, lowPins, 2, NULL, 0);
 	        } else {
 	            LogWarning("Teensy queue manager initialized but not connected on COM%d", TNY_COM_PORT);
 	        }
