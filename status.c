@@ -263,38 +263,35 @@ static void Status_TimerUpdate(void) {
                 UpdateDeviceLED(DEVICE_PSB, currentState);
                 UpdateDeviceStatus(DEVICE_PSB, stats.isConnected ? "PSB Connected" : "PSB Not Connected");
                 
-                // Get initial values if just connected (blocking call)
+                // Get initial values if just connected
                 if (stats.isConnected && currentState == CONN_STATE_CONNECTED) {
-                    PSB_Handle *handle = PSB_QueueGetHandle(psbQueueMgr);
-                    if (handle) {
-                        PSB_Status status;
-                        if (PSB_GetStatusQueued(handle, &status) == PSB_SUCCESS) {
-                            UpdatePSBValues(&status);
-                            
-                            // Set initial remote mode LED state
-                            UIUpdateData* ledData = malloc(sizeof(UIUpdateData));
-                            if (ledData) {
-                                ledData->control = PANEL_LED_REMOTE_MODE;
-                                ledData->intValue = status.remoteMode;
-                                PostDeferredCall(DeferredLEDUpdate, ledData);
-                            }
-                            
-                            // Set initial remote mode toggle state
-                            UIUpdateData* toggleData = malloc(sizeof(UIUpdateData));
-                            if (toggleData) {
-                                toggleData->control = PANEL_TOGGLE_REMOTE_MODE;
-                                toggleData->intValue = status.remoteMode;
-                                PostDeferredCall(DeferredToggleUpdate, toggleData);
-                            }
-                            
-                            // Log the initial remote mode state
-                            LogMessageEx(LOG_DEVICE_PSB, "Initial remote mode state: %s", 
-                                       status.remoteMode ? "ON" : "OFF");
-							
-							// Update status text with remote mode
-                            const char* modeText = status.remoteMode ? "PSB Connected - Remote Mode" : "PSB Connected - Local Mode";
-                            UpdateDeviceStatus(DEVICE_PSB, modeText);
+                    PSB_Status status;
+                    if (PSB_GetStatusQueued(&status) == PSB_SUCCESS) {
+                        UpdatePSBValues(&status);
+                        
+                        // Set initial remote mode LED state
+                        UIUpdateData* ledData = malloc(sizeof(UIUpdateData));
+                        if (ledData) {
+                            ledData->control = PANEL_LED_REMOTE_MODE;
+                            ledData->intValue = status.remoteMode;
+                            PostDeferredCall(DeferredLEDUpdate, ledData);
                         }
+                        
+                        // Set initial remote mode toggle state
+                        UIUpdateData* toggleData = malloc(sizeof(UIUpdateData));
+                        if (toggleData) {
+                            toggleData->control = PANEL_TOGGLE_REMOTE_MODE;
+                            toggleData->intValue = status.remoteMode;
+                            PostDeferredCall(DeferredToggleUpdate, toggleData);
+                        }
+                        
+                        // Log the initial remote mode state
+                        LogMessageEx(LOG_DEVICE_PSB, "Initial remote mode state: %s", 
+                                   status.remoteMode ? "ON" : "OFF");
+						
+						// Update status text with remote mode
+                        const char* modeText = status.remoteMode ? "PSB Connected - Remote Mode" : "PSB Connected - Local Mode";
+                        UpdateDeviceStatus(DEVICE_PSB, modeText);
                     }
                 } else if (!stats.isConnected) {
                     // PSB disconnected - update remote mode controls to show disconnected state
@@ -317,8 +314,7 @@ static void Status_TimerUpdate(void) {
             
             // Queue periodic status update if connected (async call)
             if (stats.isConnected && !PSB_QueueHasCommandType(psbQueueMgr, PSB_CMD_GET_STATUS)) {
-                PSB_QueueCommandAsync(psbQueueMgr, PSB_CMD_GET_STATUS, NULL, 
-                                    PSB_PRIORITY_NORMAL, PSBStatusCallback, NULL);
+				PSB_GetStatusAsync(PSBStatusCallback, NULL);
             }
         }
     }
@@ -356,23 +352,19 @@ static void Status_TimerUpdate(void) {
                 UpdateDeviceLED(DEVICE_DTB, CONN_STATE_ERROR);
                 UpdateDeviceStatus(DEVICE_DTB, "DTB Not Connected");
             } else if (stats.isConnected && g_status.lastDTBState == CONN_STATE_ERROR) {
-                // Just connected - get initial status (blocking call)
-                DTB_Handle *handle = DTB_QueueGetHandle(dtbQueueMgr);
-                if (handle) {
-                    DTB_Status status;
-                    if (DTB_GetStatusQueued(handle, &status) == DTB_SUCCESS) {
-                        UpdateDTBValues(&status);
-                        // Set state based on output enabled
-                        g_status.lastDTBState = status.outputEnabled ? CONN_STATE_CONNECTED : CONN_STATE_IDLE;
-                        UpdateDeviceStatus(DEVICE_DTB, "DTB Connected");
-                    }
+                // Just connected - get initial status
+                DTB_Status status;
+                if (DTB_GetStatusQueued(&status) == DTB_SUCCESS) {
+                    UpdateDTBValues(&status);
+                    // Set state based on output enabled
+                    g_status.lastDTBState = status.outputEnabled ? CONN_STATE_CONNECTED : CONN_STATE_IDLE;
+                    UpdateDeviceStatus(DEVICE_DTB, "DTB Connected");
                 }
             }
             
             // Queue periodic status update if connected (async call)
             if (stats.isConnected && !DTB_QueueHasCommandType(dtbQueueMgr, DTB_CMD_GET_STATUS)) {
-                DTB_QueueCommandAsync(dtbQueueMgr, DTB_CMD_GET_STATUS, NULL,
-                                    DTB_PRIORITY_NORMAL, DTBStatusCallback, NULL);
+				DTB_GetStatusAsync(DTBStatusCallback, NULL);
             }
         }
     }

@@ -195,7 +195,7 @@ static int TeensyCommandManager(CommandContext *ctx) {
 	
 	int error;
 	char response[16];
-	error = TNY_SendRawCommandQueued(NULL, ctx->command, response, 16);
+	error = TNY_SendRawCommandQueued(ctx->command, response, 16);
 	
 	if (error != SUCCESS) {
 		char message[1024];
@@ -211,7 +211,7 @@ static int TeensyCommandManager(CommandContext *ctx) {
 
 static int DTBCommandManager(CommandContext *ctx) {
 	if (strcmp(ctx->command, "RESET") == 0) {
-		int error = DTB_FactoryResetQueued(NULL);
+		int error = DTB_FactoryResetQueued();
 		
 		if (error != SUCCESS) {
 			char message[1024];
@@ -222,7 +222,7 @@ static int DTBCommandManager(CommandContext *ctx) {
 		
 		LogPromptTextbox(CMD_OUTPUT, "Reset command success.");
 	} else if (strcmp(ctx->command, "SETUP") == 0) {
-		int error = DTB_EnableWriteAccessQueued(NULL);
+		int error = DTB_EnableWriteAccessQueued();
 		
 		if (error != SUCCESS) {
 			char message[1024];
@@ -231,7 +231,7 @@ static int DTBCommandManager(CommandContext *ctx) {
 			return -1;
 		}
 		
-		error = DTB_ConfigureDefaultQueued(NULL);
+		error = DTB_ConfigureDefaultQueued();
 		
 		if (error != SUCCESS) {
 			char message[1024];
@@ -242,7 +242,7 @@ static int DTBCommandManager(CommandContext *ctx) {
 		
 		LogPromptTextbox(CMD_OUTPUT, "Setup command success.");
 	} else if (strcmp(ctx->command, "AT") == 0) {
-		int error = DTB_StartAutoTuningQueued(NULL);
+		int error = DTB_StartAutoTuningQueued();
 		
 		if (error != SUCCESS) {
 			char message[1024];

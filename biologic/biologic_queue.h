@@ -52,7 +52,7 @@ typedef DeviceQueueStats BioQueueStats;
 #define BIO_QUEUE_COMMAND_TIMEOUT_MS  DEVICE_QUEUE_COMMAND_TIMEOUT_MS
 
 // Error codes specific to partial data
-#define BL_ERR_PARTIAL_DATA        -500  // Technique stopped with error but partial data available
+#define BIO_ERR_PARTIAL_DATA        -500  // Technique stopped with error but partial data available
 
 // Progress callback for techniques
 typedef void (*BioTechniqueProgressCallback)(double elapsedTime, int memFilled, void *userData);
@@ -76,6 +76,19 @@ typedef enum {
     // Configuration commands
     BIO_CMD_SET_HARDWARE_CONFIG,
     BIO_CMD_GET_HARDWARE_CONFIG,
+	
+    BIO_CMD_STOP_CHANNEL,
+    BIO_CMD_GET_CURRENT_VALUES,
+    BIO_CMD_GET_CHANNEL_INFOS,
+    BIO_CMD_IS_CHANNEL_PLUGGED,
+    BIO_CMD_GET_CHANNELS_PLUGGED,
+    BIO_CMD_START_CHANNEL,
+    BIO_CMD_GET_DATA,
+    BIO_CMD_GET_EXPERIMENT_INFOS,
+    BIO_CMD_SET_EXPERIMENT_INFOS,
+    BIO_CMD_LOAD_FIRMWARE,
+    BIO_CMD_GET_LIB_VERSION,
+    BIO_CMD_GET_MESSAGE,
     
     BIO_CMD_TYPE_COUNT
 } BioCommandType;
@@ -191,6 +204,35 @@ typedef struct {
 	bool processData;
 } BioSGEISCommand;
 
+// Get channels plugged command
+typedef struct {
+    BioCommandParams base;
+    uint8_t maxChannels;  // Size of array to fill
+} BioGetChannelsPluggedCommand;
+
+// Set experiment info command
+typedef struct {
+    BioCommandParams base;
+    TExperimentInfos_t expInfo;
+} BioSetExperimentInfosCommand;
+
+// Load firmware command
+typedef struct {
+    BioCommandParams base;
+    uint8_t channels[16];
+    uint8_t numChannels;
+    bool showGauge;
+    bool forceReload;
+    char binFile[MAX_PATH_LENGTH];
+    char xlxFile[MAX_PATH_LENGTH];
+} BioLoadFirmwareCommand;
+
+// Get message command
+typedef struct {
+    BioCommandParams base;
+    unsigned int maxSize;
+} BioGetMessageCommand;
+
 // Hardware config command
 typedef struct {
     BioCommandParams base;
@@ -211,11 +253,25 @@ typedef struct {
         
         // Technique results
         struct {
-            BL_TechniqueData *techniqueData;      // Combined raw and converted data
+            BIO_TechniqueData *techniqueData;      // Combined raw and converted data
             double elapsedTime;                   // Total measurement time
             int finalState;                       // Final state of technique
             bool partialData;                     // True if data is partial due to error
         } techniqueResult;
+		
+        TCurrentValues_t currentValues;
+        TChannelInfos_t channelInfos;
+        bool isPlugged;
+        uint8_t channelsPlugged[16];
+        struct {
+            TDataInfos_t dataInfo;
+            TCurrentValues_t currentValues;
+            unsigned int *rawData;  // Must be freed
+        } dataResult;
+        TExperimentInfos_t experimentInfos;
+        int firmwareResults[16];
+        char version[256];
+        char *message;  // Must be freed
     } data;
 } BioCommandResult;
 
@@ -238,16 +294,6 @@ void BIO_QueueGetStats(BioQueueManager *mgr, BioQueueStats *stats);
 /******************************************************************************
  * Command Queueing Functions
  ******************************************************************************/
-
-// Queue a command (blocking)
-int BIO_QueueCommandBlocking(BioQueueManager *mgr, BioCommandType type,
-                           BioCommandParams *params, BioPriority priority,
-                           BioCommandResult *result, int timeoutMs);
-
-// Queue a command (async with callback)
-BioCommandID BIO_QueueCommandAsync(BioQueueManager *mgr, BioCommandType type,
-                                 BioCommandParams *params, BioPriority priority,
-                                 BioCommandCallback callback, void *userData);
 
 // Cancel commands
 int BIO_QueueCancelCommand(BioQueueManager *mgr, BioCommandID cmdId);
@@ -278,23 +324,26 @@ int BIO_QueueCancelTransaction(BioQueueManager *mgr, BioTransactionHandle txn);
 
 /******************************************************************************
  * High-Level Technique Functions (Blocking)
+ * 
+ * These functions will use the queue if initialized, otherwise return
+ * ERR_QUEUE_NOT_INIT
  ******************************************************************************/
 
 // OCV measurement (blocking)
-int BL_RunOCVQueued(int ID, uint8_t channel,
+int BIO_RunOCVQueued(int ID, uint8_t channel,
                     double duration_s,
                     double sample_interval_s,
                     double record_every_dE,
                     double record_every_dT,
                     int e_range,
 					bool processData,
-                    BL_TechniqueData **result,
+                    BIO_TechniqueData **result,
                     int timeout_ms,
                     BioTechniqueProgressCallback progressCallback,
                     void *userData);
 
 // PEIS measurement (blocking)
-int BL_RunPEISQueued(int ID, uint8_t channel,
+int BIO_RunPEISQueued(int ID, uint8_t channel,
                      bool vs_initial,
                      double initial_voltage_step,
                      double duration_step,
@@ -309,13 +358,13 @@ int BL_RunPEISQueued(int ID, uint8_t channel,
                      bool correction,
                      double wait_for_steady,
 					 bool processData,
-                     BL_TechniqueData **result,
+                     BIO_TechniqueData **result,
                      int timeout_ms,
                      BioTechniqueProgressCallback progressCallback,
                      void *userData);
 
 // SPEIS measurement (blocking)
-int BL_RunSPEISQueued(int ID, uint8_t channel,
+int BIO_RunSPEISQueued(int ID, uint8_t channel,
                       bool vs_initial,
                       bool vs_final,
                       double initial_voltage_step,
@@ -333,13 +382,13 @@ int BL_RunSPEISQueued(int ID, uint8_t channel,
                       bool correction,
                       double wait_for_steady,
 					  bool processData,
-                      BL_TechniqueData **result,
+                      BIO_TechniqueData **result,
                       int timeout_ms,
                       BioTechniqueProgressCallback progressCallback,
                       void *userData);
 
 // GEIS measurement (blocking)
-int BL_RunGEISQueued(int ID, uint8_t channel,
+int BIO_RunGEISQueued(int ID, uint8_t channel,
                      bool vs_initial,
                      double initial_current_step,
                      double duration_step,
@@ -355,13 +404,13 @@ int BL_RunGEISQueued(int ID, uint8_t channel,
                      double wait_for_steady,
                      int i_range,
 					 bool processData,
-                     BL_TechniqueData **result,
+                     BIO_TechniqueData **result,
                      int timeout_ms,
                      BioTechniqueProgressCallback progressCallback,
                      void *userData);
 
 // SGEIS measurement (blocking)
-int BL_RunSGEISQueued(int ID, uint8_t channel,
+int BIO_RunSGEISQueued(int ID, uint8_t channel,
                       bool vs_initial,
                       bool vs_final,
                       double initial_current_step,
@@ -380,17 +429,19 @@ int BL_RunSGEISQueued(int ID, uint8_t channel,
                       double wait_for_steady,
                       int i_range,
 					  bool processData,
-                      BL_TechniqueData **result,
+                      BIO_TechniqueData **result,
                       int timeout_ms,
                       BioTechniqueProgressCallback progressCallback,
                       void *userData);
 
 /******************************************************************************
  * High-Level Technique Functions (Async)
+ * 
+ * These functions return ERR_QUEUE_NOT_INIT if the queue is not initialized
  ******************************************************************************/
 
 // OCV measurement (async)
-BioCommandID BL_RunOCVAsync(int ID, uint8_t channel,
+BioCommandID BIO_RunOCVAsync(int ID, uint8_t channel,
                             double duration_s,
                             double sample_interval_s,
                             double record_every_dE,
@@ -401,7 +452,7 @@ BioCommandID BL_RunOCVAsync(int ID, uint8_t channel,
                             void *userData);
 
 // PEIS measurement (async)
-BioCommandID BL_RunPEISAsync(int ID, uint8_t channel,
+BioCommandID BIO_RunPEISAsync(int ID, uint8_t channel,
                              bool vs_initial,
                              double initial_voltage_step,
                              double duration_step,
@@ -420,7 +471,7 @@ BioCommandID BL_RunPEISAsync(int ID, uint8_t channel,
                              void *userData);
 
 // SPEIS measurement (async)
-BioCommandID BL_RunSPEISAsync(int ID, uint8_t channel,
+BioCommandID BIO_RunSPEISAsync(int ID, uint8_t channel,
                               bool vs_initial,
                               bool vs_final,
                               double initial_voltage_step,
@@ -442,7 +493,7 @@ BioCommandID BL_RunSPEISAsync(int ID, uint8_t channel,
                               void *userData);
 
 // GEIS measurement (async)
-BioCommandID BL_RunGEISAsync(int ID, uint8_t channel,
+BioCommandID BIO_RunGEISAsync(int ID, uint8_t channel,
                              bool vs_initial,
                              double initial_current_step,
                              double duration_step,
@@ -462,7 +513,7 @@ BioCommandID BL_RunGEISAsync(int ID, uint8_t channel,
                              void *userData);
 
 // SGEIS measurement (async)
-BioCommandID BL_RunSGEISAsync(int ID, uint8_t channel,
+BioCommandID BIO_RunSGEISAsync(int ID, uint8_t channel,
                               bool vs_initial,
                               bool vs_final,
                               double initial_current_step,
@@ -486,16 +537,46 @@ BioCommandID BL_RunSGEISAsync(int ID, uint8_t channel,
 
 /******************************************************************************
  * Connection and Configuration Functions
+ * 
+ * These functions will use the queue if initialized, otherwise return
+ * ERR_QUEUE_NOT_INIT
  ******************************************************************************/
 
 // Connection wrappers
-int BL_ConnectQueued(const char* address, uint8_t timeout, int* pID, TDeviceInfos_t* pInfos);
-int BL_DisconnectQueued(int ID);
-int BL_TestConnectionQueued(int ID);
+int BIO_ConnectQueued(const char* address, uint8_t timeout, int* pID, TDeviceInfos_t* pInfos);
+int BIO_DisconnectQueued(int ID);
+int BIO_TestConnectionQueued(int ID);
 
 // Configuration wrappers
-int BL_GetHardConfQueued(int ID, uint8_t ch, THardwareConf_t* pHardConf);
-int BL_SetHardConfQueued(int ID, uint8_t ch, THardwareConf_t HardConf);
+int BIO_GetHardConfQueued(int ID, uint8_t ch, THardwareConf_t* pHardConf);
+int BIO_SetHardConfQueued(int ID, uint8_t ch, THardwareConf_t HardConf);
+
+/******************************************************************************
+ * General queued functions
+ ******************************************************************************/
+
+// Channel control
+int BIO_StopChannelQueued(int ID, uint8_t channel);
+int BIO_StartChannelQueued(int ID, uint8_t channel);
+
+// Channel status
+int BIO_GetCurrentValuesQueued(int ID, uint8_t channel, TCurrentValues_t* pValues);
+int BIO_GetChannelInfosQueued(int ID, uint8_t channel, TChannelInfos_t* pInfos);
+bool BIO_IsChannelPluggedQueued(int ID, uint8_t channel);
+int BIO_GetChannelsPluggedQueued(int ID, uint8_t* pChPlugged, uint8_t Size);
+
+// Data retrieval
+int BIO_GetDataQueued(int ID, uint8_t channel, TDataBuffer_t* pBuf, TDataInfos_t* pInfos, TCurrentValues_t* pValues);
+
+// Experiment info
+int BIO_GetExperimentInfosQueued(int ID, uint8_t channel, TExperimentInfos_t* pExpInfos);
+int BIO_SetExperimentInfosQueued(int ID, uint8_t channel, TExperimentInfos_t ExpInfos);
+
+// System functions
+int BIO_LoadFirmwareQueued(int ID, uint8_t* pChannels, int* pResults, uint8_t Length, 
+                          bool ShowGauge, bool ForceReload, const char* BinFile, const char* XlxFile);
+int BIO_GetLibVersionQueued(char* pVersion, unsigned int* psize);
+int BIO_GetMessageQueued(int ID, uint8_t channel, char* msg, unsigned int* size);
 
 /******************************************************************************
  * Utility Functions

@@ -46,7 +46,7 @@ static int SwitchToPSB(SOCEISTestContext *ctx);
 static int PerformEISMeasurement(SOCEISTestContext *ctx, double targetSOC);
 static int RunOCVMeasurement(SOCEISTestContext *ctx, EISMeasurement *measurement);
 static int RunGEISMeasurement(SOCEISTestContext *ctx, EISMeasurement *measurement);
-static int ProcessGEISData(BL_TechniqueData *geisData, EISMeasurement *measurement);
+static int ProcessGEISData(BIO_TechniqueData *geisData, EISMeasurement *measurement);
 static int SaveMeasurementData(SOCEISTestContext *ctx, EISMeasurement *measurement);
 static int RunChargingPhase(SOCEISTestContext *ctx);
 static int UpdateSOCTracking(SOCEISTestContext *ctx, double voltage, double current);
@@ -188,6 +188,8 @@ int CVICALLBACK StartSOCEISExperimentCallback(int panel, int control, int event,
 	                 "Please enter a valid battery capacity or use the\n"
 	                 "'Import Settings' button to load capacity from a\n"
 	                 "previous capacity test.");
+		
+		g_testContext.state = SOCEIS_STATE_CANCELLED;
 	    
 	    LogError("SOCEIS test aborted - battery capacity is 0");
 	    return 0;
@@ -511,13 +513,7 @@ cleanup:
     SetRelayState(SOCEIS_RELAY_PSB_PIN, SOCEIS_RELAY_STATE_DISCONNECTED);
     SetRelayState(SOCEIS_RELAY_BIOLOGIC_PIN, SOCEIS_RELAY_STATE_DISCONNECTED);
     
-    // Turn off PSB output
-    PSBCommandParams offParams = {0};
-    PSBCommandResult offResult = {0};
-    offParams.outputEnable.enable = 0;
-    PSB_QueueCommandBlocking(PSB_GetGlobalQueueManager(), PSB_CMD_SET_OUTPUT_ENABLE,
-                           &offParams, PSB_PRIORITY_HIGH, &offResult,
-                           PSB_QUEUE_COMMAND_TIMEOUT_MS);
+    PSB_SetOutputEnableQueued(0);
     
     // Update status based on final state
     if (ctx->state == SOCEIS_STATE_COMPLETED) {
@@ -539,10 +535,10 @@ cleanup:
 	            ctx->measurements[i].frequencies) {
 	            
 	            if (ctx->measurements[i].ocvData) {
-	                BL_FreeTechniqueData(ctx->measurements[i].ocvData);
+	                BIO_FreeTechniqueData(ctx->measurements[i].ocvData);
 	            }
 	            if (ctx->measurements[i].geisData) {
-	                BL_FreeTechniqueData(ctx->measurements[i].geisData);
+	                BIO_FreeTechniqueData(ctx->measurements[i].geisData);
 	            }
 	            if (ctx->measurements[i].frequencies) {
 	                free(ctx->measurements[i].frequencies);
@@ -615,8 +611,6 @@ static int CreateTestDirectory(SOCEISTestContext *ctx) {
 }
 
 static int VerifyBatteryDischarged(SOCEISTestContext *ctx) {
-    PSBCommandParams params = {0};
-    PSBCommandResult result = {0};
     char message[LARGE_BUFFER_SIZE];
     
     LogMessage("Verifying battery discharge state...");
@@ -633,18 +627,18 @@ static int VerifyBatteryDischarged(SOCEISTestContext *ctx) {
     }
     
     // Get current battery voltage
-    error = PSB_QueueCommandBlocking(PSB_GetGlobalQueueManager(), PSB_CMD_GET_STATUS,
-                                   &params, PSB_PRIORITY_HIGH, &result,
-                                   PSB_QUEUE_COMMAND_TIMEOUT_MS);
+	PSB_Status status;
+    error = PSB_GetStatusQueued(&status);
+	
     if (error != PSB_SUCCESS) {
         LogError("Failed to read PSB status: %s", PSB_GetErrorString(error));
         return ERR_COMM_FAILED;
     }
     
-    double voltageDiff = fabs(result.data.status.voltage - ctx->params.dischargeVoltage);
+    double voltageDiff = fabs(status.voltage - ctx->params.dischargeVoltage);
     
     LogMessage("Battery voltage: %.3f V, Expected: %.3f V, Difference: %.3f V", 
-               result.data.status.voltage, ctx->params.dischargeVoltage, voltageDiff);
+               status.voltage, ctx->params.dischargeVoltage, voltageDiff);
     
     if (voltageDiff > SOCEIS_VOLTAGE_MARGIN) {
         SAFE_SPRINTF(message, sizeof(message),
@@ -654,7 +648,7 @@ static int VerifyBatteryDischarged(SOCEISTestContext *ctx) {
             "Difference: %.3f V\n"
             "Error Margin: %.3f V\n\n"
             "Do you want to continue anyway?",
-            result.data.status.voltage,
+            status.voltage,
             ctx->params.dischargeVoltage,
             voltageDiff,
             SOCEIS_VOLTAGE_MARGIN);
@@ -672,11 +666,7 @@ static int VerifyBatteryDischarged(SOCEISTestContext *ctx) {
     }
     
     // Disconnect PSB for safety
-    params.outputEnable.enable = 0;
-    PSB_QueueCommandBlocking(PSB_GetGlobalQueueManager(), PSB_CMD_SET_OUTPUT_ENABLE,
-                           &params, PSB_PRIORITY_HIGH, &result,
-                           PSB_QUEUE_COMMAND_TIMEOUT_MS);
-    
+    PSB_SetOutputEnableQueued(0);    
     SetRelayState(SOCEIS_RELAY_PSB_PIN, SOCEIS_RELAY_STATE_DISCONNECTED);
     
     LogMessage("Battery discharge state verified");
@@ -821,7 +811,7 @@ static int SetRelayState(int pin, int state) {
         return ERR_NOT_CONNECTED;
     }
     
-    return TNY_SetPinQueued(NULL, pin, state);
+    return TNY_SetPinQueued(pin, state);
 }
 
 static int SwitchToBioLogic(SOCEISTestContext *ctx) {
@@ -829,13 +819,7 @@ static int SwitchToBioLogic(SOCEISTestContext *ctx) {
     
     LogDebug("Switching to BioLogic...");
     
-    // Disable PSB output first
-    PSBCommandParams params = {0};
-    PSBCommandResult cmdResult = {0};
-    params.outputEnable.enable = 0;
-    PSB_QueueCommandBlocking(PSB_GetGlobalQueueManager(), PSB_CMD_SET_OUTPUT_ENABLE,
-                           &params, PSB_PRIORITY_HIGH, &cmdResult,
-                           PSB_QUEUE_COMMAND_TIMEOUT_MS);
+    PSB_SetOutputEnableQueued(0);
     
     // Disconnect PSB
     result = SetRelayState(SOCEIS_RELAY_PSB_PIN, SOCEIS_RELAY_STATE_DISCONNECTED);
@@ -852,7 +836,7 @@ static int SwitchToBioLogic(SOCEISTestContext *ctx) {
     Delay(SOCEIS_RELAY_SWITCH_DELAY_MS / 1000.0);
     
     // Verify BioLogic connection
-    result = BL_TestConnectionQueued(ctx->biologicID);
+    result = BIO_TestConnectionQueued(ctx->biologicID);
     if (result != SUCCESS) {
         LogError("BioLogic connection test failed after relay switch");
         return result;
@@ -992,14 +976,14 @@ static int RunOCVMeasurement(SOCEISTestContext *ctx, EISMeasurement *measurement
     measurement->ocvVoltage = 0.0;
     
     // Test connection first
-    result = BL_TestConnectionQueued(ctx->biologicID);
+    result = BIO_TestConnectionQueued(ctx->biologicID);
     if (result != SUCCESS) {
-        LogError("BioLogic connection test failed before OCV: %s", BL_GetErrorString(result));
+        LogError("BioLogic connection test failed before OCV: %s", BIO_GetErrorString(result));
         return result;
     }
     
     // Run OCV
-    result = BL_RunOCVQueued(ctx->biologicID, 0,  // channel 0
+    result = BIO_RunOCVQueued(ctx->biologicID, 0,  // channel 0
                             SOCEIS_OCV_DURATION_S,
                             SOCEIS_OCV_SAMPLE_INTERVAL_S,
                             SOCEIS_OCV_RECORD_EVERY_DE,
@@ -1011,10 +995,10 @@ static int RunOCVMeasurement(SOCEISTestContext *ctx, EISMeasurement *measurement
                             NULL, NULL);
     
     if (result != SUCCESS) {
-        LogError("OCV measurement failed: %s (error code: %d)", BL_GetErrorString(result), result);
+        LogError("OCV measurement failed: %s (error code: %d)", BIO_GetErrorString(result), result);
         
         // Try to stop the channel if it's stuck
-        BL_StopChannel(ctx->biologicID, 0);
+        BIO_StopChannelQueued(ctx->biologicID, 0);
         Delay(0.5);
         
         return result;
@@ -1022,7 +1006,7 @@ static int RunOCVMeasurement(SOCEISTestContext *ctx, EISMeasurement *measurement
     
     // Extract final voltage
     if (measurement->ocvData && measurement->ocvData->convertedData) {
-        BL_ConvertedData *convData = measurement->ocvData->convertedData;
+        BIO_ConvertedData *convData = measurement->ocvData->convertedData;
         
         LogDebug("OCV data: numPoints=%d, numVariables=%d", 
                  convData->numPoints, convData->numVariables);
@@ -1049,7 +1033,7 @@ static int RunGEISMeasurement(SOCEISTestContext *ctx, EISMeasurement *measuremen
     LogDebug("Starting GEIS measurement...");
     
     // Run GEIS
-    result = BL_RunGEISQueued(ctx->biologicID, 0,  // channel 0
+    result = BIO_RunGEISQueued(ctx->biologicID, 0,  // channel 0
                              true,  // vs initial (OCV)
                              SOCEIS_GEIS_INITIAL_CURRENT,
                              SOCEIS_GEIS_DURATION_S,
@@ -1070,7 +1054,7 @@ static int RunGEISMeasurement(SOCEISTestContext *ctx, EISMeasurement *measuremen
                              NULL, NULL);
     
     if (result != SUCCESS) {
-        LogError("GEIS measurement failed: %s", BL_GetErrorString(result));
+        LogError("GEIS measurement failed: %s", BIO_GetErrorString(result));
         return result;
     }
     
@@ -1078,7 +1062,7 @@ static int RunGEISMeasurement(SOCEISTestContext *ctx, EISMeasurement *measuremen
     return SUCCESS;
 }
 
-static int ProcessGEISData(BL_TechniqueData *geisData, EISMeasurement *measurement) {
+static int ProcessGEISData(BIO_TechniqueData *geisData, EISMeasurement *measurement) {
     if (!geisData) {
         LogWarning("No GEIS data available");
         return ERR_INVALID_PARAMETER;
@@ -1090,7 +1074,7 @@ static int ProcessGEISData(BL_TechniqueData *geisData, EISMeasurement *measureme
         return ERR_OPERATION_FAILED;
     }
     
-    BL_ConvertedData *convData = geisData->convertedData;
+    BIO_ConvertedData *convData = geisData->convertedData;
     
     // Check process index from raw data
     int processIndex = -1;
@@ -1257,8 +1241,6 @@ static int SaveMeasurementData(SOCEISTestContext *ctx, EISMeasurement *measureme
 
 static int RunChargingPhase(SOCEISTestContext *ctx) {
     char filename[MAX_PATH_LENGTH];
-    PSBCommandParams params = {0};
-    PSBCommandResult cmdResult = {0};
     int result;
     int nextTargetIndex = 1;  // Skip 0% as we already measured it
     int dynamicTargetsAdded = 0;  // Track if we've gone beyond 100%
@@ -1286,14 +1268,14 @@ static int RunChargingPhase(SOCEISTestContext *ctx) {
     }
     
     // Set charging parameters
-    result = PSB_SetVoltageQueued(NULL, ctx->params.chargeVoltage);
+    result = PSB_SetVoltageQueued(ctx->params.chargeVoltage);
     if (result != PSB_SUCCESS) {
         LogError("Failed to set charge voltage: %s", PSB_GetErrorString(result));
         fclose(ctx->currentLogFile);
         return result;
     }
     
-    result = PSB_SetCurrentQueued(NULL, ctx->params.chargeCurrent);
+    result = PSB_SetCurrentQueued(ctx->params.chargeCurrent);
     if (result != PSB_SUCCESS) {
         LogError("Failed to set charge current: %s", PSB_GetErrorString(result));
         fclose(ctx->currentLogFile);
@@ -1301,11 +1283,8 @@ static int RunChargingPhase(SOCEISTestContext *ctx) {
     }
     
     // Enable PSB output
-    params.outputEnable.enable = 1;
-    result = PSB_QueueCommandBlocking(PSB_GetGlobalQueueManager(), 
-                                    PSB_CMD_SET_OUTPUT_ENABLE,
-                                    &params, PSB_PRIORITY_HIGH, &cmdResult,
-                                    PSB_QUEUE_COMMAND_TIMEOUT_MS);
+    PSB_SetOutputEnableQueued(1);
+	
     if (result != PSB_SUCCESS) {
         LogError("Failed to enable output: %s", PSB_GetErrorString(result));
         fclose(ctx->currentLogFile);
@@ -1339,26 +1318,21 @@ static int RunChargingPhase(SOCEISTestContext *ctx) {
         double elapsedTime = currentTime - ctx->phaseStartTime;
         
         // Get current status
-        PSBCommandParams statusParams = {0};
-        PSBCommandResult statusResult = {0};
-        result = PSB_QueueCommandBlocking(PSB_GetGlobalQueueManager(), 
-                                        PSB_CMD_GET_STATUS,
-                                        &statusParams, PSB_PRIORITY_HIGH, &statusResult,
-                                        PSB_QUEUE_COMMAND_TIMEOUT_MS);
+        PSB_Status status;
+		result = PSB_GetStatusQueued(&status);
+		
         if (result != PSB_SUCCESS) {
             LogError("Failed to read status: %s", PSB_GetErrorString(result));
             break;
         }
         
-        PSB_Status *status = &statusResult.data.status;
-        
         // Update SOC tracking (no clamping to 100%)
-        UpdateSOCTracking(ctx, status->voltage, status->current);
+        UpdateSOCTracking(ctx, status.voltage, status.current);
         
         // Log data if interval reached
         if ((currentTime - ctx->lastLogTime) >= ctx->params.logInterval) {
             fprintf(ctx->currentLogFile, "%.3f,%.3f,%.3f,%.3f,%.2f\n", 
-                    elapsedTime, status->voltage, status->current, status->power, ctx->currentSOC);
+                    elapsedTime, status.voltage, status.current, status.power, ctx->currentSOC);
             fflush(ctx->currentLogFile);
             ctx->lastLogTime = currentTime;
             
@@ -1368,7 +1342,7 @@ static int RunChargingPhase(SOCEISTestContext *ctx) {
         
         // Update graph if needed
         if ((currentTime - ctx->lastGraphUpdate) >= 1.0) {  // Update every second
-            UpdateGraphs(ctx, status->current, elapsedTime);
+            UpdateGraphs(ctx, status.current, elapsedTime);
             ctx->lastGraphUpdate = currentTime;
         }
         
@@ -1380,11 +1354,7 @@ static int RunChargingPhase(SOCEISTestContext *ctx) {
                       ctx->targetSOCs[nextTargetIndex], ctx->currentSOC);
             
             // Disable PSB output
-            params.outputEnable.enable = 0;
-            PSB_QueueCommandBlocking(PSB_GetGlobalQueueManager(), 
-                                   PSB_CMD_SET_OUTPUT_ENABLE,
-                                   &params, PSB_PRIORITY_HIGH, &cmdResult,
-                                   PSB_QUEUE_COMMAND_TIMEOUT_MS);
+            PSB_SetOutputEnableQueued(0);
             
             // Perform EIS measurement
             ctx->state = SOCEIS_STATE_MEASURING_EIS;
@@ -1423,25 +1393,17 @@ static int RunChargingPhase(SOCEISTestContext *ctx) {
             if (result != SUCCESS) break;
             
             // Re-enable PSB output
-            params.outputEnable.enable = 1;
-            PSB_QueueCommandBlocking(PSB_GetGlobalQueueManager(), 
-                                   PSB_CMD_SET_OUTPUT_ENABLE,
-                                   &params, PSB_PRIORITY_HIGH, &cmdResult,
-                                   PSB_QUEUE_COMMAND_TIMEOUT_MS);
+            PSB_SetOutputEnableQueued(1);
         }
         
         // Check current threshold for charge completion
-        if (fabs(status->current) < ctx->params.currentThreshold) {
+        if (fabs(status.current) < ctx->params.currentThreshold) {
             LogMessage("Charging completed - current below threshold (%.3f A < %.3f A)",
-                      fabs(status->current), ctx->params.currentThreshold);
+                      fabs(status.current), ctx->params.currentThreshold);
             LogMessage("Final SOC: %.1f%%", ctx->currentSOC);
             
             // Perform final measurement at actual final SOC
-            params.outputEnable.enable = 0;
-            PSB_QueueCommandBlocking(PSB_GetGlobalQueueManager(), 
-                                   PSB_CMD_SET_OUTPUT_ENABLE,
-                                   &params, PSB_PRIORITY_HIGH, &cmdResult,
-                                   PSB_QUEUE_COMMAND_TIMEOUT_MS);
+            PSB_SetOutputEnableQueued(0);
             
             // Add final measurement if not already at a target
             int needFinalMeasurement = 1;
@@ -1472,11 +1434,7 @@ static int RunChargingPhase(SOCEISTestContext *ctx) {
     }
     
     // Disable output
-    params.outputEnable.enable = 0;
-    PSB_QueueCommandBlocking(PSB_GetGlobalQueueManager(), 
-                           PSB_CMD_SET_OUTPUT_ENABLE,
-                           &params, PSB_PRIORITY_HIGH, &cmdResult,
-                           PSB_QUEUE_COMMAND_TIMEOUT_MS);
+    PSB_SetOutputEnableQueued(0);
     
     // Close log file
     fclose(ctx->currentLogFile);
@@ -1719,7 +1677,7 @@ static int DischargeToFiftyPercent(SOCEISTestContext *ctx) {
     };
     
     // Perform the discharge
-    int dischargeResult = Battery_DischargeCapacity(ctx->psbHandle, &discharge50);
+    int dischargeResult = Battery_DischargeCapacity(&discharge50);
     
     if (dischargeResult == SUCCESS && discharge50.result == BATTERY_OP_SUCCESS) {
         LogMessage("Successfully discharged battery to 50%% capacity");

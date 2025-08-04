@@ -103,7 +103,7 @@ int CVICALLBACK StartCapacityExperimentCallback(int panel, int control, int even
     
     // Check that PSB output is disabled
     PSB_Status status;
-    if (PSB_GetStatusQueued(psbHandle, &status) == PSB_SUCCESS) {
+    if (PSB_GetStatusQueued(&status) == PSB_SUCCESS) {
         if (status.outputEnabled) {
             CmtGetLock(g_busyLock);
             g_systemBusy = 0;
@@ -132,7 +132,6 @@ int CVICALLBACK StartCapacityExperimentCallback(int panel, int control, int even
     g_testContext.tabPanelHandle = panel;
     g_testContext.buttonControl = control;
     g_testContext.statusControl = PANEL_STR_PSB_STATUS;
-    g_testContext.psbHandle = psbHandle;
     g_testContext.graph1Handle = PANEL_GRAPH_1;
     g_testContext.graph2Handle = PANEL_GRAPH_2;
     
@@ -233,7 +232,7 @@ static int CapacityExperimentThread(void *functionData) {
     
     // Initialize PSB to safe state
     LogMessage("Initializing PSB to zeroed state...");
-    result = PSB_ZeroAllValues(NULL);
+    result = PSB_ZeroAllValuesQueued();
     
     if (result != PSB_SUCCESS) {
         LogError("Failed to initialize PSB to safe state: %s", PSB_GetErrorString(result));
@@ -342,7 +341,7 @@ static int CapacityExperimentThread(void *functionData) {
             };
             
             // Perform the discharge
-            int dischargeResult = Battery_DischargeCapacity(ctx->psbHandle, &discharge50);
+            int dischargeResult = Battery_DischargeCapacity(&discharge50);
             
             if (dischargeResult == SUCCESS && discharge50.result == BATTERY_OP_SUCCESS) {
                 LogMessage("Successfully returned battery to 50%% capacity");
@@ -361,13 +360,8 @@ static int CapacityExperimentThread(void *functionData) {
     }
     
 cleanup:
-    // Turn off PSB output
-    PSBCommandParams offParams = {0};
-    PSBCommandResult offResult = {0};
-    offParams.outputEnable.enable = 0;
-    PSB_QueueCommandBlocking(PSB_GetGlobalQueueManager(), PSB_CMD_SET_OUTPUT_ENABLE,
-                           &offParams, PSB_PRIORITY_HIGH, &offResult,
-                           PSB_QUEUE_COMMAND_TIMEOUT_MS);
+	// Turn off PSB output
+    PSB_SetOutputEnableQueued(0);
     
     // Update status based on final state
     if (ctx->state == CAPACITY_STATE_COMPLETED) {
@@ -431,8 +425,6 @@ static int CreateTestDirectory(CapacityTestContext *ctx) {
 }
 
 static int VerifyBatteryCharged(CapacityTestContext *ctx) {
-    PSBCommandParams params = {0};
-    PSBCommandResult result = {0};
     char message[LARGE_BUFFER_SIZE];
     
     LogMessage("Verifying battery charge state...");
@@ -443,18 +435,18 @@ static int VerifyBatteryCharged(CapacityTestContext *ctx) {
     }
     
     // Get current battery voltage
-    int error = PSB_QueueCommandBlocking(PSB_GetGlobalQueueManager(), PSB_CMD_GET_STATUS,
-                                       &params, PSB_PRIORITY_HIGH, &result,
-                                       PSB_QUEUE_COMMAND_TIMEOUT_MS);
+	PSB_Status status;
+	int error = PSB_GetStatusQueued(&status);
+	
     if (error != PSB_SUCCESS) {
         LogError("Failed to read PSB status: %s", PSB_GetErrorString(error));
         return ERR_COMM_FAILED;
     }
     
-    double voltageDiff = fabs(result.data.status.voltage - ctx->params.chargeVoltage);
+    double voltageDiff = fabs(status.voltage - ctx->params.chargeVoltage);
     
     LogMessage("Battery voltage: %.3f V, Expected: %.3f V, Difference: %.3f V", 
-               result.data.status.voltage, ctx->params.chargeVoltage, voltageDiff);
+               status.voltage, ctx->params.chargeVoltage, voltageDiff);
     
     if (voltageDiff > CAPACITY_TEST_VOLTAGE_MARGIN) {
         SAFE_SPRINTF(message, sizeof(message),
@@ -464,7 +456,7 @@ static int VerifyBatteryCharged(CapacityTestContext *ctx) {
             "Difference: %.3f V\n"
             "Error Margin: %.3f V\n\n"
             "Do you want to continue anyway?",
-            result.data.status.voltage,
+            status.voltage,
             ctx->params.chargeVoltage,
             voltageDiff,
             CAPACITY_TEST_VOLTAGE_MARGIN);
@@ -519,8 +511,6 @@ static int ConfigureGraphs(CapacityTestContext *ctx) {
 
 static int RunTestPhase(CapacityTestContext *ctx, CapacityTestPhase phase) {
     char filename[MAX_PATH_LENGTH];
-    PSBCommandParams params = {0};
-    PSBCommandResult cmdResult = {0};
     CapacityDataPoint dataPoint;
     PhaseResults *phaseResults;
     int result;
@@ -567,7 +557,7 @@ static int RunTestPhase(CapacityTestContext *ctx, CapacityTestPhase phase) {
     fprintf(ctx->csvFile, "Time_s,Voltage_V,Current_A,Power_W\n");
     
     // Set target voltage
-    result = PSB_SetVoltageQueued(NULL, targetVoltage);
+    result = PSB_SetVoltageQueued(targetVoltage);
     if (result != PSB_SUCCESS) {
         LogError("Failed to set voltage: %s", PSB_GetErrorString(result));
         fclose(ctx->csvFile);
@@ -576,9 +566,9 @@ static int RunTestPhase(CapacityTestContext *ctx, CapacityTestPhase phase) {
     
     // Set target current
     if (phase == CAPACITY_PHASE_DISCHARGE) {
-        result = PSB_SetSinkCurrentQueued(NULL, targetCurrent);
+        result = PSB_SetSinkCurrentQueued(targetCurrent);
     } else {
-        result = PSB_SetCurrentQueued(NULL, targetCurrent);
+        result = PSB_SetCurrentQueued(targetCurrent);
     }
     if (result != PSB_SUCCESS) {
         LogError("Failed to set current: %s", PSB_GetErrorString(result));
@@ -587,11 +577,8 @@ static int RunTestPhase(CapacityTestContext *ctx, CapacityTestPhase phase) {
     }
     
     // Enable PSB output
-    params.outputEnable.enable = 1;
-    result = PSB_QueueCommandBlocking(PSB_GetGlobalQueueManager(), 
-                                    PSB_CMD_SET_OUTPUT_ENABLE,
-                                    &params, PSB_PRIORITY_HIGH, &cmdResult,
-                                    PSB_QUEUE_COMMAND_TIMEOUT_MS);
+    PSB_SetOutputEnableQueued(1);
+	
     if (result != PSB_SUCCESS) {
         LogError("Failed to enable output: %s", PSB_GetErrorString(result));
         fclose(ctx->csvFile);
@@ -624,14 +611,11 @@ static int RunTestPhase(CapacityTestContext *ctx, CapacityTestPhase phase) {
     SetCtrlVal(ctx->tabPanelHandle, capacityControl, 0.0);
     
     // Get initial status for start voltage
-    PSBCommandParams statusParams = {0};
-    PSBCommandResult statusResult = {0};
-    result = PSB_QueueCommandBlocking(PSB_GetGlobalQueueManager(), 
-                                    PSB_CMD_GET_STATUS,
-                                    &statusParams, PSB_PRIORITY_HIGH, &statusResult,
-                                    PSB_QUEUE_COMMAND_TIMEOUT_MS);
+    PSB_Status status;
+	result = PSB_GetStatusQueued(&status);
+	
     if (result == PSB_SUCCESS) {
-        phaseResults->startVoltage = statusResult.data.status.voltage;
+        phaseResults->startVoltage = status.voltage;
     }
     
     LogMessage("%s phase started", phaseName);
@@ -653,32 +637,28 @@ static int RunTestPhase(CapacityTestContext *ctx, CapacityTestPhase phase) {
             break;
         }
         
-        // Get current status
-        result = PSB_QueueCommandBlocking(PSB_GetGlobalQueueManager(), 
-                                        PSB_CMD_GET_STATUS,
-                                        &statusParams, PSB_PRIORITY_HIGH, &statusResult,
-                                        PSB_QUEUE_COMMAND_TIMEOUT_MS);
-        if (result != PSB_SUCCESS) {
+        PSB_Status status;
+		result = PSB_GetStatusQueued(&status);
+		
+		if (result != PSB_SUCCESS) {
             LogError("Failed to read status: %s", PSB_GetErrorString(result));
             break;
         }
         
-        PSB_Status *status = &statusResult.data.status;
-        
         // Check current threshold
-        if (fabs(status->current) < ctx->params.currentThreshold) {
+        if (fabs(status.current) < ctx->params.currentThreshold) {
             LogMessage("%s phase completed - current below threshold (%.3f A < %.3f A)",
-                      phaseName, fabs(status->current), ctx->params.currentThreshold);
-            phaseResults->endVoltage = status->voltage;
+                      phaseName, fabs(status.current), ctx->params.currentThreshold);
+            phaseResults->endVoltage = status.voltage;
             break;
         }
         
         // Log data point if interval reached
         if ((currentTime - ctx->lastLogTime) >= ctx->params.logInterval) {
             dataPoint.time = elapsedTime;
-            dataPoint.voltage = status->voltage;
-            dataPoint.current = status->current;
-            dataPoint.power = status->power;
+            dataPoint.voltage = status.voltage;
+            dataPoint.current = status.current;
+            dataPoint.power = status.power;
             
             LogDataPoint(ctx, &dataPoint);
             ctx->lastLogTime = currentTime;
@@ -687,9 +667,9 @@ static int RunTestPhase(CapacityTestContext *ctx, CapacityTestPhase phase) {
         // Update graphs if needed
         if ((currentTime - ctx->lastGraphUpdate) >= CAPACITY_TEST_GRAPH_UPDATE_RATE) {
             dataPoint.time = elapsedTime;
-            dataPoint.voltage = status->voltage;
-            dataPoint.current = status->current;
-            dataPoint.power = status->power;
+            dataPoint.voltage = status.voltage;
+            dataPoint.current = status.current;
+            dataPoint.power = status.power;
             
             UpdateGraphs(ctx, &dataPoint);
             ctx->lastGraphUpdate = currentTime;
@@ -701,11 +681,7 @@ static int RunTestPhase(CapacityTestContext *ctx, CapacityTestPhase phase) {
     }
     
     // Disable output
-    params.outputEnable.enable = 0;
-    PSB_QueueCommandBlocking(PSB_GetGlobalQueueManager(), 
-                           PSB_CMD_SET_OUTPUT_ENABLE,
-                           &params, PSB_PRIORITY_HIGH, &cmdResult,
-                           PSB_QUEUE_COMMAND_TIMEOUT_MS);
+    PSB_SetOutputEnableQueued(0);
     
     // Store final results
     phaseResults->capacity_mAh = ctx->accumulatedCapacity_mAh;

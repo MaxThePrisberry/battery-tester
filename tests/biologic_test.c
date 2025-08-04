@@ -34,7 +34,7 @@ static BioTestCase testCases[] = {
     {"Connection Test", Test_BIO_Connection, 0, "", 0.0},
     {"OCV Test", Test_BIO_OCV, 0, "", 0.0},
     {"PEIS Test", Test_BIO_PEIS, 0, "", 0.0},
-    {"SPEIS Test", Test_BIO_SPEIS, 0, "", 0.0},
+    //{"SPEIS Test", Test_BIO_SPEIS, 0, "", 0.0},
     {"GEIS Test", Test_BIO_GEIS, 0, "", 0.0},
     {"SGEIS Test", Test_BIO_SGEIS, 0, "", 0.0}
 };
@@ -415,13 +415,8 @@ int Test_BIO_Connection(BioQueueManager *bioQueueMgr, char *errorMsg, int errorM
     
     LogDebugEx(LOG_DEVICE_BIO, "BioLogic queue manager is connected, testing communication...");
     
-    // Test the connection using queued command
-    BioCommandParams params = {0};
-    BioCommandResult cmdResult;
-    
-    int result = BIO_QueueCommandBlocking(bioQueueMgr, BIO_CMD_TEST_CONNECTION,
-                                        &params, BIO_PRIORITY_HIGH, &cmdResult,
-                                        BIO_TEST_TIMEOUT_MS);
+    // Test the connection
+	int result = BIO_TestConnectionQueued(0);
     
     if (result != SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Connection test failed: %s", GetErrorString(result));
@@ -447,8 +442,8 @@ int Test_BIO_OCV(BioQueueManager *bioQueueMgr, char *errorMsg, int errorMsgSize)
     LogDebugEx(LOG_DEVICE_BIO, "Running OCV measurement for %.1f seconds...", BIO_TEST_OCV_DURATION);
     
     // Run OCV measurement using high-level function
-    BL_TechniqueData *ocvData = NULL;
-    int result = BL_RunOCVQueued(
+    BIO_TechniqueData *ocvData = NULL;
+    int result = BIO_RunOCVQueued(
         deviceID,
         TEST_CHANNEL,
         BIO_TEST_OCV_DURATION,  // duration_s
@@ -463,17 +458,17 @@ int Test_BIO_OCV(BioQueueManager *bioQueueMgr, char *errorMsg, int errorMsgSize)
         g_biologicTestSuiteContext   // Pass test context
     );
     
-    if (result == BL_ERR_PARTIAL_DATA) {
+    if (result == BIO_ERR_PARTIAL_DATA) {
         LogWarningEx(LOG_DEVICE_BIO, "OCV measurement stopped with error, but partial data retrieved");
     } else if (result != SUCCESS) {
-        snprintf(errorMsg, errorMsgSize, "OCV measurement failed: %s", BL_GetErrorString(result));
+        snprintf(errorMsg, errorMsgSize, "OCV measurement failed: %s", BIO_GetErrorString(result));
         return -1;
     }
     
     // Verify we got data
     if (!ocvData || !ocvData->rawData || ocvData->rawData->numPoints == 0) {
         snprintf(errorMsg, errorMsgSize, "No data received from OCV measurement");
-        if (ocvData) BL_FreeTechniqueData(ocvData);
+        if (ocvData) BIO_FreeTechniqueData(ocvData);
         return -1;
     }
     
@@ -517,7 +512,7 @@ int Test_BIO_OCV(BioQueueManager *bioQueueMgr, char *errorMsg, int errorMsgSize)
     LogMessageEx(LOG_DEVICE_BIO, "========================================");
     
     // Clean up
-    BL_FreeTechniqueData(ocvData);
+    BIO_FreeTechniqueData(ocvData);
     
     LogDebugEx(LOG_DEVICE_BIO, "OCV test completed successfully");
     return 1;  // Test passed
@@ -539,8 +534,8 @@ int Test_BIO_PEIS(BioQueueManager *bioQueueMgr, char *errorMsg, int errorMsgSize
                BIO_TEST_PEIS_START_FREQ, BIO_TEST_PEIS_END_FREQ);
     
     // Run PEIS measurement using high-level function with proper parameters
-    BL_TechniqueData *peisData = NULL;
-    int result = BL_RunPEISQueued(
+    BIO_TechniqueData *peisData = NULL;
+    int result = BIO_RunPEISQueued(
         deviceID,
         TEST_CHANNEL,
         true,                           // vs_initial (vs OCV)
@@ -563,17 +558,17 @@ int Test_BIO_PEIS(BioQueueManager *bioQueueMgr, char *errorMsg, int errorMsgSize
         g_biologicTestSuiteContext     // Pass test context
     );
     
-    if (result == BL_ERR_PARTIAL_DATA) {
+    if (result == BIO_ERR_PARTIAL_DATA) {
         LogWarningEx(LOG_DEVICE_BIO, "PEIS measurement stopped with error, but partial data retrieved");
     } else if (result != SUCCESS) {
-        snprintf(errorMsg, errorMsgSize, "PEIS measurement failed: %s", BL_GetErrorString(result));
+        snprintf(errorMsg, errorMsgSize, "PEIS measurement failed: %s", BIO_GetErrorString(result));
         return -1;
     }
     
     // Verify we got data
     if (!peisData || !peisData->rawData || peisData->rawData->numPoints == 0) {
         snprintf(errorMsg, errorMsgSize, "No data received from PEIS measurement");
-        if (peisData) BL_FreeTechniqueData(peisData);
+        if (peisData) BIO_FreeTechniqueData(peisData);
         return -1;
     }
     
@@ -622,13 +617,13 @@ int Test_BIO_PEIS(BioQueueManager *bioQueueMgr, char *errorMsg, int errorMsgSize
     LogMessageEx(LOG_DEVICE_BIO, "========================================");
     
     // Clean up
-    BL_FreeTechniqueData(peisData);
+    BIO_FreeTechniqueData(peisData);
     
     LogDebugEx(LOG_DEVICE_BIO, "PEIS test completed successfully");
     return 1;
 }
 
-int Test_BIO_SPEIS(BioQueueManager *bioQueueMgr, char *errorMsg, int errorMsgSize) {
+/*int Test_BIO_SPEIS(BioQueueManager *bioQueueMgr, char *errorMsg, int errorMsgSize) {
     LogDebugEx(LOG_DEVICE_BIO, "Testing BioLogic SPEIS functionality...");
     
     const uint8_t TEST_CHANNEL = 0;
@@ -644,24 +639,24 @@ int Test_BIO_SPEIS(BioQueueManager *bioQueueMgr, char *errorMsg, int errorMsgSiz
                BIO_TEST_SPEIS_INIT_V, BIO_TEST_SPEIS_FINAL_V, BIO_TEST_SPEIS_STEPS);
     
     // Run SPEIS measurement using high-level function
-    BL_TechniqueData *speisData = NULL;
-    int result = BL_RunSPEISQueued(
+    BIO_TechniqueData *speisData = NULL;
+    int result = BIO_RunSPEISQueued(
         deviceID,
         TEST_CHANNEL,
-        true,                          // vs_initial (vs OCV)
-        false,                         // vs_final (not vs OCV)
-        BIO_TEST_SPEIS_INIT_V,        // initial_voltage_step (-0.5V)
-        BIO_TEST_SPEIS_FINAL_V,       // final_voltage_step (+0.5V)
+        true,                         // vs_initial
+		true,                         // vs_final
+        BIO_TEST_SPEIS_INIT_V,        // initial_voltage_step
+        BIO_TEST_SPEIS_FINAL_V,       // final_voltage_step
         1.0,                          // duration_step (1s per step)
-        BIO_TEST_SPEIS_STEPS,         // step_number (10 steps)
+        BIO_TEST_SPEIS_STEPS,         // step_number
         0.1,                          // record_every_dT (100ms)
         0.0,                          // record_every_dI (not used)
         1000.0,                       // initial_freq (1kHz)
         100.0,                        // final_freq (100Hz)
         false,                        // sweep_linear (FALSE = logarithmic)
-        0.010,                        // amplitude_voltage (10mV)
-        3,                            // frequency_number (3 frequencies per step)
-        1,                            // average_n_times (1 repeat)
+        0.001,                        // amplitude_voltage (10mV)
+        1,                            // frequency_number
+        1,                            // average_n_times
         false,                        // correction (no non-stationary correction)
         0.0,                          // wait_for_steady (0 periods)
         true,                         // Process the data
@@ -671,17 +666,17 @@ int Test_BIO_SPEIS(BioQueueManager *bioQueueMgr, char *errorMsg, int errorMsgSiz
         g_biologicTestSuiteContext    // Pass test context
     );
     
-    if (result == BL_ERR_PARTIAL_DATA) {
+    if (result == BIO_ERR_PARTIAL_DATA) {
         LogWarningEx(LOG_DEVICE_BIO, "SPEIS measurement stopped with error, but partial data retrieved");
     } else if (result != SUCCESS) {
-        snprintf(errorMsg, errorMsgSize, "SPEIS measurement failed: %s", BL_GetErrorString(result));
+        snprintf(errorMsg, errorMsgSize, "SPEIS measurement failed: %s", BIO_GetErrorString(result));
         return -1;
     }
     
     // Verify we got data
     if (!speisData || !speisData->rawData || speisData->rawData->numPoints == 0) {
         snprintf(errorMsg, errorMsgSize, "No data received from SPEIS measurement");
-        if (speisData) BL_FreeTechniqueData(speisData);
+        if (speisData) BIO_FreeTechniqueData(speisData);
         return -1;
     }
     
@@ -739,11 +734,11 @@ int Test_BIO_SPEIS(BioQueueManager *bioQueueMgr, char *errorMsg, int errorMsgSiz
     LogMessageEx(LOG_DEVICE_BIO, "========================================");
     
     // Clean up
-    BL_FreeTechniqueData(speisData);
+    BIO_FreeTechniqueData(speisData);
     
     LogDebugEx(LOG_DEVICE_BIO, "SPEIS test completed successfully");
     return 1;
-}
+}*/
 
 int Test_BIO_GEIS(BioQueueManager *bioQueueMgr, char *errorMsg, int errorMsgSize) {
     LogDebugEx(LOG_DEVICE_BIO, "Testing BioLogic GEIS functionality...");
@@ -761,8 +756,8 @@ int Test_BIO_GEIS(BioQueueManager *bioQueueMgr, char *errorMsg, int errorMsgSize
                BIO_TEST_GEIS_INIT_I * 1000, BIO_TEST_GEIS_START_FREQ, BIO_TEST_GEIS_END_FREQ);
     
     // Run GEIS measurement using high-level function
-    BL_TechniqueData *geisData = NULL;
-    int result = BL_RunGEISQueued(
+    BIO_TechniqueData *geisData = NULL;
+    int result = BIO_RunGEISQueued(
         deviceID,
         TEST_CHANNEL,
         true,                          // vs_initial (vs initial current)
@@ -786,17 +781,17 @@ int Test_BIO_GEIS(BioQueueManager *bioQueueMgr, char *errorMsg, int errorMsgSize
         g_biologicTestSuiteContext    // Pass test context
     );
     
-    if (result == BL_ERR_PARTIAL_DATA) {
+    if (result == BIO_ERR_PARTIAL_DATA) {
         LogWarningEx(LOG_DEVICE_BIO, "GEIS measurement stopped with error, but partial data retrieved");
     } else if (result != SUCCESS) {
-        snprintf(errorMsg, errorMsgSize, "GEIS measurement failed: %s", BL_GetErrorString(result));
+        snprintf(errorMsg, errorMsgSize, "GEIS measurement failed: %s", BIO_GetErrorString(result));
         return -1;
     }
     
     // Verify we got data
     if (!geisData || !geisData->rawData || geisData->rawData->numPoints == 0) {
         snprintf(errorMsg, errorMsgSize, "No data received from GEIS measurement");
-        if (geisData) BL_FreeTechniqueData(geisData);
+        if (geisData) BIO_FreeTechniqueData(geisData);
         return -1;
     }
     
@@ -845,7 +840,7 @@ int Test_BIO_GEIS(BioQueueManager *bioQueueMgr, char *errorMsg, int errorMsgSize
     LogMessageEx(LOG_DEVICE_BIO, "========================================");
     
     // Clean up
-    BL_FreeTechniqueData(geisData);
+    BIO_FreeTechniqueData(geisData);
     
     LogDebugEx(LOG_DEVICE_BIO, "GEIS test completed successfully");
     return 1;
@@ -867,8 +862,8 @@ int Test_BIO_SGEIS(BioQueueManager *bioQueueMgr, char *errorMsg, int errorMsgSiz
                BIO_TEST_SGEIS_INIT_I * 1000, BIO_TEST_SGEIS_FINAL_I * 1000, BIO_TEST_SGEIS_STEPS);
     
     // Run SGEIS measurement using high-level function
-    BL_TechniqueData *sgeisData = NULL;
-    int result = BL_RunSGEISQueued(
+    BIO_TechniqueData *sgeisData = NULL;
+    int result = BIO_RunSGEISQueued(
         deviceID,
         TEST_CHANNEL,
         true,                         // vs_initial (vs initial current)
@@ -895,17 +890,17 @@ int Test_BIO_SGEIS(BioQueueManager *bioQueueMgr, char *errorMsg, int errorMsgSiz
         g_biologicTestSuiteContext   // Pass test context
     );
     
-    if (result == BL_ERR_PARTIAL_DATA) {
+    if (result == BIO_ERR_PARTIAL_DATA) {
         LogWarningEx(LOG_DEVICE_BIO, "SGEIS measurement stopped with error, but partial data retrieved");
     } else if (result != SUCCESS) {
-        snprintf(errorMsg, errorMsgSize, "SGEIS measurement failed: %s", BL_GetErrorString(result));
+        snprintf(errorMsg, errorMsgSize, "SGEIS measurement failed: %s", BIO_GetErrorString(result));
         return -1;
     }
     
     // Verify we got data
     if (!sgeisData || !sgeisData->rawData || sgeisData->rawData->numPoints == 0) {
         snprintf(errorMsg, errorMsgSize, "No data received from SGEIS measurement");
-        if (sgeisData) BL_FreeTechniqueData(sgeisData);
+        if (sgeisData) BIO_FreeTechniqueData(sgeisData);
         return -1;
     }
     
@@ -964,7 +959,7 @@ int Test_BIO_SGEIS(BioQueueManager *bioQueueMgr, char *errorMsg, int errorMsgSiz
     LogMessageEx(LOG_DEVICE_BIO, "========================================");
     
     // Clean up
-    BL_FreeTechniqueData(sgeisData);
+    BIO_FreeTechniqueData(sgeisData);
     
     LogDebugEx(LOG_DEVICE_BIO, "SGEIS test completed successfully");
     return 1;

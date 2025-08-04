@@ -91,8 +91,8 @@ typedef struct {
     double actualSOC;            // Actual SOC when measured
     double ocvVoltage;           // Open circuit voltage
     double timestamp;            // Time since experiment start
-    BL_TechniqueData *ocvData;   // Raw OCV data
-    BL_TechniqueData *geisData;  // Raw GEIS data
+    BIO_TechniqueData *ocvData;   // Raw OCV data
+    BIO_TechniqueData *geisData;  // Raw GEIS data
     // Calculated impedance values from GEIS
     double *frequencies;         // Array of frequencies
     double *zReal;              // Real impedance values

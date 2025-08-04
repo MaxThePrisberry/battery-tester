@@ -70,7 +70,7 @@ const char* GetErrorString(int errorCode) {
     
     // Check if it's a BioLogic error (-1 to -405 range)
     if (errorCode >= -405 && errorCode <= -1) {
-        return BL_GetErrorString(errorCode);
+        return BIO_GetErrorString(errorCode);
     }
     
     // Check if it's a PSB error (-3000 range)

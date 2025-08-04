@@ -123,11 +123,7 @@ typedef struct {
     int statusControl;
     int capacityControl;
     int graph1Handle;        // Current vs Time
-    int graph2Handle;        // Voltage vs Time
-    
-    // PSB handle
-    PSB_Handle *psbHandle;
-    
+    int graph2Handle;        // Voltage vs Time    
 } CapacityTestContext;
 
 /******************************************************************************

@@ -87,7 +87,7 @@ typedef struct {
 
 typedef struct {
     const char *testName;
-    int (*testFunction)(PSB_Handle *handle, char *errorMsg, int errorMsgSize);
+    int (*testFunction)(char *errorMsg, int errorMsgSize);
     int result;  // 0 = not run, 1 = pass, -1 = fail
     char errorMessage[256];
     double executionTime;
@@ -98,7 +98,6 @@ typedef struct {
  ******************************************************************************/
 
 typedef struct {
-    PSB_Handle *psbHandle;
     int panelHandle;
     int statusStringControl;
     int cancelRequested;
@@ -113,30 +112,29 @@ typedef struct {
 int CVICALLBACK TestPSBWorkerThread(void *functionData);
 
 // Main test suite functions
-int PSB_TestSuite_Initialize(TestSuiteContext *context, PSB_Handle *handle, 
-                            int panel, int statusControl);
+int PSB_TestSuite_Initialize(TestSuiteContext *context, int panel, int statusControl);
 int PSB_TestSuite_Run(TestSuiteContext *context);
 void PSB_TestSuite_Cancel(TestSuiteContext *context);
 void PSB_TestSuite_Cleanup(TestSuiteContext *context);
 
 // Individual test functions
-int Test_RemoteMode(PSB_Handle *handle, char *errorMsg, int errorMsgSize);
-int Test_StatusRegisterReading(PSB_Handle *handle, char *errorMsg, int errorMsgSize);
-int Test_VoltageControl(PSB_Handle *handle, char *errorMsg, int errorMsgSize);
-int Test_VoltageLimits(PSB_Handle *handle, char *errorMsg, int errorMsgSize);
-int Test_CurrentControl(PSB_Handle *handle, char *errorMsg, int errorMsgSize);
-int Test_CurrentLimits(PSB_Handle *handle, char *errorMsg, int errorMsgSize);
-int Test_PowerControl(PSB_Handle *handle, char *errorMsg, int errorMsgSize);
-int Test_PowerLimit(PSB_Handle *handle, char *errorMsg, int errorMsgSize);
-int Test_OutputControl(PSB_Handle *handle, char *errorMsg, int errorMsgSize);
-int Test_InvalidParameters(PSB_Handle *handle, char *errorMsg, int errorMsgSize);
-int Test_SequenceOperations(PSB_Handle *handle, char *errorMsg, int errorMsgSize);
-int Test_BoundaryConditions(PSB_Handle *handle, char *errorMsg, int errorMsgSize);
-int Test_OutputVoltageVerification(PSB_Handle *handle, char *errorMsg, int errorMsgSize);
-int Test_SinkCurrentControl(PSB_Handle *handle, char *errorMsg, int errorMsgSize);
-int Test_SinkPowerControl(PSB_Handle *handle, char *errorMsg, int errorMsgSize);
-int Test_SinkCurrentLimits(PSB_Handle *handle, char *errorMsg, int errorMsgSize);
-int Test_SinkPowerLimit(PSB_Handle *handle, char *errorMsg, int errorMsgSize);
+int Test_RemoteMode(char *errorMsg, int errorMsgSize);
+int Test_StatusRegisterReading(char *errorMsg, int errorMsgSize);
+int Test_VoltageControl(char *errorMsg, int errorMsgSize);
+int Test_VoltageLimits(char *errorMsg, int errorMsgSize);
+int Test_CurrentControl(char *errorMsg, int errorMsgSize);
+int Test_CurrentLimits(char *errorMsg, int errorMsgSize);
+int Test_PowerControl(char *errorMsg, int errorMsgSize);
+int Test_PowerLimit(char *errorMsg, int errorMsgSize);
+int Test_OutputControl(char *errorMsg, int errorMsgSize);
+int Test_InvalidParameters(char *errorMsg, int errorMsgSize);
+int Test_SequenceOperations(char *errorMsg, int errorMsgSize);
+int Test_BoundaryConditions(char *errorMsg, int errorMsgSize);
+int Test_OutputVoltageVerification(char *errorMsg, int errorMsgSize);
+int Test_SinkCurrentControl(char *errorMsg, int errorMsgSize);
+int Test_SinkPowerControl(char *errorMsg, int errorMsgSize);
+int Test_SinkCurrentLimits(char *errorMsg, int errorMsgSize);
+int Test_SinkPowerLimit(char *errorMsg, int errorMsgSize);
 
 // Utility functions
 void UpdateTestProgress(TestSuiteContext *context, const char *message);

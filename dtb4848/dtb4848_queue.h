@@ -163,16 +163,6 @@ void DTB_QueueGetStats(DTBQueueManager *mgr, DTBQueueStats *stats);
  * Command Queueing Functions
  ******************************************************************************/
 
-// Queue a command (blocking)
-int DTB_QueueCommandBlocking(DTBQueueManager *mgr, DTBCommandType type,
-                           DTBCommandParams *params, DTBPriority priority,
-                           DTBCommandResult *result, int timeoutMs);
-
-// Queue a command (async with callback)
-CommandID DTB_QueueCommandAsync(DTBQueueManager *mgr, DTBCommandType type,
-                              DTBCommandParams *params, DTBPriority priority,
-                              DTBCommandCallback callback, void *userData);
-
 // Cancel commands
 int DTB_QueueCancelCommand(DTBQueueManager *mgr, CommandID cmdId);
 int DTB_QueueCancelByType(DTBQueueManager *mgr, DTBCommandType type);
@@ -201,51 +191,85 @@ int DTB_QueueCommitTransaction(DTBQueueManager *mgr, TransactionHandle txn,
 int DTB_QueueCancelTransaction(DTBQueueManager *mgr, TransactionHandle txn);
 
 /******************************************************************************
- * Wrapper Functions (Direct replacements for existing DTB functions)
+ * Wrapper Functions (Global queue manager required)
+ * Note: These functions require DTB_SetGlobalQueueManager() to be called first
  ******************************************************************************/
 
 // Control functions
-int DTB_SetRunStopQueued(DTB_Handle *handle, int run);
-int DTB_SetSetPointQueued(DTB_Handle *handle, double temperature);
-int DTB_StartAutoTuningQueued(DTB_Handle *handle);
-int DTB_StopAutoTuningQueued(DTB_Handle *handle);
+int DTB_SetRunStopQueued(int run);
+int DTB_SetSetPointQueued(double temperature);
+int DTB_StartAutoTuningQueued(void);
+int DTB_StopAutoTuningQueued(void);
 
 // Configuration functions
-int DTB_SetControlMethodQueued(DTB_Handle *handle, int method);
-int DTB_SetPIDModeQueued(DTB_Handle *handle, int mode);
-int DTB_SetSensorTypeQueued(DTB_Handle *handle, int sensorType);
-int DTB_SetTemperatureLimitsQueued(DTB_Handle *handle, double upperLimit, double lowerLimit);
-int DTB_SetAlarmLimitsQueued(DTB_Handle *handle, double upperLimit, double lowerLimit);
-int DTB_SetHeatingCoolingQueued(DTB_Handle *handle, int mode);
-int DTB_ConfigureQueued(DTB_Handle *handle, const DTB_Configuration *config);
-int DTB_ConfigureDefaultQueued(DTB_Handle *handle);
-int DTB_FactoryResetQueued(DTB_Handle *handle);
+int DTB_SetControlMethodQueued(int method);
+int DTB_SetPIDModeQueued(int mode);
+int DTB_SetSensorTypeQueued(int sensorType);
+int DTB_SetTemperatureLimitsQueued(double upperLimit, double lowerLimit);
+int DTB_SetAlarmLimitsQueued(double upperLimit, double lowerLimit);
+int DTB_SetHeatingCoolingQueued(int mode);
+int DTB_ConfigureQueued(const DTB_Configuration *config);
+int DTB_ConfigureDefaultQueued(void);
+int DTB_FactoryResetQueued(void);
 
 // Read functions
-int DTB_GetStatusQueued(DTB_Handle *handle, DTB_Status *status);
-int DTB_GetProcessValueQueued(DTB_Handle *handle, double *temperature);
-int DTB_GetSetPointQueued(DTB_Handle *handle, double *setPoint);
-int DTB_GetPIDParamsQueued(DTB_Handle *handle, int pidNumber, DTB_PIDParams *params);
-int DTB_GetAlarmStatusQueued(DTB_Handle *handle, int *alarmActive);
+int DTB_GetStatusQueued(DTB_Status *status);
+int DTB_GetProcessValueQueued(double *temperature);
+int DTB_GetSetPointQueued(double *setPoint);
+int DTB_GetPIDParamsQueued(int pidNumber, DTB_PIDParams *params);
+int DTB_GetAlarmStatusQueued(int *alarmActive);
 
 // Alarm functions
-int DTB_ClearAlarmQueued(DTB_Handle *handle);
+int DTB_ClearAlarmQueued(void);
 
 // Front panel lock functions
-int DTB_SetFrontPanelLockQueued(DTB_Handle *handle, int lockMode);
-int DTB_GetFrontPanelLockQueued(DTB_Handle *handle, int *lockMode);
-int DTB_UnlockFrontPanelQueued(DTB_Handle *handle);
-int DTB_LockFrontPanelQueued(DTB_Handle *handle, int allowSetpointChange);
+int DTB_SetFrontPanelLockQueued(int lockMode);
+int DTB_GetFrontPanelLockQueued(int *lockMode);
+int DTB_UnlockFrontPanelQueued(void);
+int DTB_LockFrontPanelQueued(int allowSetpointChange);
 
 // Write protection functions
-int DTB_EnableWriteAccessQueued(DTB_Handle *handle);
-int DTB_DisableWriteAccessQueued(DTB_Handle *handle);
-int DTB_GetWriteAccessStatusQueued(DTB_Handle *handle, int *isEnabled);
+int DTB_EnableWriteAccessQueued(void);
+int DTB_DisableWriteAccessQueued(void);
+int DTB_GetWriteAccessStatusQueued(int *isEnabled);
 
 // Raw command support
-int DTB_SendRawModbusQueued(DTB_Handle *handle, unsigned char functionCode,
-                       unsigned short address, unsigned short data,
-                       unsigned char *rxBuffer, int rxBufferSize);
+int DTB_SendRawModbusQueued(unsigned char functionCode,
+                           unsigned short address, unsigned short data,
+                           unsigned char *rxBuffer, int rxBufferSize);
+
+/******************************************************************************
+ * Async Command Functions
+ * 
+ * These functions return CommandID on success or ERR_QUEUE_NOT_INIT if the 
+ * queue is not initialized
+ ******************************************************************************/
+
+/**
+ * Get DTB status asynchronously
+ * @param callback - Callback function to be called when command completes
+ * @param userData - User data passed to callback
+ * @return Command ID on success or ERR_QUEUE_NOT_INIT if queue not initialized
+ */
+CommandID DTB_GetStatusAsync(DTBCommandCallback callback, void *userData);
+
+/**
+ * Set DTB run/stop state asynchronously
+ * @param run - 1 to run, 0 to stop
+ * @param callback - Callback function to be called when command completes
+ * @param userData - User data passed to callback
+ * @return Command ID on success or ERR_QUEUE_NOT_INIT if queue not initialized
+ */
+CommandID DTB_SetRunStopAsync(int run, DTBCommandCallback callback, void *userData);
+
+/**
+ * Set DTB temperature setpoint asynchronously
+ * @param temperature - Target temperature in degrees Celsius
+ * @param callback - Callback function to be called when command completes
+ * @param userData - User data passed to callback
+ * @return Command ID on success or ERR_QUEUE_NOT_INIT if queue not initialized
+ */
+CommandID DTB_SetSetPointAsync(double temperature, DTBCommandCallback callback, void *userData);
 
 /******************************************************************************
  * Utility Functions
@@ -265,26 +289,24 @@ DTBQueueManager* DTB_GetGlobalQueueManager(void);
  * Safely configure temperature controller with atomic transaction
  * This ensures all configuration parameters are set together
  * 
- * @param handle - DTB handle (can be NULL to use global queue manager)
  * @param config - Complete configuration structure
  * @param callback - Optional callback for transaction completion
  * @param userData - User data for callback
  * @return SUCCESS or error code
  */
-int DTB_ConfigureAtomic(DTB_Handle *handle, const DTB_Configuration *config,
+int DTB_ConfigureAtomic(const DTB_Configuration *config,
                        DTBTransactionCallback callback, void *userData);
 
 /**
  * Safely change control method with PID parameters
  * Uses transaction to ensure consistent state
  * 
- * @param handle - DTB handle (can be NULL to use global queue manager)
  * @param method - Control method (PID, ON/OFF, etc.)
  * @param pidMode - PID mode (if method is PID)
  * @param pidParams - PID parameters (if method is PID, can be NULL)
  * @return SUCCESS or error code
  */
-int DTB_SetControlMethodWithParams(DTB_Handle *handle, int method, int pidMode,
+int DTB_SetControlMethodWithParams(int method, int pidMode,
                                   const DTB_PIDParams *pidParams);
 
 #endif // DTB4848_QUEUE_H

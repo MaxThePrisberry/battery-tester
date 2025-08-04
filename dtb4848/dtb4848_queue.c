@@ -45,6 +45,16 @@ static const char* g_commandTypeNames[] = {
 // Global queue manager pointer
 static DTBQueueManager *g_dtbQueueManager = NULL;
 
+// Queue a command (blocking)
+static int DTB_QueueCommandBlocking(DTBQueueManager *mgr, DTBCommandType type,
+                           DTBCommandParams *params, DTBPriority priority,
+                           DTBCommandResult *result, int timeoutMs);
+
+// Queue a command (async with callback)
+static CommandID DTB_QueueCommandAsync(DTBQueueManager *mgr, DTBCommandType type,
+                              DTBCommandParams *params, DTBPriority priority,
+                              DTBCommandCallback callback, void *userData);
+
 /******************************************************************************
  * DTB Device Context Structure
  ******************************************************************************/
@@ -568,13 +578,13 @@ void DTB_QueueGetStats(DTBQueueManager *mgr, DTBQueueStats *stats) {
  * Command Queueing Functions
  ******************************************************************************/
 
-int DTB_QueueCommandBlocking(DTBQueueManager *mgr, DTBCommandType type,
+static int DTB_QueueCommandBlocking(DTBQueueManager *mgr, DTBCommandType type,
                            DTBCommandParams *params, DTBPriority priority,
                            DTBCommandResult *result, int timeoutMs) {
     return DeviceQueue_CommandBlocking(mgr, type, params, priority, result, timeoutMs);
 }
 
-CommandID DTB_QueueCommandAsync(DTBQueueManager *mgr, DTBCommandType type,
+static CommandID DTB_QueueCommandAsync(DTBQueueManager *mgr, DTBCommandType type,
                               DTBCommandParams *params, DTBPriority priority,
                               DTBCommandCallback callback, void *userData) {
     return DeviceQueue_CommandAsync(mgr, type, params, priority, callback, userData);
@@ -618,8 +628,8 @@ DTBQueueManager* DTB_GetGlobalQueueManager(void) {
     return g_dtbQueueManager;
 }
 
-int DTB_SetRunStopQueued(DTB_Handle *handle, int run) {
-    if (!g_dtbQueueManager) return DTB_SetRunStop(handle, run);
+int DTB_SetRunStopQueued(int run) {
+    if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     
     DTBCommandParams params = {.runStop = {run}};
     DTBCommandResult result;
@@ -629,8 +639,8 @@ int DTB_SetRunStopQueued(DTB_Handle *handle, int run) {
                                   DTB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int DTB_SetSetPointQueued(DTB_Handle *handle, double temperature) {
-    if (!g_dtbQueueManager) return DTB_SetSetPoint(handle, temperature);
+int DTB_SetSetPointQueued(double temperature) {
+    if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     
     DTBCommandParams params = {.setpoint = {temperature}};
     DTBCommandResult result;
@@ -640,8 +650,8 @@ int DTB_SetSetPointQueued(DTB_Handle *handle, double temperature) {
                                   DTB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int DTB_StartAutoTuningQueued(DTB_Handle *handle) {
-    if (!g_dtbQueueManager) return DTB_StartAutoTuning(handle);
+int DTB_StartAutoTuningQueued(void) {
+    if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     
     DTBCommandParams params = {0};
     DTBCommandResult result;
@@ -651,8 +661,8 @@ int DTB_StartAutoTuningQueued(DTB_Handle *handle) {
                                   DTB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int DTB_StopAutoTuningQueued(DTB_Handle *handle) {
-    if (!g_dtbQueueManager) return DTB_StopAutoTuning(handle);
+int DTB_StopAutoTuningQueued(void) {
+    if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     
     DTBCommandParams params = {0};
     DTBCommandResult result;
@@ -662,8 +672,8 @@ int DTB_StopAutoTuningQueued(DTB_Handle *handle) {
                                   DTB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int DTB_SetControlMethodQueued(DTB_Handle *handle, int method) {
-    if (!g_dtbQueueManager) return DTB_SetControlMethod(handle, method);
+int DTB_SetControlMethodQueued(int method) {
+    if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     
     DTBCommandParams params = {.controlMethod = {method}};
     DTBCommandResult result;
@@ -673,8 +683,8 @@ int DTB_SetControlMethodQueued(DTB_Handle *handle, int method) {
                                   DTB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int DTB_SetPIDModeQueued(DTB_Handle *handle, int mode) {
-    if (!g_dtbQueueManager) return DTB_SetPIDMode(handle, mode);
+int DTB_SetPIDModeQueued(int mode) {
+    if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     
     DTBCommandParams params = {.pidMode = {mode}};
     DTBCommandResult result;
@@ -684,8 +694,8 @@ int DTB_SetPIDModeQueued(DTB_Handle *handle, int mode) {
                                   DTB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int DTB_SetSensorTypeQueued(DTB_Handle *handle, int sensorType) {
-    if (!g_dtbQueueManager) return DTB_SetSensorType(handle, sensorType);
+int DTB_SetSensorTypeQueued(int sensorType) {
+    if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     
     DTBCommandParams params = {.sensorType = {sensorType}};
     DTBCommandResult result;
@@ -695,8 +705,8 @@ int DTB_SetSensorTypeQueued(DTB_Handle *handle, int sensorType) {
                                   DTB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int DTB_SetTemperatureLimitsQueued(DTB_Handle *handle, double upperLimit, double lowerLimit) {
-    if (!g_dtbQueueManager) return DTB_SetTemperatureLimits(handle, upperLimit, lowerLimit);
+int DTB_SetTemperatureLimitsQueued(double upperLimit, double lowerLimit) {
+    if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     
     DTBCommandParams params = {.temperatureLimits = {upperLimit, lowerLimit}};
     DTBCommandResult result;
@@ -706,8 +716,8 @@ int DTB_SetTemperatureLimitsQueued(DTB_Handle *handle, double upperLimit, double
                                   DTB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int DTB_SetAlarmLimitsQueued(DTB_Handle *handle, double upperLimit, double lowerLimit) {
-    if (!g_dtbQueueManager) return DTB_SetAlarmLimits(handle, upperLimit, lowerLimit);
+int DTB_SetAlarmLimitsQueued(double upperLimit, double lowerLimit) {
+    if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     
     DTBCommandParams params = {.alarmLimits = {upperLimit, lowerLimit}};
     DTBCommandResult result;
@@ -717,8 +727,8 @@ int DTB_SetAlarmLimitsQueued(DTB_Handle *handle, double upperLimit, double lower
                                   DTB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int DTB_SetHeatingCoolingQueued(DTB_Handle *handle, int mode) {
-    if (!g_dtbQueueManager) return DTB_SetHeatingCooling(handle, mode);
+int DTB_SetHeatingCoolingQueued(int mode) {
+    if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     
     DTBCommandParams params = {.heatingCooling = {mode}};
     DTBCommandResult result;
@@ -728,8 +738,9 @@ int DTB_SetHeatingCoolingQueued(DTB_Handle *handle, int mode) {
                                   DTB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int DTB_ConfigureQueued(DTB_Handle *handle, const DTB_Configuration *config) {
-    if (!g_dtbQueueManager) return DTB_Configure(handle, config);
+int DTB_ConfigureQueued(const DTB_Configuration *config) {
+    if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
+    if (!config) return ERR_NULL_POINTER;
     
     DTBCommandParams params = {.configure = {*config}};
     DTBCommandResult result;
@@ -739,8 +750,8 @@ int DTB_ConfigureQueued(DTB_Handle *handle, const DTB_Configuration *config) {
                                   DTB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int DTB_ConfigureDefaultQueued(DTB_Handle *handle) {
-    if (!g_dtbQueueManager) return DTB_ConfigureDefault(handle);
+int DTB_ConfigureDefaultQueued(void) {
+    if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     
     DTBCommandParams params = {0};
     DTBCommandResult result;
@@ -750,8 +761,8 @@ int DTB_ConfigureDefaultQueued(DTB_Handle *handle) {
                                   DTB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int DTB_FactoryResetQueued(DTB_Handle *handle) {
-    if (!g_dtbQueueManager) return DTB_FactoryReset(handle);
+int DTB_FactoryResetQueued(void) {
+    if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     
     DTBCommandParams params = {0};
     DTBCommandResult result;
@@ -761,8 +772,9 @@ int DTB_FactoryResetQueued(DTB_Handle *handle) {
                                   DTB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int DTB_GetStatusQueued(DTB_Handle *handle, DTB_Status *status) {
-    if (!g_dtbQueueManager || !status) return DTB_GetStatus(handle, status);
+int DTB_GetStatusQueued(DTB_Status *status) {
+    if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
+    if (!status) return ERR_NULL_POINTER;
     
     DTBCommandParams params = {0};
     DTBCommandResult result;
@@ -777,8 +789,9 @@ int DTB_GetStatusQueued(DTB_Handle *handle, DTB_Status *status) {
     return error;
 }
 
-int DTB_GetProcessValueQueued(DTB_Handle *handle, double *temperature) {
-    if (!g_dtbQueueManager || !temperature) return DTB_GetProcessValue(handle, temperature);
+int DTB_GetProcessValueQueued(double *temperature) {
+    if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
+    if (!temperature) return ERR_NULL_POINTER;
     
     DTBCommandParams params = {0};
     DTBCommandResult result;
@@ -793,8 +806,9 @@ int DTB_GetProcessValueQueued(DTB_Handle *handle, double *temperature) {
     return error;
 }
 
-int DTB_GetSetPointQueued(DTB_Handle *handle, double *setPoint) {
-    if (!g_dtbQueueManager || !setPoint) return DTB_GetSetPoint(handle, setPoint);
+int DTB_GetSetPointQueued(double *setPoint) {
+    if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
+    if (!setPoint) return ERR_NULL_POINTER;
     
     DTBCommandParams params = {0};
     DTBCommandResult result;
@@ -809,8 +823,9 @@ int DTB_GetSetPointQueued(DTB_Handle *handle, double *setPoint) {
     return error;
 }
 
-int DTB_GetPIDParamsQueued(DTB_Handle *handle, int pidNumber, DTB_PIDParams *pidParams) {
-    if (!g_dtbQueueManager || !pidParams) return DTB_GetPIDParams(handle, pidNumber, pidParams);
+int DTB_GetPIDParamsQueued(int pidNumber, DTB_PIDParams *pidParams) {
+    if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
+    if (!pidParams) return ERR_NULL_POINTER;
     
     DTBCommandParams params = {.getPidParams = {pidNumber}};
     DTBCommandResult result;
@@ -825,8 +840,9 @@ int DTB_GetPIDParamsQueued(DTB_Handle *handle, int pidNumber, DTB_PIDParams *pid
     return error;
 }
 
-int DTB_GetAlarmStatusQueued(DTB_Handle *handle, int *alarmActive) {
-    if (!g_dtbQueueManager || !alarmActive) return DTB_GetAlarmStatus(handle, alarmActive);
+int DTB_GetAlarmStatusQueued(int *alarmActive) {
+    if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
+    if (!alarmActive) return ERR_NULL_POINTER;
     
     DTBCommandParams params = {0};
     DTBCommandResult result;
@@ -841,8 +857,8 @@ int DTB_GetAlarmStatusQueued(DTB_Handle *handle, int *alarmActive) {
     return error;
 }
 
-int DTB_ClearAlarmQueued(DTB_Handle *handle) {
-    if (!g_dtbQueueManager) return DTB_ClearAlarm(handle);
+int DTB_ClearAlarmQueued(void) {
+    if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     
     DTBCommandParams params = {0};
     DTBCommandResult result;
@@ -852,8 +868,8 @@ int DTB_ClearAlarmQueued(DTB_Handle *handle) {
                                   DTB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int DTB_SetFrontPanelLockQueued(DTB_Handle *handle, int lockMode) {
-    if (!g_dtbQueueManager) return DTB_SetFrontPanelLock(handle, lockMode);
+int DTB_SetFrontPanelLockQueued(int lockMode) {
+    if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     
     DTBCommandParams params = {.frontPanelLock = {lockMode}};
     DTBCommandResult result;
@@ -863,8 +879,9 @@ int DTB_SetFrontPanelLockQueued(DTB_Handle *handle, int lockMode) {
                                   DTB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int DTB_GetFrontPanelLockQueued(DTB_Handle *handle, int *lockMode) {
-    if (!g_dtbQueueManager || !lockMode) return DTB_GetFrontPanelLock(handle, lockMode);
+int DTB_GetFrontPanelLockQueued(int *lockMode) {
+    if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
+    if (!lockMode) return ERR_NULL_POINTER;
     
     DTBCommandParams params = {0};
     DTBCommandResult result;
@@ -879,17 +896,17 @@ int DTB_GetFrontPanelLockQueued(DTB_Handle *handle, int *lockMode) {
     return error;
 }
 
-int DTB_UnlockFrontPanelQueued(DTB_Handle *handle) {
-    return DTB_SetFrontPanelLockQueued(handle, FRONT_PANEL_UNLOCKED);
+int DTB_UnlockFrontPanelQueued(void) {
+    return DTB_SetFrontPanelLockQueued(FRONT_PANEL_UNLOCKED);
 }
 
-int DTB_LockFrontPanelQueued(DTB_Handle *handle, int allowSetpointChange) {
+int DTB_LockFrontPanelQueued(int allowSetpointChange) {
     int lockMode = allowSetpointChange ? FRONT_PANEL_LOCK_EXCEPT_SV : FRONT_PANEL_LOCK_ALL;
-    return DTB_SetFrontPanelLockQueued(handle, lockMode);
+    return DTB_SetFrontPanelLockQueued(lockMode);
 }
 
-int DTB_EnableWriteAccessQueued(DTB_Handle *handle) {
-    if (!g_dtbQueueManager) return DTB_EnableWriteAccess(handle);
+int DTB_EnableWriteAccessQueued(void) {
+    if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     
     DTBCommandParams params = {0};
     DTBCommandResult result;
@@ -899,8 +916,8 @@ int DTB_EnableWriteAccessQueued(DTB_Handle *handle) {
                                   DTB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int DTB_DisableWriteAccessQueued(DTB_Handle *handle) {
-    if (!g_dtbQueueManager) return DTB_DisableWriteAccess(handle);
+int DTB_DisableWriteAccessQueued(void) {
+    if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     
     DTBCommandParams params = {0};
     DTBCommandResult result;
@@ -910,8 +927,9 @@ int DTB_DisableWriteAccessQueued(DTB_Handle *handle) {
                                   DTB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int DTB_GetWriteAccessStatusQueued(DTB_Handle *handle, int *isEnabled) {
-    if (!g_dtbQueueManager || !isEnabled) return DTB_GetWriteAccessStatus(handle, isEnabled);
+int DTB_GetWriteAccessStatusQueued(int *isEnabled) {
+    if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
+    if (!isEnabled) return ERR_NULL_POINTER;
     
     DTBCommandParams params = {0};
     DTBCommandResult result;
@@ -926,45 +944,10 @@ int DTB_GetWriteAccessStatusQueued(DTB_Handle *handle, int *isEnabled) {
     return error;
 }
 
-int DTB_SendRawModbusQueued(DTB_Handle *handle, unsigned char functionCode,
-                       unsigned short address, unsigned short data,
-                       unsigned char *rxBuffer, int rxBufferSize) {
-    if (!g_dtbQueueManager) {
-        // Fall back to direct calls if no queue manager
-        switch (functionCode) {
-            case MODBUS_READ_REGISTERS:
-                if (rxBuffer && rxBufferSize >= 2) {
-                    unsigned short value;
-                    int result = DTB_ReadRegister(handle, address, &value);
-                    if (result == DTB_SUCCESS) {
-                        rxBuffer[0] = (value >> 8) & 0xFF;
-                        rxBuffer[1] = value & 0xFF;
-                    }
-                    return result;
-                }
-                return DTB_ERROR_INVALID_PARAM;
-                
-            case MODBUS_WRITE_REGISTER:
-                return DTB_WriteRegister(handle, address, data);
-                
-            case MODBUS_READ_BITS:
-                if (rxBuffer && rxBufferSize >= 1) {
-                    int bitValue;
-                    int result = DTB_ReadBit(handle, address, &bitValue);
-                    if (result == DTB_SUCCESS) {
-                        rxBuffer[0] = bitValue ? 0x01 : 0x00;
-                    }
-                    return result;
-                }
-                return DTB_ERROR_INVALID_PARAM;
-                
-            case MODBUS_WRITE_BIT:
-                return DTB_WriteBit(handle, address, (data == 0xFF00) ? 1 : 0);
-                
-            default:
-                return DTB_ERROR_NOT_SUPPORTED;
-        }
-    }
+int DTB_SendRawModbusQueued(unsigned char functionCode,
+                           unsigned short address, unsigned short data,
+                           unsigned char *rxBuffer, int rxBufferSize) {
+    if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     
     DTBCommandParams params = {
         .rawModbus = {
@@ -984,6 +967,46 @@ int DTB_SendRawModbusQueued(DTB_Handle *handle, unsigned char functionCode,
     // Response data is already copied to rxBuffer in DTB_AdapterExecuteCommand
     
     return error;
+}
+
+/******************************************************************************
+ * Async Command Function Implementations
+ ******************************************************************************/
+
+CommandID DTB_GetStatusAsync(DTBCommandCallback callback, void *userData) {
+    DTBQueueManager *mgr = DTB_GetGlobalQueueManager();
+    if (!mgr) {
+        return ERR_QUEUE_NOT_INIT;
+    }
+    
+    DTBCommandParams params = {0};
+    
+    return DTB_QueueCommandAsync(mgr, DTB_CMD_GET_STATUS, &params,
+                                DTB_PRIORITY_NORMAL, callback, userData);
+}
+
+CommandID DTB_SetRunStopAsync(int run, DTBCommandCallback callback, void *userData) {
+    DTBQueueManager *mgr = DTB_GetGlobalQueueManager();
+    if (!mgr) {
+        return ERR_QUEUE_NOT_INIT;
+    }
+    
+    DTBCommandParams params = {.runStop = {run}};
+    
+    return DTB_QueueCommandAsync(mgr, DTB_CMD_SET_RUN_STOP, &params,
+                                DTB_PRIORITY_HIGH, callback, userData);
+}
+
+CommandID DTB_SetSetPointAsync(double temperature, DTBCommandCallback callback, void *userData) {
+    DTBQueueManager *mgr = DTB_GetGlobalQueueManager();
+    if (!mgr) {
+        return ERR_QUEUE_NOT_INIT;
+    }
+    
+    DTBCommandParams params = {.setpoint = {temperature}};
+    
+    return DTB_QueueCommandAsync(mgr, DTB_CMD_SET_SETPOINT, &params,
+                                DTB_PRIORITY_HIGH, callback, userData);
 }
 
 /******************************************************************************
@@ -1068,7 +1091,7 @@ int DTB_QueueCancelTransaction(DTBQueueManager *mgr, TransactionHandle txn) {
  * Advanced Transaction-Based Functions
  ******************************************************************************/
 
-int DTB_ConfigureAtomic(DTB_Handle *handle, const DTB_Configuration *config,
+int DTB_ConfigureAtomic(const DTB_Configuration *config,
                        DTBTransactionCallback callback, void *userData) {
     DTBQueueManager *queueMgr = DTB_GetGlobalQueueManager();
     if (!queueMgr) {
@@ -1076,7 +1099,7 @@ int DTB_ConfigureAtomic(DTB_Handle *handle, const DTB_Configuration *config,
         return ERR_QUEUE_NOT_INIT;
     }
     if (!config) {
-        return DTB_ERROR_INVALID_PARAM;
+        return ERR_NULL_POINTER;
     }
     
     // Create transaction
@@ -1144,10 +1167,9 @@ cleanup:
     return result;
 }
 
-int DTB_SetControlMethodWithParams(DTB_Handle *handle, int method, int pidMode,
+int DTB_SetControlMethodWithParams(int method, int pidMode,
                                   const DTB_PIDParams *pidParams) {
     DTBQueueManager *queueMgr = DTB_GetGlobalQueueManager();
-    // Add explicit check
     if (!queueMgr) {
         LogErrorEx(LOG_DEVICE_DTB, "Queue manager not initialized for control method change");
         return ERR_QUEUE_NOT_INIT;
@@ -1155,7 +1177,7 @@ int DTB_SetControlMethodWithParams(DTB_Handle *handle, int method, int pidMode,
     
     // For non-PID methods, just set the control method
     if (method != CONTROL_METHOD_PID) {
-        return DTB_SetControlMethodQueued(handle, method);
+        return DTB_SetControlMethodQueued(method);
     }
     
     // For PID control, use transaction to ensure consistency

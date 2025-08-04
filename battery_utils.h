@@ -126,20 +126,18 @@ double Battery_CalculateEnergyIncrement(double voltage1_V, double current1_A,
  * Automatically determines whether to charge or discharge based on current voltage
  * This is a blocking function that uses coulomb counting
  * 
- * @param psbHandle - PSB handle (can be NULL to use global queue manager)
  * @param params - Target voltage parameters and results
  * @return SUCCESS or error code
  */
-int Battery_GoToVoltage(PSB_Handle *psbHandle, VoltageTargetParams *params);
+int Battery_GoToVoltage(VoltageTargetParams *params);
 
 /**
  * Discharge a specific amount of capacity from the battery
  * This is a blocking function that uses coulomb counting
  * 
- * @param psbHandle - PSB handle (can be NULL to use global queue manager)
  * @param params - Discharge parameters and results
  * @return SUCCESS or error code
  */
-int Battery_DischargeCapacity(PSB_Handle *psbHandle, DischargeParams *params);
+int Battery_DischargeCapacity(DischargeParams *params);
 
 #endif // BATTERY_UTILS_H

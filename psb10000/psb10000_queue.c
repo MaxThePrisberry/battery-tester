@@ -35,6 +35,16 @@ static const char* g_commandTypeNames[] = {
 // Global queue manager pointer
 static PSBQueueManager *g_psbQueueManager = NULL;
 
+// Queue a command (blocking)
+static int PSB_QueueCommandBlocking(PSBQueueManager *mgr, PSBCommandType type,
+                           PSBCommandParams *params, PSBPriority priority,
+                           PSBCommandResult *result, int timeoutMs);
+
+// Queue a command (async with callback)
+static CommandID PSB_QueueCommandAsync(PSBQueueManager *mgr, PSBCommandType type,
+                              PSBCommandParams *params, PSBPriority priority,
+                              PSBCommandCallback callback, void *userData);
+
 /******************************************************************************
  * PSB Device Context Structure
  ******************************************************************************/
@@ -415,13 +425,13 @@ void PSB_QueueGetStats(PSBQueueManager *mgr, PSBQueueStats *stats) {
  * Command Queueing Functions
  ******************************************************************************/
 
-int PSB_QueueCommandBlocking(PSBQueueManager *mgr, PSBCommandType type,
+static int PSB_QueueCommandBlocking(PSBQueueManager *mgr, PSBCommandType type,
                            PSBCommandParams *params, PSBPriority priority,
                            PSBCommandResult *result, int timeoutMs) {
     return DeviceQueue_CommandBlocking(mgr, type, params, priority, result, timeoutMs);
 }
 
-CommandID PSB_QueueCommandAsync(PSBQueueManager *mgr, PSBCommandType type,
+static CommandID PSB_QueueCommandAsync(PSBQueueManager *mgr, PSBCommandType type,
                               PSBCommandParams *params, PSBPriority priority,
                               PSBCommandCallback callback, void *userData) {
     return DeviceQueue_CommandAsync(mgr, type, params, priority, callback, userData);
@@ -454,7 +464,7 @@ int PSB_QueueCommitTransaction(PSBQueueManager *mgr, TransactionHandle txn,
 }
 
 /******************************************************************************
- * Wrapper Functions
+ * Wrapper Functions - All return ERR_QUEUE_NOT_INIT if queue not initialized
  ******************************************************************************/
 
 void PSB_SetGlobalQueueManager(PSBQueueManager *mgr) {
@@ -465,8 +475,8 @@ PSBQueueManager* PSB_GetGlobalQueueManager(void) {
     return g_psbQueueManager;
 }
 
-int PSB_SetRemoteModeQueued(PSB_Handle *handle, int enable) {
-    if (!g_psbQueueManager) return PSB_SetRemoteMode(handle, enable);
+int PSB_SetRemoteModeQueued(int enable) {
+    if (!g_psbQueueManager) return ERR_QUEUE_NOT_INIT;
     
     PSBCommandParams params = {.remoteMode = {enable}};
     PSBCommandResult result;
@@ -476,8 +486,8 @@ int PSB_SetRemoteModeQueued(PSB_Handle *handle, int enable) {
                                   PSB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int PSB_SetOutputEnableQueued(PSB_Handle *handle, int enable) {
-    if (!g_psbQueueManager) return PSB_SetOutputEnable(handle, enable);
+int PSB_SetOutputEnableQueued(int enable) {
+    if (!g_psbQueueManager) return ERR_QUEUE_NOT_INIT;
     
     PSBCommandParams params = {.outputEnable = {enable}};
     PSBCommandResult result;
@@ -487,8 +497,8 @@ int PSB_SetOutputEnableQueued(PSB_Handle *handle, int enable) {
                                   PSB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int PSB_SetVoltageQueued(PSB_Handle *handle, double voltage) {
-    if (!g_psbQueueManager) return PSB_SetVoltage(handle, voltage);
+int PSB_SetVoltageQueued(double voltage) {
+    if (!g_psbQueueManager) return ERR_QUEUE_NOT_INIT;
     
     PSBCommandParams params = {.setVoltage = {voltage}};
     PSBCommandResult result;
@@ -498,8 +508,8 @@ int PSB_SetVoltageQueued(PSB_Handle *handle, double voltage) {
                                   PSB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int PSB_SetCurrentQueued(PSB_Handle *handle, double current) {
-    if (!g_psbQueueManager) return PSB_SetCurrent(handle, current);
+int PSB_SetCurrentQueued(double current) {
+    if (!g_psbQueueManager) return ERR_QUEUE_NOT_INIT;
     
     PSBCommandParams params = {.setCurrent = {current}};
     PSBCommandResult result;
@@ -509,8 +519,8 @@ int PSB_SetCurrentQueued(PSB_Handle *handle, double current) {
                                   PSB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int PSB_SetPowerQueued(PSB_Handle *handle, double power) {
-    if (!g_psbQueueManager) return PSB_SetPower(handle, power);
+int PSB_SetPowerQueued(double power) {
+    if (!g_psbQueueManager) return ERR_QUEUE_NOT_INIT;
     
     PSBCommandParams params = {.setPower = {power}};
     PSBCommandResult result;
@@ -520,8 +530,8 @@ int PSB_SetPowerQueued(PSB_Handle *handle, double power) {
                                   PSB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int PSB_SetVoltageLimitsQueued(PSB_Handle *handle, double minVoltage, double maxVoltage) {
-    if (!g_psbQueueManager) return PSB_SetVoltageLimits(handle, minVoltage, maxVoltage);
+int PSB_SetVoltageLimitsQueued(double minVoltage, double maxVoltage) {
+    if (!g_psbQueueManager) return ERR_QUEUE_NOT_INIT;
     
     PSBCommandParams params = {.voltageLimits = {minVoltage, maxVoltage}};
     PSBCommandResult result;
@@ -531,8 +541,8 @@ int PSB_SetVoltageLimitsQueued(PSB_Handle *handle, double minVoltage, double max
                                   PSB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int PSB_SetCurrentLimitsQueued(PSB_Handle *handle, double minCurrent, double maxCurrent) {
-    if (!g_psbQueueManager) return PSB_SetCurrentLimits(handle, minCurrent, maxCurrent);
+int PSB_SetCurrentLimitsQueued(double minCurrent, double maxCurrent) {
+    if (!g_psbQueueManager) return ERR_QUEUE_NOT_INIT;
     
     PSBCommandParams params = {.currentLimits = {minCurrent, maxCurrent}};
     PSBCommandResult result;
@@ -542,8 +552,8 @@ int PSB_SetCurrentLimitsQueued(PSB_Handle *handle, double minCurrent, double max
                                   PSB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int PSB_SetPowerLimitQueued(PSB_Handle *handle, double maxPower) {
-    if (!g_psbQueueManager) return PSB_SetPowerLimit(handle, maxPower);
+int PSB_SetPowerLimitQueued(double maxPower) {
+    if (!g_psbQueueManager) return ERR_QUEUE_NOT_INIT;
     
     PSBCommandParams params = {.powerLimit = {maxPower}};
     PSBCommandResult result;
@@ -553,8 +563,9 @@ int PSB_SetPowerLimitQueued(PSB_Handle *handle, double maxPower) {
                                   PSB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int PSB_GetStatusQueued(PSB_Handle *handle, PSB_Status *status) {
-    if (!g_psbQueueManager || !status) return PSB_GetStatus(handle, status);
+int PSB_GetStatusQueued(PSB_Status *status) {
+    if (!g_psbQueueManager) return ERR_QUEUE_NOT_INIT;
+    if (!status) return ERR_NULL_POINTER;
     
     PSBCommandParams params = {0};
     PSBCommandResult result;
@@ -569,8 +580,8 @@ int PSB_GetStatusQueued(PSB_Handle *handle, PSB_Status *status) {
     return error;
 }
 
-int PSB_GetActualValuesQueued(PSB_Handle *handle, double *voltage, double *current, double *power) {
-    if (!g_psbQueueManager) return PSB_GetActualValues(handle, voltage, current, power);
+int PSB_GetActualValuesQueued(double *voltage, double *current, double *power) {
+    if (!g_psbQueueManager) return ERR_QUEUE_NOT_INIT;
     
     PSBCommandParams params = {0};
     PSBCommandResult result;
@@ -587,8 +598,8 @@ int PSB_GetActualValuesQueued(PSB_Handle *handle, double *voltage, double *curre
     return error;
 }
 
-int PSB_SetSinkCurrentQueued(PSB_Handle *handle, double current) {
-    if (!g_psbQueueManager) return PSB_SetSinkCurrent(handle, current);
+int PSB_SetSinkCurrentQueued(double current) {
+    if (!g_psbQueueManager) return ERR_QUEUE_NOT_INIT;
     
     PSBCommandParams params = {.setSinkCurrent = {current}};
     PSBCommandResult result;
@@ -598,8 +609,8 @@ int PSB_SetSinkCurrentQueued(PSB_Handle *handle, double current) {
                                   PSB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int PSB_SetSinkPowerQueued(PSB_Handle *handle, double power) {
-    if (!g_psbQueueManager) return PSB_SetSinkPower(handle, power);
+int PSB_SetSinkPowerQueued(double power) {
+    if (!g_psbQueueManager) return ERR_QUEUE_NOT_INIT;
     
     PSBCommandParams params = {.setSinkPower = {power}};
     PSBCommandResult result;
@@ -609,8 +620,8 @@ int PSB_SetSinkPowerQueued(PSB_Handle *handle, double power) {
                                   PSB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int PSB_SetSinkCurrentLimitsQueued(PSB_Handle *handle, double minCurrent, double maxCurrent) {
-    if (!g_psbQueueManager) return PSB_SetSinkCurrentLimits(handle, minCurrent, maxCurrent);
+int PSB_SetSinkCurrentLimitsQueued(double minCurrent, double maxCurrent) {
+    if (!g_psbQueueManager) return ERR_QUEUE_NOT_INIT;
     
     PSBCommandParams params = {.sinkCurrentLimits = {minCurrent, maxCurrent}};
     PSBCommandResult result;
@@ -620,8 +631,8 @@ int PSB_SetSinkCurrentLimitsQueued(PSB_Handle *handle, double minCurrent, double
                                   PSB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int PSB_SetSinkPowerLimitQueued(PSB_Handle *handle, double maxPower) {
-    if (!g_psbQueueManager) return PSB_SetSinkPowerLimit(handle, maxPower);
+int PSB_SetSinkPowerLimitQueued(double maxPower) {
+    if (!g_psbQueueManager) return ERR_QUEUE_NOT_INIT;
     
     PSBCommandParams params = {.sinkPowerLimit = {maxPower}};
     PSBCommandResult result;
@@ -631,12 +642,8 @@ int PSB_SetSinkPowerLimitQueued(PSB_Handle *handle, double maxPower) {
                                   PSB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int PSB_SetSafeLimits(PSB_Handle *handle) {
-    PSBQueueManager *queueMgr = PSB_GetGlobalQueueManager();
-    if (!queueMgr && !handle) {
-        LogErrorEx(LOG_DEVICE_PSB, "Neither queue manager nor handle available for setting safe limits");
-        return ERR_NOT_CONNECTED;
-    }
+int PSB_SetSafeLimitsQueued(void) {
+    if (!g_psbQueueManager) return ERR_QUEUE_NOT_INIT;
     
     int result;
     int overallResult = PSB_SUCCESS;
@@ -644,35 +651,35 @@ int PSB_SetSafeLimits(PSB_Handle *handle) {
     LogMessageEx(LOG_DEVICE_PSB, "Setting PSB safe limits...");
     
     // Set voltage limits to maximum safe range
-    result = PSB_SetVoltageLimitsQueued(handle, PSB_SAFE_VOLTAGE_MIN, PSB_SAFE_VOLTAGE_MAX);
+    result = PSB_SetVoltageLimitsQueued(PSB_SAFE_VOLTAGE_MIN, PSB_SAFE_VOLTAGE_MAX);
     if (result != PSB_SUCCESS) {
         LogWarningEx(LOG_DEVICE_PSB, "Failed to set voltage limits: %s", PSB_GetErrorString(result));
         overallResult = result;
     }
     
     // Set current limits to maximum safe range
-    result = PSB_SetCurrentLimitsQueued(handle, PSB_SAFE_CURRENT_MIN, PSB_SAFE_CURRENT_MAX);
+    result = PSB_SetCurrentLimitsQueued(PSB_SAFE_CURRENT_MIN, PSB_SAFE_CURRENT_MAX);
     if (result != PSB_SUCCESS) {
         LogWarningEx(LOG_DEVICE_PSB, "Failed to set current limits: %s", PSB_GetErrorString(result));
         overallResult = result;
     }
     
     // Set sink current limits to maximum safe range
-    result = PSB_SetSinkCurrentLimitsQueued(handle, PSB_SAFE_SINK_CURRENT_MIN, PSB_SAFE_SINK_CURRENT_MAX);
+    result = PSB_SetSinkCurrentLimitsQueued(PSB_SAFE_SINK_CURRENT_MIN, PSB_SAFE_SINK_CURRENT_MAX);
     if (result != PSB_SUCCESS) {
         LogWarningEx(LOG_DEVICE_PSB, "Failed to set sink current limits: %s", PSB_GetErrorString(result));
         overallResult = result;
     }
     
     // Set power limit to maximum safe value
-    result = PSB_SetPowerLimitQueued(handle, PSB_SAFE_POWER_MAX);
+    result = PSB_SetPowerLimitQueued(PSB_SAFE_POWER_MAX);
     if (result != PSB_SUCCESS) {
         LogWarningEx(LOG_DEVICE_PSB, "Failed to set power limit: %s", PSB_GetErrorString(result));
         overallResult = result;
     }
     
     // Set sink power limit to maximum safe value
-    result = PSB_SetSinkPowerLimitQueued(handle, PSB_SAFE_SINK_POWER_MAX);
+    result = PSB_SetSinkPowerLimitQueued(PSB_SAFE_SINK_POWER_MAX);
     if (result != PSB_SUCCESS) {
         LogWarningEx(LOG_DEVICE_PSB, "Failed to set sink power limit: %s", PSB_GetErrorString(result));
         overallResult = result;
@@ -687,12 +694,8 @@ int PSB_SetSafeLimits(PSB_Handle *handle) {
     return overallResult;
 }
 
-int PSB_ZeroAllValues(PSB_Handle *handle) {
-    PSBQueueManager *queueMgr = PSB_GetGlobalQueueManager();
-    if (!queueMgr && !handle) {
-        LogErrorEx(LOG_DEVICE_PSB, "Neither queue manager nor handle available for zeroing values");
-        return ERR_NOT_CONNECTED;
-    }
+int PSB_ZeroAllValuesQueued(void) {
+    if (!g_psbQueueManager) return ERR_QUEUE_NOT_INIT;
     
     int result;
     int overallResult = PSB_SUCCESS;
@@ -700,42 +703,42 @@ int PSB_ZeroAllValues(PSB_Handle *handle) {
     LogMessageEx(LOG_DEVICE_PSB, "Zeroing all PSB values...");
     
     // Disable output first
-    result = PSB_SetOutputEnableQueued(handle, 0);
+    result = PSB_SetOutputEnableQueued(0);
     if (result != PSB_SUCCESS) {
         LogWarningEx(LOG_DEVICE_PSB, "Failed to disable output: %s", PSB_GetErrorString(result));
         overallResult = result;
     }
     
     // Set voltage to 0V
-    result = PSB_SetVoltageQueued(handle, 0.0);
+    result = PSB_SetVoltageQueued(0.0);
     if (result != PSB_SUCCESS) {
         LogWarningEx(LOG_DEVICE_PSB, "Failed to set voltage to 0V: %s", PSB_GetErrorString(result));
         overallResult = result;
     }
     
     // Set current to 0A
-    result = PSB_SetCurrentQueued(handle, 0.0);
+    result = PSB_SetCurrentQueued(0.0);
     if (result != PSB_SUCCESS) {
         LogWarningEx(LOG_DEVICE_PSB, "Failed to set current to 0A: %s", PSB_GetErrorString(result));
         overallResult = result;
     }
     
     // Set power to 0W
-    result = PSB_SetPowerQueued(handle, 0.0);
+    result = PSB_SetPowerQueued(0.0);
     if (result != PSB_SUCCESS) {
         LogWarningEx(LOG_DEVICE_PSB, "Failed to set power to 0W: %s", PSB_GetErrorString(result));
         overallResult = result;
     }
     
     // Set sink current to 0A
-    result = PSB_SetSinkCurrentQueued(handle, 0.0);
+    result = PSB_SetSinkCurrentQueued(0.0);
     if (result != PSB_SUCCESS) {
         LogWarningEx(LOG_DEVICE_PSB, "Failed to set sink current to 0A: %s", PSB_GetErrorString(result));
         overallResult = result;
     }
     
     // Set sink power to 0W
-    result = PSB_SetSinkPowerQueued(handle, 0.0);
+    result = PSB_SetSinkPowerQueued(0.0);
     if (result != PSB_SUCCESS) {
         LogWarningEx(LOG_DEVICE_PSB, "Failed to set sink power to 0W: %s", PSB_GetErrorString(result));
         overallResult = result;
@@ -750,10 +753,9 @@ int PSB_ZeroAllValues(PSB_Handle *handle) {
     return overallResult;
 }
 
-int PSB_SendRawModbusQueued(PSB_Handle *handle, unsigned char *txBuffer, int txLength,
+int PSB_SendRawModbusQueued(unsigned char *txBuffer, int txLength,
                             unsigned char *rxBuffer, int rxBufferSize, int expectedRxLength) {
-    if (!g_psbQueueManager) return PSB_SendRawModbus(handle, txBuffer, txLength, 
-                                                     rxBuffer, rxBufferSize, expectedRxLength);
+    if (!g_psbQueueManager) return ERR_QUEUE_NOT_INIT;
     
     if (!txBuffer || !rxBuffer || txLength <= 0 || rxBufferSize <= 0) {
         return PSB_ERROR_INVALID_PARAM;
@@ -782,6 +784,58 @@ int PSB_SendRawModbusQueued(PSB_Handle *handle, unsigned char *txBuffer, int txL
     }
     
     return error;
+}
+
+/******************************************************************************
+ * Async Command Function Implementations
+ ******************************************************************************/
+
+CommandID PSB_GetStatusAsync(PSBCommandCallback callback, void *userData) {
+    PSBQueueManager *mgr = PSB_GetGlobalQueueManager();
+    if (!mgr) {
+        return ERR_QUEUE_NOT_INIT;
+    }
+    
+    PSBCommandParams params = {0};
+    
+    return PSB_QueueCommandAsync(mgr, PSB_CMD_GET_STATUS, &params,
+                                PSB_PRIORITY_NORMAL, callback, userData);
+}
+
+CommandID PSB_SetRemoteModeAsync(int enable, PSBCommandCallback callback, void *userData) {
+    PSBQueueManager *mgr = PSB_GetGlobalQueueManager();
+    if (!mgr) {
+        return ERR_QUEUE_NOT_INIT;
+    }
+    
+    PSBCommandParams params = {.remoteMode = {enable}};
+    
+    return PSB_QueueCommandAsync(mgr, PSB_CMD_SET_REMOTE_MODE, &params,
+                                PSB_PRIORITY_HIGH, callback, userData);
+}
+
+CommandID PSB_SetOutputEnableAsync(int enable, PSBCommandCallback callback, void *userData) {
+    PSBQueueManager *mgr = PSB_GetGlobalQueueManager();
+    if (!mgr) {
+        return ERR_QUEUE_NOT_INIT;
+    }
+    
+    PSBCommandParams params = {.outputEnable = {enable}};
+    
+    return PSB_QueueCommandAsync(mgr, PSB_CMD_SET_OUTPUT_ENABLE, &params,
+                                PSB_PRIORITY_HIGH, callback, userData);
+}
+
+CommandID PSB_GetActualValuesAsync(PSBCommandCallback callback, void *userData) {
+    PSBQueueManager *mgr = PSB_GetGlobalQueueManager();
+    if (!mgr) {
+        return ERR_QUEUE_NOT_INIT;
+    }
+    
+    PSBCommandParams params = {0};
+    
+    return PSB_QueueCommandAsync(mgr, PSB_CMD_GET_ACTUAL_VALUES, &params,
+                                PSB_PRIORITY_NORMAL, callback, userData);
 }
 
 /******************************************************************************

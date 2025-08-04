@@ -69,11 +69,11 @@ typedef enum {
     // Raw Modbus commands
     PSB_CMD_RAW_MODBUS,
     
-	PSB_CMD_SET_SINK_CURRENT,
-	PSB_CMD_SET_SINK_POWER,
-	PSB_CMD_SET_SINK_CURRENT_LIMITS,
-	PSB_CMD_SET_SINK_POWER_LIMIT,
-	
+    PSB_CMD_SET_SINK_CURRENT,
+    PSB_CMD_SET_SINK_POWER,
+    PSB_CMD_SET_SINK_CURRENT_LIMITS,
+    PSB_CMD_SET_SINK_POWER_LIMIT,
+    
     PSB_CMD_TYPE_COUNT
 } PSBCommandType;
 
@@ -143,16 +143,6 @@ void PSB_QueueGetStats(PSBQueueManager *mgr, PSBQueueStats *stats);
  * Command Queueing Functions
  ******************************************************************************/
 
-// Queue a command (blocking)
-int PSB_QueueCommandBlocking(PSBQueueManager *mgr, PSBCommandType type,
-                           PSBCommandParams *params, PSBPriority priority,
-                           PSBCommandResult *result, int timeoutMs);
-
-// Queue a command (async with callback)
-CommandID PSB_QueueCommandAsync(PSBQueueManager *mgr, PSBCommandType type,
-                              PSBCommandParams *params, PSBPriority priority,
-                              PSBCommandCallback callback, void *userData);
-
 // Cancel commands
 int PSB_QueueCancelCommand(PSBQueueManager *mgr, CommandID cmdId);
 int PSB_QueueCancelByType(PSBQueueManager *mgr, PSBCommandType type);
@@ -181,26 +171,67 @@ int PSB_QueueCommitTransaction(PSBQueueManager *mgr, TransactionHandle txn,
 int PSB_QueueCancelTransaction(PSBQueueManager *mgr, TransactionHandle txn);
 
 /******************************************************************************
- * Wrapper Functions
+ * Queued Wrapper Functions - All require initialized queue manager
  ******************************************************************************/
 
-// These maintain the existing API but use the queue internally
-int PSB_SetRemoteModeQueued(PSB_Handle *handle, int enable);
-int PSB_SetOutputEnableQueued(PSB_Handle *handle, int enable);
-int PSB_SetVoltageQueued(PSB_Handle *handle, double voltage);
-int PSB_SetCurrentQueued(PSB_Handle *handle, double current);
-int PSB_SetPowerQueued(PSB_Handle *handle, double power);
-int PSB_SetVoltageLimitsQueued(PSB_Handle *handle, double minVoltage, double maxVoltage);
-int PSB_SetCurrentLimitsQueued(PSB_Handle *handle, double minCurrent, double maxCurrent);
-int PSB_SetPowerLimitQueued(PSB_Handle *handle, double maxPower);
-int PSB_SetSinkCurrentQueued(PSB_Handle *handle, double current);
-int PSB_SetSinkPowerQueued(PSB_Handle *handle, double power);
-int PSB_SetSinkCurrentLimitsQueued(PSB_Handle *handle, double minCurrent, double maxCurrent);
-int PSB_SetSinkPowerLimitQueued(PSB_Handle *handle, double maxPower);
-int PSB_GetStatusQueued(PSB_Handle *handle, PSB_Status *status);
-int PSB_GetActualValuesQueued(PSB_Handle *handle, double *voltage, double *current, double *power);
-int PSB_SendRawModbusQueued(PSB_Handle *handle, unsigned char *txBuffer, int txLength,
+// These functions use the global queue manager and return ERR_QUEUE_NOT_INIT if not initialized
+int PSB_SetRemoteModeQueued(int enable);
+int PSB_SetOutputEnableQueued(int enable);
+int PSB_SetVoltageQueued(double voltage);
+int PSB_SetCurrentQueued(double current);
+int PSB_SetPowerQueued(double power);
+int PSB_SetVoltageLimitsQueued(double minVoltage, double maxVoltage);
+int PSB_SetCurrentLimitsQueued(double minCurrent, double maxCurrent);
+int PSB_SetPowerLimitQueued(double maxPower);
+int PSB_SetSinkCurrentQueued(double current);
+int PSB_SetSinkPowerQueued(double power);
+int PSB_SetSinkCurrentLimitsQueued(double minCurrent, double maxCurrent);
+int PSB_SetSinkPowerLimitQueued(double maxPower);
+int PSB_GetStatusQueued(PSB_Status *status);
+int PSB_GetActualValuesQueued(double *voltage, double *current, double *power);
+int PSB_SendRawModbusQueued(unsigned char *txBuffer, int txLength,
                             unsigned char *rxBuffer, int rxBufferSize, int expectedRxLength);
+
+/******************************************************************************
+ * Async Command Functions
+ * 
+ * These functions return CommandID on success or ERR_QUEUE_NOT_INIT if the 
+ * queue is not initialized
+ ******************************************************************************/
+
+/**
+ * Get PSB status asynchronously
+ * @param callback - Callback function to be called when command completes
+ * @param userData - User data passed to callback
+ * @return Command ID on success or ERR_QUEUE_NOT_INIT if queue not initialized
+ */
+CommandID PSB_GetStatusAsync(PSBCommandCallback callback, void *userData);
+
+/**
+ * Set PSB remote mode asynchronously
+ * @param enable - 1 to enable remote mode, 0 to disable
+ * @param callback - Callback function to be called when command completes
+ * @param userData - User data passed to callback
+ * @return Command ID on success or ERR_QUEUE_NOT_INIT if queue not initialized
+ */
+CommandID PSB_SetRemoteModeAsync(int enable, PSBCommandCallback callback, void *userData);
+
+/**
+ * Set PSB output enable asynchronously
+ * @param enable - 1 to enable output, 0 to disable
+ * @param callback - Callback function to be called when command completes
+ * @param userData - User data passed to callback
+ * @return Command ID on success or ERR_QUEUE_NOT_INIT if queue not initialized
+ */
+CommandID PSB_SetOutputEnableAsync(int enable, PSBCommandCallback callback, void *userData);
+
+/**
+ * Get PSB actual values (voltage, current, power) asynchronously
+ * @param callback - Callback function to be called when command completes
+ * @param userData - User data passed to callback
+ * @return Command ID on success or ERR_QUEUE_NOT_INIT if queue not initialized
+ */
+CommandID PSB_GetActualValuesAsync(PSBCommandCallback callback, void *userData);
 
 /******************************************************************************
  * Utility Functions
@@ -217,23 +248,21 @@ void PSB_SetGlobalQueueManager(PSBQueueManager *mgr);
 PSBQueueManager* PSB_GetGlobalQueueManager(void);
 
 /**
- * Zero all PSB values and disable output
+ * Zero all PSB values and disable output using the queue manager
  * This function ensures the PSB outputs are in a safe zero state by:
  * 1. Disabling output
  * 2. Setting all values (voltage, current, power, sink current, sink power) to zero
  * 
- * @param handle - PSB handle (can be NULL to use global queue manager)
- * @return PSB_SUCCESS or error code
+ * @return PSB_SUCCESS or error code (ERR_QUEUE_NOT_INIT if queue not initialized)
  */
-int PSB_ZeroAllValues(PSB_Handle *handle);
+int PSB_ZeroAllValuesQueued(void);
 
 /**
- * Set all PSB limits to safe maximum values
+ * Set all PSB limits to safe maximum values using the queue manager
  * This function sets all PSB limits to their safe maximum ranges
  * 
- * @param handle - PSB handle (can be NULL to use global queue manager)
- * @return PSB_SUCCESS or error code
+ * @return PSB_SUCCESS or error code (ERR_QUEUE_NOT_INIT if queue not initialized)
  */
-int PSB_SetSafeLimits(PSB_Handle *handle);
+int PSB_SetSafeLimitsQueued(void);
 
 #endif // PSB10000_QUEUE_H

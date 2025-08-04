@@ -33,9 +33,9 @@
 #define BIO_TEST_PEIS_END_FREQ      10.0    // 10Hz
 
 // SPEIS test parameters
-#define BIO_TEST_SPEIS_INIT_V       -0.5    // Initial voltage -0.5V
-#define BIO_TEST_SPEIS_FINAL_V      0.5     // Final voltage +0.5V
-#define BIO_TEST_SPEIS_STEPS        10      // 10 
+#define BIO_TEST_SPEIS_INIT_V       0.0     // Initial voltage of OCV
+#define BIO_TEST_SPEIS_FINAL_V      -0.1     // 100mV higher than initial OCV
+#define BIO_TEST_SPEIS_STEPS        20
 
 // GEIS test parameters
 #define BIO_TEST_GEIS_INIT_I        0.0     // Initial current 0A

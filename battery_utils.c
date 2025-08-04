@@ -50,7 +50,7 @@ double Battery_CalculateEnergyIncrement(double voltage1_V, double current1_A,
     return averagePower_W * deltaTime_s / 3600.0;
 }
 
-int Battery_GoToVoltage(PSB_Handle *psbHandle, VoltageTargetParams *params) {
+int Battery_GoToVoltage(VoltageTargetParams *params) {
     if (!params) return ERR_INVALID_PARAMETER;
     
     // Validate input parameters
@@ -67,21 +67,6 @@ int Battery_GoToVoltage(PSB_Handle *psbHandle, VoltageTargetParams *params) {
         params->updateIntervalMs = MIN_UPDATE_INTERVAL_MS;
     }
     
-    // Get queue manager if no handle provided
-    PSBQueueManager *queueMgr = NULL;
-    if (!psbHandle) {
-        queueMgr = PSB_GetGlobalQueueManager();
-        if (!queueMgr) {
-            LogError("Battery_GoToVoltage: No PSB handle or queue manager");
-            return PSB_ERROR_NOT_CONNECTED;
-        }
-        psbHandle = PSB_QueueGetHandle(queueMgr);
-        if (!psbHandle) {
-            LogError("Battery_GoToVoltage: Failed to get PSB handle from queue");
-            return PSB_ERROR_NOT_CONNECTED;
-        }
-    }
-    
     // Initialize results
     params->actualCapacity_mAh = 0.0;
     params->actualEnergy_Wh = 0.0;
@@ -92,8 +77,6 @@ int Battery_GoToVoltage(PSB_Handle *psbHandle, VoltageTargetParams *params) {
     params->wasCharging = 0;
     
     int result;
-    PSBCommandParams cmdParams = {0};
-    PSBCommandResult cmdResult = {0};
     
     // Update status
     if (params->statusCallback) {
@@ -106,7 +89,7 @@ int Battery_GoToVoltage(PSB_Handle *psbHandle, VoltageTargetParams *params) {
     
     // Get current battery voltage to determine direction
     PSB_Status initialStatus;
-    result = PSB_GetStatusQueued(psbHandle, &initialStatus);
+    result = PSB_GetStatusQueued(&initialStatus);
     if (result != PSB_SUCCESS) {
         LogError("Failed to read initial status: %s", PSB_GetErrorString(result));
         return result;
@@ -138,7 +121,7 @@ int Battery_GoToVoltage(PSB_Handle *psbHandle, VoltageTargetParams *params) {
     }
     
     // Set voltage
-    result = PSB_SetVoltageQueued(psbHandle, params->targetVoltage_V);
+    result = PSB_SetVoltageQueued(params->targetVoltage_V);
     if (result != PSB_SUCCESS) {
         LogError("Failed to set voltage: %s", PSB_GetErrorString(result));
         return result;
@@ -146,9 +129,9 @@ int Battery_GoToVoltage(PSB_Handle *psbHandle, VoltageTargetParams *params) {
     
     // Set current based on direction
     if (params->wasCharging) {
-        result = PSB_SetCurrentQueued(psbHandle, params->maxCurrent_A);
+        result = PSB_SetCurrentQueued(params->maxCurrent_A);
     } else {
-        result = PSB_SetSinkCurrentQueued(psbHandle, params->maxCurrent_A);
+        result = PSB_SetSinkCurrentQueued(params->maxCurrent_A);
     }
     if (result != PSB_SUCCESS) {
         LogError("Failed to set current: %s", PSB_GetErrorString(result));
@@ -156,11 +139,7 @@ int Battery_GoToVoltage(PSB_Handle *psbHandle, VoltageTargetParams *params) {
     }
     
     // Enable output
-    cmdParams.outputEnable.enable = 1;
-    result = PSB_QueueCommandBlocking(queueMgr ? queueMgr : PSB_GetGlobalQueueManager(), 
-                                    PSB_CMD_SET_OUTPUT_ENABLE,
-                                    &cmdParams, PSB_PRIORITY_HIGH, &cmdResult,
-                                    PSB_QUEUE_COMMAND_TIMEOUT_MS);
+    PSB_SetOutputEnableQueued(1);
     if (result != PSB_SUCCESS) {
         LogError("Failed to enable output: %s", PSB_GetErrorString(result));
         return result;
@@ -204,7 +183,7 @@ int Battery_GoToVoltage(PSB_Handle *psbHandle, VoltageTargetParams *params) {
             
             // Get current status
             PSB_Status status;
-            result = PSB_GetStatusQueued(psbHandle, &status);
+            result = PSB_GetStatusQueued(&status);
             if (result != PSB_SUCCESS) {
                 LogError("Failed to read status: %s", PSB_GetErrorString(result));
                 params->result = BATTERY_OP_ERROR;
@@ -293,11 +272,7 @@ int Battery_GoToVoltage(PSB_Handle *psbHandle, VoltageTargetParams *params) {
     params->elapsedTime_s = Timer() - startTime;
     
     // Disable output
-    cmdParams.outputEnable.enable = 0;
-    PSB_QueueCommandBlocking(queueMgr ? queueMgr : PSB_GetGlobalQueueManager(), 
-                           PSB_CMD_SET_OUTPUT_ENABLE,
-                           &cmdParams, PSB_PRIORITY_HIGH, &cmdResult,
-                           PSB_QUEUE_COMMAND_TIMEOUT_MS);
+    PSB_SetOutputEnableQueued(0);
     
     // Final status update
     char finalMsg[256];
@@ -318,7 +293,7 @@ int Battery_GoToVoltage(PSB_Handle *psbHandle, VoltageTargetParams *params) {
     return (params->result == BATTERY_OP_SUCCESS) ? SUCCESS : ERR_OPERATION_FAILED;
 }
 
-int Battery_DischargeCapacity(PSB_Handle *psbHandle, DischargeParams *params) {
+int Battery_DischargeCapacity(DischargeParams *params) {
     if (!params) return ERR_INVALID_PARAMETER;
     
     // Validate input parameters
@@ -335,21 +310,6 @@ int Battery_DischargeCapacity(PSB_Handle *psbHandle, DischargeParams *params) {
         params->updateIntervalMs = MIN_UPDATE_INTERVAL_MS;
     }
     
-    // Get queue manager if no handle provided
-    PSBQueueManager *queueMgr = NULL;
-    if (!psbHandle) {
-        queueMgr = PSB_GetGlobalQueueManager();
-        if (!queueMgr) {
-            LogError("Battery_DischargeCapacity: No PSB handle or queue manager");
-            return PSB_ERROR_NOT_CONNECTED;
-        }
-        psbHandle = PSB_QueueGetHandle(queueMgr);
-        if (!psbHandle) {
-            LogError("Battery_DischargeCapacity: Failed to get PSB handle from queue");
-            return PSB_ERROR_NOT_CONNECTED;
-        }
-    }
-    
     // Initialize results
     params->actualDischarged_mAh = 0.0;
     params->elapsedTime_s = 0.0;
@@ -357,8 +317,6 @@ int Battery_DischargeCapacity(PSB_Handle *psbHandle, DischargeParams *params) {
     params->result = BATTERY_OP_ERROR;
     
     int result;
-    PSBCommandParams cmdParams = {0};
-    PSBCommandResult cmdResult = {0};
     
     LogMessage("Starting discharge of %.2f mAh at %.2f A", 
                params->targetCapacity_mAh, params->dischargeCurrent_A);
@@ -373,25 +331,22 @@ int Battery_DischargeCapacity(PSB_Handle *psbHandle, DischargeParams *params) {
     }
     
     // Set discharge voltage
-    result = PSB_SetVoltageQueued(psbHandle, params->dischargeVoltage_V);
+    result = PSB_SetVoltageQueued(params->dischargeVoltage_V);
     if (result != PSB_SUCCESS) {
         LogError("Failed to set discharge voltage: %s", PSB_GetErrorString(result));
         return result;
     }
     
     // Set sink current
-    result = PSB_SetSinkCurrentQueued(psbHandle, params->dischargeCurrent_A);
+    result = PSB_SetSinkCurrentQueued(params->dischargeCurrent_A);
     if (result != PSB_SUCCESS) {
         LogError("Failed to set sink current: %s", PSB_GetErrorString(result));
         return result;
     }
     
     // Enable output
-    cmdParams.outputEnable.enable = 1;
-    result = PSB_QueueCommandBlocking(queueMgr ? queueMgr : PSB_GetGlobalQueueManager(), 
-                                    PSB_CMD_SET_OUTPUT_ENABLE,
-                                    &cmdParams, PSB_PRIORITY_HIGH, &cmdResult,
-                                    PSB_QUEUE_COMMAND_TIMEOUT_MS);
+    PSB_SetOutputEnableQueued(1);
+	
     if (result != PSB_SUCCESS) {
         LogError("Failed to enable output: %s", PSB_GetErrorString(result));
         return result;
@@ -433,7 +388,7 @@ int Battery_DischargeCapacity(PSB_Handle *psbHandle, DischargeParams *params) {
             
             // Get current status
             PSB_Status status;
-            result = PSB_GetStatusQueued(psbHandle, &status);
+            result = PSB_GetStatusQueued(&status);
             if (result != PSB_SUCCESS) {
                 LogError("Failed to read status during discharge: %s", PSB_GetErrorString(result));
                 params->result = BATTERY_OP_ERROR;
@@ -513,11 +468,7 @@ int Battery_DischargeCapacity(PSB_Handle *psbHandle, DischargeParams *params) {
     params->elapsedTime_s = Timer() - startTime;
     
     // Disable output
-    cmdParams.outputEnable.enable = 0;
-    PSB_QueueCommandBlocking(queueMgr ? queueMgr : PSB_GetGlobalQueueManager(), 
-                           PSB_CMD_SET_OUTPUT_ENABLE,
-                           &cmdParams, PSB_PRIORITY_HIGH, &cmdResult,
-                           PSB_QUEUE_COMMAND_TIMEOUT_MS);
+    PSB_SetOutputEnableQueued(0);
     
     // Final status update
     char finalMsg[256];

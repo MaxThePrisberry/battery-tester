@@ -83,13 +83,13 @@ int main (int argc, char *argv[]) {
 	            LogMessage("Initializing PSB to safe state...");
 	            
 	            // First set safe limits
-	            int limitResult = PSB_SetSafeLimits(NULL);
+	            int limitResult = PSB_SetSafeLimitsQueued();
 	            if (limitResult != PSB_SUCCESS) {
 	                LogWarning("Failed to set all PSB safe limits: %s", PSB_GetErrorString(limitResult));
 	            }
 	            
 	            // Then zero all values
-	            int zeroResult = PSB_ZeroAllValues(NULL);
+	            int zeroResult = PSB_ZeroAllValuesQueued();
 	            if (zeroResult != PSB_SUCCESS) {
 	                LogWarning("Failed to zero all PSB values: %s", PSB_GetErrorString(zeroResult));
 	            }
@@ -128,12 +128,9 @@ int main (int argc, char *argv[]) {
 	        if (stats.isConnected) {
 	            LogMessage("DTB queue manager initialized and connected on COM%d", DTB_COM_PORT);
 	            
-	            // Get DTB handle
-	            DTB_Handle *dtbHandle = DTB_QueueGetHandle(g_dtbQueueMgr);
-	            
 	            // Check current write access status
 	            int writeEnabled = 0;
-	            int statusResult = DTB_GetWriteAccessStatusQueued(dtbHandle, &writeEnabled);
+	            int statusResult = DTB_GetWriteAccessStatusQueued(&writeEnabled);
 	            if (statusResult == DTB_SUCCESS) {
 	                LogMessage("DTB write access currently: %s", writeEnabled ? "ENABLED" : "DISABLED");
 	            }
@@ -141,7 +138,7 @@ int main (int argc, char *argv[]) {
 	            // Enable write access if needed
 	            if (!writeEnabled) {
 	                LogMessage("Enabling DTB write access...");
-	                int writeResult = DTB_EnableWriteAccessQueued(dtbHandle);
+	                int writeResult = DTB_EnableWriteAccessQueued();
 	                if (writeResult != DTB_SUCCESS) {
 	                    LogError("Failed to enable DTB write access: %s", 
 	                            DTB_GetErrorString(writeResult));
@@ -152,7 +149,7 @@ int main (int argc, char *argv[]) {
 	            
 	            // Configure DTB for K-type thermocouple with PID control
 	            LogMessage("Configuring DTB4848 for K-type thermocouple with PID control...");
-	            int configResult = DTB_ConfigureDefaultQueued(dtbHandle);
+	            int configResult = DTB_ConfigureDefaultQueued();
 	            
 	            if (configResult == DTB_SUCCESS) {
 	                LogMessage("DTB4848 configured successfully");
@@ -189,7 +186,7 @@ int main (int argc, char *argv[]) {
 	            
 	            // Optional: Initialize pins to known state
 	            int lowPins[] = {0, 1};
-	            TNY_InitializePins(NULL, lowPins, 2, NULL, 0);
+	            TNY_InitializePins(lowPins, 2, NULL, 0);
 	        } else {
 	            LogWarning("Teensy queue manager initialized but not connected on COM%d", TNY_COM_PORT);
 	        }

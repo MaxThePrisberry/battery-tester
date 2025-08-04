@@ -126,17 +126,14 @@ void Controls_UpdateFromDeviceStates(void) {
     if (ENABLE_PSB && !g_controls.remoteModeChangePending) {
         PSBQueueManager *psbQueueMgr = PSB_GetGlobalQueueManager();
         if (psbQueueMgr) {
-            PSB_Handle *psbHandle = PSB_QueueGetHandle(psbQueueMgr);
-            if (psbHandle && psbHandle->isConnected) {
-                PSB_Status status;
-                if (PSB_GetStatusQueued(psbHandle, &status) == PSB_SUCCESS) {
-                    if (status.remoteMode != g_controls.lastKnownRemoteMode) {
-                        g_controls.lastKnownRemoteMode = status.remoteMode;
-                        UpdateRemoteToggleState(status.remoteMode);
-                        Status_UpdateRemoteLED(status.remoteMode);
-                        LogMessage("PSB remote mode: %s", 
-                                 status.remoteMode ? "ON" : "OFF");
-                    }
+            PSB_Status status;
+            if (PSB_GetStatusQueued(&status) == PSB_SUCCESS) {
+                if (status.remoteMode != g_controls.lastKnownRemoteMode) {
+                    g_controls.lastKnownRemoteMode = status.remoteMode;
+                    UpdateRemoteToggleState(status.remoteMode);
+                    Status_UpdateRemoteLED(status.remoteMode);
+                    LogMessage("PSB remote mode: %s", 
+                             status.remoteMode ? "ON" : "OFF");
                 }
             }
         }
@@ -146,30 +143,27 @@ void Controls_UpdateFromDeviceStates(void) {
     if (ENABLE_DTB && !g_controls.dtbRunStateChangePending) {
         DTBQueueManager *dtbQueueMgr = DTB_GetGlobalQueueManager();
         if (dtbQueueMgr) {
-            DTB_Handle *dtbHandle = DTB_QueueGetHandle(dtbQueueMgr);
-            if (dtbHandle && dtbHandle->isConnected) {
-                DTB_Status status;
-                if (DTB_GetStatusQueued(dtbHandle, &status) == DTB_SUCCESS) {
-                    int stateChanged = (status.outputEnabled != g_controls.lastKnownDTBRunState);
-                    int setpointChanged = (fabs(status.setPoint - g_controls.lastKnownDTBSetpoint) >= 0.1);
-                    
-                    if (stateChanged) {
-                        g_controls.lastKnownDTBRunState = status.outputEnabled;
-                        UpdateDTBButtonState(status.outputEnabled);
-                    }
-                    
-                    if (setpointChanged) {
-                        SetCtrlVal(g_controls.panelHandle, PANEL_NUM_DTB_SETPOINT, status.setPoint);
-                    }
-                    
-                    // Always update internal tracking
-                    g_controls.lastKnownDTBSetpoint = status.setPoint;
-                    
-                    if (stateChanged || (setpointChanged && g_controls.lastKnownDTBSetpoint == 0.0)) {
-                        LogMessage("DTB state: %s, setpoint: %.1f°C", 
-                                 status.outputEnabled ? "Running" : "Stopped",
-                                 status.setPoint);
-                    }
+            DTB_Status status;
+            if (DTB_GetStatusQueued(&status) == DTB_SUCCESS) {
+                int stateChanged = (status.outputEnabled != g_controls.lastKnownDTBRunState);
+                int setpointChanged = (fabs(status.setPoint - g_controls.lastKnownDTBSetpoint) >= 0.1);
+                
+                if (stateChanged) {
+                    g_controls.lastKnownDTBRunState = status.outputEnabled;
+                    UpdateDTBButtonState(status.outputEnabled);
+                }
+                
+                if (setpointChanged) {
+                    SetCtrlVal(g_controls.panelHandle, PANEL_NUM_DTB_SETPOINT, status.setPoint);
+                }
+                
+                // Always update internal tracking
+                g_controls.lastKnownDTBSetpoint = status.setPoint;
+                
+                if (stateChanged || (setpointChanged && g_controls.lastKnownDTBSetpoint == 0.0)) {
+                    LogMessage("DTB state: %s, setpoint: %.1f°C", 
+                             status.outputEnabled ? "Running" : "Stopped",
+                             status.setPoint);
                 }
             }
         }
@@ -233,10 +227,7 @@ int CVICALLBACK RemoteModeToggle(int panel, int control, int event,
             LogMessage("Changing remote mode to %s...", enable ? "ON" : "OFF");
             
             // Queue the command asynchronously
-            PSBCommandParams params = {.remoteMode = {enable}};
-            CommandID cmdId = PSB_QueueCommandAsync(psbQueueMgr, PSB_CMD_SET_REMOTE_MODE,
-                                                   &params, PSB_PRIORITY_HIGH,
-                                                   RemoteModeCallback, NULL);
+			CommandID cmdId = PSB_SetRemoteModeAsync(enable, RemoteModeCallback, NULL);
             
             if (cmdId == 0) {
                 LogError("Failed to queue remote mode command");
@@ -335,10 +326,7 @@ int CVICALLBACK DTBRunStopCallback(int panel, int control, int event,
                 LogMessage("Stopping DTB temperature control...");
                 
                 // Queue stop command
-                DTBCommandParams params = {.runStop = {0}};
-                CommandID cmdId = DTB_QueueCommandAsync(dtbQueueMgr, DTB_CMD_SET_RUN_STOP,
-                                                       &params, DTB_PRIORITY_HIGH,
-                                                       DTBRunStopQueueCallback, NULL);
+				CommandID cmdId = DTB_SetRunStopAsync(0, DTBRunStopQueueCallback, NULL);
                 
                 if (cmdId == 0) {
                     LogError("Failed to queue DTB stop command");
@@ -363,10 +351,7 @@ int CVICALLBACK DTBRunStopCallback(int panel, int control, int event,
                 g_controls.lastKnownDTBSetpoint = setpoint;
                 
                 // Queue setpoint command first
-                DTBCommandParams params = {.setpoint = {setpoint}};
-                CommandID cmdId = DTB_QueueCommandAsync(dtbQueueMgr, DTB_CMD_SET_SETPOINT,
-                                                       &params, DTB_PRIORITY_HIGH,
-                                                       DTBSetpointCallback, NULL);
+				CommandID cmdId = DTB_SetSetPointAsync(setpoint, DTBSetpointCallback, NULL);
                 
                 if (cmdId == 0) {
                     LogError("Failed to queue DTB setpoint command");
@@ -392,10 +377,7 @@ static void DTBSetpointCallback(CommandID cmdId, DTBCommandType type,
         if (dtbQueueMgr) {
             LogMessage("Starting DTB temperature control...");
             
-            DTBCommandParams params = {.runStop = {1}};
-            CommandID cmdId = DTB_QueueCommandAsync(dtbQueueMgr, DTB_CMD_SET_RUN_STOP,
-                                                   &params, DTB_PRIORITY_HIGH,
-                                                   DTBRunStopQueueCallback, NULL);
+			CommandID cmdId = DTB_SetRunStopAsync(1, DTBRunStopQueueCallback, NULL);
             
             if (cmdId == 0) {
                 LogError("Failed to queue DTB start command");
@@ -574,7 +556,7 @@ int CVICALLBACK TestTeensyCallback(int panel, int control, int event,
             LogMessage("Setting Teensy pin 13 to %s", toggleValue ? "HIGH" : "LOW");
             
             // Set pin 13 through the queue
-            int result = TNY_SetPinQueued(NULL, 13, toggleValue ? TNY_PIN_STATE_HIGH : TNY_PIN_STATE_LOW);
+            int result = TNY_SetPinQueued(13, toggleValue ? TNY_PIN_STATE_HIGH : TNY_PIN_STATE_LOW);
             
             if (result != TNY_SUCCESS) {
                 LogError("Failed to set Teensy pin 13: %s", TNY_GetErrorString(result));

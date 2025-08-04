@@ -24,6 +24,16 @@ static const char* g_commandTypeNames[] = {
 // Global queue manager pointer
 static TNYQueueManager *g_tnyQueueManager = NULL;
 
+// Queue a command (blocking)
+static int TNY_QueueCommandBlocking(TNYQueueManager *mgr, TNYCommandType type,
+                           TNYCommandParams *params, TNYPriority priority,
+                           TNYCommandResult *result, int timeoutMs);
+
+// Queue a command (async with callback)
+static CommandID TNY_QueueCommandAsync(TNYQueueManager *mgr, TNYCommandType type,
+                              TNYCommandParams *params, TNYPriority priority,
+                              TNYCommandCallback callback, void *userData);
+
 /******************************************************************************
  * TNY Device Context Structure
  ******************************************************************************/
@@ -320,13 +330,13 @@ void TNY_QueueGetStats(TNYQueueManager *mgr, TNYQueueStats *stats) {
  * Command Queueing Functions
  ******************************************************************************/
 
-int TNY_QueueCommandBlocking(TNYQueueManager *mgr, TNYCommandType type,
+static TNY_QueueCommandBlocking(TNYQueueManager *mgr, TNYCommandType type,
                            TNYCommandParams *params, TNYPriority priority,
                            TNYCommandResult *result, int timeoutMs) {
     return DeviceQueue_CommandBlocking(mgr, type, params, priority, result, timeoutMs);
 }
 
-CommandID TNY_QueueCommandAsync(TNYQueueManager *mgr, TNYCommandType type,
+static CommandID TNY_QueueCommandAsync(TNYQueueManager *mgr, TNYCommandType type,
                               TNYCommandParams *params, TNYPriority priority,
                               TNYCommandCallback callback, void *userData) {
     return DeviceQueue_CommandAsync(mgr, type, params, priority, callback, userData);
@@ -359,7 +369,7 @@ int TNY_QueueCommitTransaction(TNYQueueManager *mgr, TransactionHandle txn,
 }
 
 /******************************************************************************
- * Wrapper Functions
+ * Wrapper Functions - No fallback behavior, require queue to be initialized
  ******************************************************************************/
 
 void TNY_SetGlobalQueueManager(TNYQueueManager *mgr) {
@@ -370,8 +380,8 @@ TNYQueueManager* TNY_GetGlobalQueueManager(void) {
     return g_tnyQueueManager;
 }
 
-int TNY_SetPinQueued(TNY_Handle *handle, int pin, int state) {
-    if (!g_tnyQueueManager) return TNY_SetPin(handle, pin, state);
+int TNY_SetPinQueued(int pin, int state) {
+    if (!g_tnyQueueManager) return ERR_QUEUE_NOT_INIT;
     
     TNYCommandParams params = {.setPin = {pin, state}};
     TNYCommandResult result;
@@ -381,8 +391,8 @@ int TNY_SetPinQueued(TNY_Handle *handle, int pin, int state) {
                                   TNY_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int TNY_SetMultiplePinsQueued(TNY_Handle *handle, const int *pins, const int *states, int count) {
-    if (!g_tnyQueueManager) return TNY_SetMultiplePins(handle, pins, states, count);
+int TNY_SetMultiplePinsQueued(const int *pins, const int *states, int count) {
+    if (!g_tnyQueueManager) return ERR_QUEUE_NOT_INIT;
     
     TNYCommandParams params = {.setMultiplePins = {(int*)pins, (int*)states, count}};
     TNYCommandResult result;
@@ -392,8 +402,8 @@ int TNY_SetMultiplePinsQueued(TNY_Handle *handle, const int *pins, const int *st
                                   TNY_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int TNY_SendRawCommandQueued(TNY_Handle *handle, char *command, char *response, int responseSize) {
-	if (!g_tnyQueueManager) return TNY_SendCommand(handle, command, response, responseSize);
+int TNY_SendRawCommandQueued(char *command, char *response, int responseSize) {
+	if (!g_tnyQueueManager) return ERR_QUEUE_NOT_INIT;
 	
 	TNYCommandParams params = {.sendRawCommand = {command, response, responseSize}};
 	TNYCommandResult result;
@@ -403,8 +413,8 @@ int TNY_SendRawCommandQueued(TNY_Handle *handle, char *command, char *response, 
 									TNY_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int TNY_TestConnectionQueued(TNY_Handle *handle) {
-    if (!g_tnyQueueManager) return TNY_TestConnection(handle);
+int TNY_TestConnectionQueued(void) {
+    if (!g_tnyQueueManager) return ERR_QUEUE_NOT_INIT;
     
     TNYCommandParams params = {0};
     TNYCommandResult result;
@@ -464,27 +474,23 @@ int TNY_QueueCancelTransaction(TNYQueueManager *mgr, TransactionHandle txn) {
  * Advanced Transaction-Based Functions
  ******************************************************************************/
 
-int TNY_SetPinsAtomic(TNY_Handle *handle, const TNYPinState *pinStates, int count,
+int TNY_SetPinsAtomic(const TNYPinState *pinStates, int count,
                      TNYTransactionCallback callback, void *userData) {
-    TNYQueueManager *queueMgr = TNY_GetGlobalQueueManager();
+    if (!g_tnyQueueManager) return ERR_QUEUE_NOT_INIT;
 	
-    if (!queueMgr) {
-        LogErrorEx(LOG_DEVICE_TNY, "Queue manager not initialized for atomic pin set");
-        return ERR_QUEUE_NOT_INIT;
-    }
     if (!pinStates || count <= 0) {
         return TNY_ERROR_INVALID_PARAM;
     }
     
     // Create transaction
-    TransactionHandle txn = TNY_QueueBeginTransaction(queueMgr);
+    TransactionHandle txn = TNY_QueueBeginTransaction(g_tnyQueueManager);
     if (txn == 0) {
         LogErrorEx(LOG_DEVICE_TNY, "Failed to begin atomic pin set transaction");
         return ERR_QUEUE_NOT_INIT;
     }
     
     // Set transaction to high priority for atomic operations
-    DeviceQueue_SetTransactionPriority(queueMgr, txn, TNY_PRIORITY_HIGH);
+    DeviceQueue_SetTransactionPriority(g_tnyQueueManager, txn, TNY_PRIORITY_HIGH);
     
     TNYCommandParams params;
     int result = SUCCESS;
@@ -494,7 +500,7 @@ int TNY_SetPinsAtomic(TNY_Handle *handle, const TNYPinState *pinStates, int coun
         params.setPin.pin = pinStates[i].pin;
         params.setPin.state = pinStates[i].state;
         
-        result = TNY_QueueAddToTransaction(queueMgr, txn, TNY_CMD_SET_PIN, &params);
+        result = TNY_QueueAddToTransaction(g_tnyQueueManager, txn, TNY_CMD_SET_PIN, &params);
         if (result != SUCCESS) {
             LogErrorEx(LOG_DEVICE_TNY, "Failed to add pin %d to transaction", 
                       pinStates[i].pin);
@@ -503,27 +509,21 @@ int TNY_SetPinsAtomic(TNY_Handle *handle, const TNYPinState *pinStates, int coun
     }
     
     // Commit transaction
-    result = TNY_QueueCommitTransaction(queueMgr, txn, callback, userData);
+    result = TNY_QueueCommitTransaction(g_tnyQueueManager, txn, callback, userData);
     if (result == SUCCESS) {
         LogMessageEx(LOG_DEVICE_TNY, "Atomic pin set transaction committed (%d pins)", count);
         return SUCCESS;
     }
     
 cleanup:
-    TNY_QueueCancelTransaction(queueMgr, txn);
+    TNY_QueueCancelTransaction(g_tnyQueueManager, txn);
     LogErrorEx(LOG_DEVICE_TNY, "Failed to create atomic pin set transaction");
     return result;
 }
 
-int TNY_InitializePins(TNY_Handle *handle, 
-                      const int *lowPins, int lowCount,
+int TNY_InitializePins(const int *lowPins, int lowCount,
                       const int *highPins, int highCount) {
-    TNYQueueManager *queueMgr = TNY_GetGlobalQueueManager();
-	
-    if (!queueMgr) {
-        LogErrorEx(LOG_DEVICE_TNY, "Queue manager not initialized for pin initialization");
-        return ERR_QUEUE_NOT_INIT;
-    }
+    if (!g_tnyQueueManager) return ERR_QUEUE_NOT_INIT;
     
     int totalPins = (lowPins ? lowCount : 0) + (highPins ? highCount : 0);
     if (totalPins == 0) {
@@ -534,14 +534,14 @@ int TNY_InitializePins(TNY_Handle *handle,
                 totalPins, lowCount, highCount);
     
     // Create transaction
-    TransactionHandle txn = TNY_QueueBeginTransaction(queueMgr);
+    TransactionHandle txn = TNY_QueueBeginTransaction(g_tnyQueueManager);
     if (txn == 0) {
         LogErrorEx(LOG_DEVICE_TNY, "Failed to begin pin initialization transaction");
         return ERR_QUEUE_NOT_INIT;
 	}
     
     // Set high priority for initialization
-    DeviceQueue_SetTransactionPriority(queueMgr, txn, TNY_PRIORITY_HIGH);
+    DeviceQueue_SetTransactionPriority(g_tnyQueueManager, txn, TNY_PRIORITY_HIGH);
     
     TNYCommandParams params;
     int result = SUCCESS;
@@ -552,7 +552,7 @@ int TNY_InitializePins(TNY_Handle *handle,
             params.setPin.pin = lowPins[i];
             params.setPin.state = TNY_PIN_STATE_LOW;
             
-            result = TNY_QueueAddToTransaction(queueMgr, txn, TNY_CMD_SET_PIN, &params);
+            result = TNY_QueueAddToTransaction(g_tnyQueueManager, txn, TNY_CMD_SET_PIN, &params);
             if (result != SUCCESS) goto cleanup;
         }
     }
@@ -563,20 +563,20 @@ int TNY_InitializePins(TNY_Handle *handle,
             params.setPin.pin = highPins[i];
             params.setPin.state = TNY_PIN_STATE_HIGH;
             
-            result = TNY_QueueAddToTransaction(queueMgr, txn, TNY_CMD_SET_PIN, &params);
+            result = TNY_QueueAddToTransaction(g_tnyQueueManager, txn, TNY_CMD_SET_PIN, &params);
             if (result != SUCCESS) goto cleanup;
         }
     }
     
     // Commit transaction
-    result = TNY_QueueCommitTransaction(queueMgr, txn, NULL, NULL);
+    result = TNY_QueueCommitTransaction(g_tnyQueueManager, txn, NULL, NULL);
     if (result == SUCCESS) {
         LogMessageEx(LOG_DEVICE_TNY, "Pin initialization transaction committed");
         return SUCCESS;
     }
     
 cleanup:
-    TNY_QueueCancelTransaction(queueMgr, txn);
+    TNY_QueueCancelTransaction(g_tnyQueueManager, txn);
     LogErrorEx(LOG_DEVICE_TNY, "Failed to initialize pins");
     return result;
 }

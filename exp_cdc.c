@@ -132,7 +132,7 @@ static int StartCDCOperation(int panel, int control, CDCOperationMode mode) {
     
     // Check that PSB output is disabled
     PSB_Status status;
-    if (PSB_GetStatusQueued(psbHandle, &status) == PSB_SUCCESS) {
+    if (PSB_GetStatusQueued(&status) == PSB_SUCCESS) {
         if (status.outputEnabled) {
             CmtGetLock(g_busyLock);
             g_systemBusy = 0;
@@ -258,7 +258,7 @@ static int CDCExperimentThread(void *functionData) {
     
     // Initialize PSB to safe state
     LogMessage("Initializing PSB to zeroed state...");
-    result = PSB_ZeroAllValues(NULL);
+    result = PSB_ZeroAllValuesQueued();
     
     if (result != PSB_SUCCESS) {
         LogError("Failed to initialize PSB to safe state: %s", PSB_GetErrorString(result));
@@ -307,13 +307,8 @@ static int CDCExperimentThread(void *functionData) {
     LogMessage("=== %s Operation Completed Successfully ===", GetModeName(ctx->mode));
     
 cleanup:
-    // Turn off PSB output
-    PSBCommandParams offParams = {0};
-    PSBCommandResult offResult = {0};
-    offParams.outputEnable.enable = 0;
-    PSB_QueueCommandBlocking(PSB_GetGlobalQueueManager(), PSB_CMD_SET_OUTPUT_ENABLE,
-                           &offParams, PSB_PRIORITY_HIGH, &offResult,
-                           PSB_QUEUE_COMMAND_TIMEOUT_MS);
+	// Turn off PSB output
+    PSB_SetOutputEnableQueued(0);
     
     // Update status based on final state
     if (ctx->state == CDC_STATE_COMPLETED) {
@@ -349,8 +344,6 @@ cleanup:
  ******************************************************************************/
 
 static int VerifyBatteryState(CDCTestContext *ctx) {
-    PSBCommandParams params = {0};
-    PSBCommandResult result = {0};
     char message[LARGE_BUFFER_SIZE];
     
     LogMessage("Verifying battery state...");
@@ -361,18 +354,18 @@ static int VerifyBatteryState(CDCTestContext *ctx) {
     }
     
     // Get current battery voltage
-    int error = PSB_QueueCommandBlocking(PSB_GetGlobalQueueManager(), PSB_CMD_GET_STATUS,
-                                       &params, PSB_PRIORITY_HIGH, &result,
-                                       PSB_QUEUE_COMMAND_TIMEOUT_MS);
+	PSB_Status status;
+    int error = PSB_GetStatusQueued(&status);
+	
     if (error != PSB_SUCCESS) {
         LogError("Failed to read PSB status: %s", PSB_GetErrorString(error));
         return ERR_COMM_FAILED;
     }
     
-    double voltageDiff = fabs(result.data.status.voltage - ctx->params.targetVoltage);
+    double voltageDiff = fabs(status.voltage - ctx->params.targetVoltage);
     
     LogMessage("Battery voltage: %.3f V, Target: %.3f V, Difference: %.3f V", 
-               result.data.status.voltage, ctx->params.targetVoltage, voltageDiff);
+               status.voltage, ctx->params.targetVoltage, voltageDiff);
     
     // Check if battery is already at target state
     if (voltageDiff < CDC_VOLTAGE_TOLERANCE) {
@@ -386,7 +379,7 @@ static int VerifyBatteryState(CDCTestContext *ctx) {
             "Tolerance: %.3f V\n\n"
             "Do you want to continue anyway?",
             stateStr,
-            result.data.status.voltage,
+            status.voltage,
             ctx->params.targetVoltage,
             voltageDiff,
             CDC_VOLTAGE_TOLERANCE);
@@ -408,8 +401,6 @@ static int VerifyBatteryState(CDCTestContext *ctx) {
 }
 
 static int RunOperation(CDCTestContext *ctx) {
-    PSBCommandParams params = {0};
-    PSBCommandResult cmdResult = {0};
     int result;
     
     // Check for cancellation
@@ -431,13 +422,13 @@ static int RunOperation(CDCTestContext *ctx) {
     GetCtrlVal(g_mainPanelHandle, PANEL_NUM_SET_DISCHARGE_I, &dischargeCurrent);
     
     // Set both source and sink current values
-    result = PSB_SetCurrentQueued(NULL, chargeCurrent);
+    result = PSB_SetCurrentQueued(chargeCurrent);
     if (result != PSB_SUCCESS) {
         LogError("Failed to set source current: %s", PSB_GetErrorString(result));
         return result;
     }
     
-    result = PSB_SetSinkCurrentQueued(NULL, dischargeCurrent);
+    result = PSB_SetSinkCurrentQueued(dischargeCurrent);
     if (result != PSB_SUCCESS) {
         LogError("Failed to set sink current: %s", PSB_GetErrorString(result));
         return result;
@@ -446,7 +437,7 @@ static int RunOperation(CDCTestContext *ctx) {
     LogMessage("Current values set - Source: %.2fA, Sink: %.2fA", chargeCurrent, dischargeCurrent);
     
     // Now set the actual target voltage
-    result = PSB_SetVoltageQueued(NULL, ctx->params.targetVoltage);
+    result = PSB_SetVoltageQueued(ctx->params.targetVoltage);
     if (result != PSB_SUCCESS) {
         LogError("Failed to set target voltage: %s", PSB_GetErrorString(result));
         return result;
@@ -455,22 +446,19 @@ static int RunOperation(CDCTestContext *ctx) {
     LogMessage("Target voltage set to %.2fV", ctx->params.targetVoltage);
     
     // Set power values high enough to avoid CP mode
-    result = PSB_SetPowerQueued(NULL, CDC_POWER_LIMIT_W);
+    result = PSB_SetPowerQueued(CDC_POWER_LIMIT_W);
     if (result != PSB_SUCCESS) {
         LogWarning("Failed to set power: %s", PSB_GetErrorString(result));
     }
     
-    result = PSB_SetSinkPowerQueued(NULL, CDC_POWER_LIMIT_W);
+    result = PSB_SetSinkPowerQueued(CDC_POWER_LIMIT_W);
     if (result != PSB_SUCCESS) {
         LogWarning("Failed to set sink power: %s", PSB_GetErrorString(result));
     }
     
     // Enable PSB output
-    params.outputEnable.enable = 1;
-    result = PSB_QueueCommandBlocking(PSB_GetGlobalQueueManager(), 
-                                    PSB_CMD_SET_OUTPUT_ENABLE,
-                                    &params, PSB_PRIORITY_HIGH, &cmdResult,
-                                    PSB_QUEUE_COMMAND_TIMEOUT_MS);
+    PSB_SetOutputEnableQueued(1);
+	
     if (result != PSB_SUCCESS) {
         LogError("Failed to enable output: %s", PSB_GetErrorString(result));
         return result;
@@ -513,48 +501,43 @@ static int RunOperation(CDCTestContext *ctx) {
         }
         
         // Get current status
-        PSBCommandParams statusParams = {0};
-        PSBCommandResult statusResult = {0};
-        result = PSB_QueueCommandBlocking(PSB_GetGlobalQueueManager(), 
-                                        PSB_CMD_GET_STATUS,
-                                        &statusParams, PSB_PRIORITY_HIGH, &statusResult,
-                                        PSB_QUEUE_COMMAND_TIMEOUT_MS);
+		PSB_Status status;
+        result = PSB_GetStatusQueued(&status);
+		
         if (result != PSB_SUCCESS) {
             LogError("Failed to read status: %s", PSB_GetErrorString(result));
             break;
         }
         
-        PSB_Status *status = &statusResult.data.status;
-        
         // Track peak current
-        if (fabs(status->current) > ctx->peakCurrent) {
-            ctx->peakCurrent = fabs(status->current);
+        if (fabs(status.current) > ctx->peakCurrent) {
+            ctx->peakCurrent = fabs(status.current);
         }
         
         // Check completion criteria
         // For both charge and discharge: voltage at target AND current below threshold
-        double voltageDiff = fabs(status->voltage - ctx->params.targetVoltage);
+        double voltageDiff = fabs(status.voltage - ctx->params.targetVoltage);
         bool voltageAtTarget = voltageDiff < CDC_VOLTAGE_TOLERANCE;
-        bool currentBelowThreshold = fabs(status->current) < ctx->params.currentThreshold;
+        bool currentBelowThreshold = fabs(status.current) < ctx->params.currentThreshold;
         
         if (voltageAtTarget && currentBelowThreshold) {
             LogMessage("%s completed - voltage at target (%.3f V) and current below threshold (%.3f A < %.3f A)",
-                      GetModeName(ctx->mode), status->voltage, 
-                      fabs(status->current), ctx->params.currentThreshold);
+                      GetModeName(ctx->mode), status.voltage, 
+                      fabs(status.current), ctx->params.currentThreshold);
             break;
         }
         
         // Log status if interval reached
         if ((currentTime - ctx->lastLogTime) >= ctx->params.logInterval) {
             LogDebug("Time: %.1fs, V: %.3fV, I: %.3fA, P: %.3fW", 
-                     ctx->elapsedTime, status->voltage, status->current, status->power);
+                     ctx->elapsedTime, status.voltage, status.current, status.power);
             ctx->lastLogTime = currentTime;
             ctx->dataPointCount++;
         }
         
         // Update graph if needed
         if ((currentTime - ctx->lastGraphUpdate) >= CDC_GRAPH_UPDATE_RATE) {
-            UpdateGraph(ctx, status->current, ctx->elapsedTime);
+            UpdateGraph(ctx, status.current, ctx->elapsedTime);
             ctx->lastGraphUpdate = currentTime;
         }
         
@@ -564,11 +547,7 @@ static int RunOperation(CDCTestContext *ctx) {
     }
     
     // Disable output
-    params.outputEnable.enable = 0;
-    PSB_QueueCommandBlocking(PSB_GetGlobalQueueManager(), 
-                           PSB_CMD_SET_OUTPUT_ENABLE,
-                           &params, PSB_PRIORITY_HIGH, &cmdResult,
-                           PSB_QUEUE_COMMAND_TIMEOUT_MS);
+    PSB_SetOutputEnableQueued(0);
     
     // Log summary
     LogMessage("%s completed - Duration: %.1f minutes, Peak current: %.3f A", 

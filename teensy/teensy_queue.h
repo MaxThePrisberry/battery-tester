@@ -125,16 +125,6 @@ void TNY_QueueGetStats(TNYQueueManager *mgr, TNYQueueStats *stats);
  * Command Queueing Functions
  ******************************************************************************/
 
-// Queue a command (blocking)
-int TNY_QueueCommandBlocking(TNYQueueManager *mgr, TNYCommandType type,
-                           TNYCommandParams *params, TNYPriority priority,
-                           TNYCommandResult *result, int timeoutMs);
-
-// Queue a command (async with callback)
-CommandID TNY_QueueCommandAsync(TNYQueueManager *mgr, TNYCommandType type,
-                              TNYCommandParams *params, TNYPriority priority,
-                              TNYCommandCallback callback, void *userData);
-
 // Cancel commands
 int TNY_QueueCancelCommand(TNYQueueManager *mgr, CommandID cmdId);
 int TNY_QueueCancelByType(TNYQueueManager *mgr, TNYCommandType type);
@@ -163,19 +153,20 @@ int TNY_QueueCommitTransaction(TNYQueueManager *mgr, TransactionHandle txn,
 int TNY_QueueCancelTransaction(TNYQueueManager *mgr, TransactionHandle txn);
 
 /******************************************************************************
- * Wrapper Functions (the handle parameter is only used to send the raw command
- * in the case that queue doesn't exist - pass NULL in the majority of cases)
+ * Wrapper Functions
+ * All functions require the global queue manager to be initialized.
+ * If not initialized, they return ERR_QUEUE_NOT_INIT.
  ******************************************************************************/
 
 // Pin control functions
-int TNY_SetPinQueued(TNY_Handle *handle, int pin, int state);
-int TNY_SetMultiplePinsQueued(TNY_Handle *handle, const int *pins, const int *states, int count);
+int TNY_SetPinQueued(int pin, int state);
+int TNY_SetMultiplePinsQueued(const int *pins, const int *states, int count);
 
 // Send raw command (Should only be used by cmd_prompt.c/h)
-int TNY_SendRawCommandQueued(TNY_Handle *handle, char *command, char *response, int responseSize);
+int TNY_SendRawCommandQueued(char *command, char *response, int responseSize);
 
 // Test function
-int TNY_TestConnectionQueued(TNY_Handle *handle);
+int TNY_TestConnectionQueued(void);
 
 /******************************************************************************
  * Utility Functions
@@ -199,28 +190,25 @@ TNYQueueManager* TNY_GetGlobalQueueManager(void);
  * Set multiple pins atomically using a transaction
  * All pins are set in sequence without interruption
  * 
- * @param handle - Teensy handle (can be NULL to use global queue manager)
  * @param pinStates - Array of pin/state pairs
  * @param count - Number of pins to set
  * @param callback - Optional callback for transaction completion
  * @param userData - User data for callback
  * @return SUCCESS or error code
  */
-int TNY_SetPinsAtomic(TNY_Handle *handle, const TNYPinState *pinStates, int count,
+int TNY_SetPinsAtomic(const TNYPinState *pinStates, int count,
                      TNYTransactionCallback callback, void *userData);
 
 /**
  * Initialize pins to a known state using a transaction
  * 
- * @param handle - Teensy handle (can be NULL to use global queue manager)
  * @param lowPins - Array of pins to set LOW
  * @param lowCount - Number of pins to set LOW
  * @param highPins - Array of pins to set HIGH
  * @param highCount - Number of pins to set HIGH
  * @return SUCCESS or error code
  */
-int TNY_InitializePins(TNY_Handle *handle, 
-                      const int *lowPins, int lowCount,
+int TNY_InitializePins(const int *lowPins, int lowCount,
                       const int *highPins, int highCount);
 
 #endif // TEENSY_QUEUE_H
