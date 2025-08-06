@@ -24,6 +24,7 @@ static int DeviceSelect(CommandContext *ctx);
 static int TeensyCommandManager(CommandContext *ctx);
 static int DTBCommandManager(CommandContext *ctx);
 static int ControlsCommandManager(CommandContext *ctx);
+static int DAQCommandManager(CommandContext *ctx);
 
 /******************************************************************************
  * UI panel CVICALLBACKS
@@ -176,6 +177,10 @@ static int DeviceSelect(CommandContext *ctx) {
 			ControlsCommandManager(ctx);
 			break;
 			
+		case ('D' << 16 | 'A' << 8 | 'Q'):
+			DAQCommandManager(ctx);
+			break;
+			
 		default:
 			LogPromptTextbox(CMD_ERROR, "No such device.");
 	}
@@ -266,6 +271,16 @@ static int ControlsCommandManager(CommandContext *ctx) {
 		LogPromptTextbox(CMD_OUTPUT, "Update request completed.");
 	} else {
 		LogPromptTextbox(CMD_ERROR, "Invalid controls command.");
+	}
+	
+	return 0;
+}
+
+static int DAQCommandManager(CommandContext *ctx) {
+	if (0) {
+		// Insert command logic here
+	} else {
+		LogPromptTextbox(CMD_ERROR, "Invalid DAQ command.");
 	}
 	
 	return 0;

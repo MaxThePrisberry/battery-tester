@@ -18,6 +18,7 @@
 #include "controls.h"
 #include <utility.h>
 #include <toolbox.h>
+#include <NIDAQmx.h>
 
 /******************************************************************************
  * Module Variables
@@ -40,6 +41,8 @@ static struct {
 } g_status = {0};
 
 static int g_initialized = 0;
+
+static TaskHandle TCTaskHandle = {0};
 
 /******************************************************************************
  * Internal Function Prototypes
@@ -110,6 +113,11 @@ int Status_Initialize(int panelHandle) {
         UpdateDeviceLED(DEVICE_DTB, CONN_STATE_IDLE);
         UpdateDeviceStatus(DEVICE_DTB, "DTB Monitoring");
     }
+	
+	if (ENABLE_CDAQ) {
+		DAQmxCreateTask("", &TCTaskHandle);
+		DAQmxCreateAIThrmcplChan(TCTaskHandle, "cDAQ1Mod2/ai0", "", 0.0, 400.0, DAQmx_Val_DegC, DAQmx_Val_K_Type_TC, DAQmx_Val_BuiltIn, 25.0, NULL);
+	}
     
     g_initialized = 1;
     LogMessage("Status monitoring module initialized");
@@ -122,6 +130,10 @@ int Status_Start(void) {
         LogError("Status module not initialized");
         return ERR_NOT_INITIALIZED;
     }
+	
+	if (ENABLE_CDAQ) {
+		DAQmxStartTask(TCTaskHandle);
+	}
     
     LogMessage("Starting device status monitoring...");
     
@@ -145,6 +157,10 @@ int Status_Stop(void) {
     if (!g_initialized) {
         return SUCCESS;
     }
+	
+	if (ENABLE_CDAQ) {
+		DAQmxStopTask(TCTaskHandle);
+	}
     
     LogMessage("Stopping device status monitoring...");
     
@@ -168,6 +184,11 @@ void Status_Cleanup(void) {
     }
     
     Status_Stop();
+	
+	if (ENABLE_CDAQ) {
+		DAQmxClearTask(TCTaskHandle);
+	}
+	
     g_initialized = 0;
     g_status.statusPaused = 0;
     LogMessage("Status module cleaned up");
@@ -368,6 +389,13 @@ static void Status_TimerUpdate(void) {
             }
         }
     }
+	
+	// Update thermocouple readout status
+	if (ENABLE_CDAQ) {
+		float64 data[1];
+		DAQmxReadAnalogF64(TCTaskHandle, 1, 10.0, DAQmx_Val_GroupByChannel, data, 1, NULL, NULL);
+		SetCtrlVal(g_mainPanelHandle, PANEL_NUM_TC0, data[0]);
+	}
 }
 
 /******************************************************************************

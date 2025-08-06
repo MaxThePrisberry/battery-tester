@@ -36,6 +36,7 @@
 #define ENABLE_BIOLOGIC    1    // Enable BioLogic SP-150e monitoring
 #define ENABLE_DTB         1    // Enable DTB4848 monitoring
 #define ENABLE_TNY         1    // Enable Teensy monitoring
+#define ENABLE_CDAQ        1    // Enable cDAQ 9178
 
 #define PSB_COM_PORT            3       // PSB 10000 COM port
 #define PSB_SLAVE_ADDRESS       1       // PSB Modbus slave address

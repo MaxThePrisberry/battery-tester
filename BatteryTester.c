@@ -201,6 +201,7 @@ int main (int argc, char *argv[]) {
 	
     // Display panel
     DisplayPanel(g_mainPanelHandle);
+    SetActiveCtrl(g_mainPanelHandle, PANEL_STR_CMD_PROMPT_INPUT);
     
     // Run the UI
     RunUserInterface();
@@ -373,11 +374,7 @@ int CVICALLBACK PanelCallback(int panel, int event, void *callbackData,
             if (g_threadPool) {
                 LogMessage("Shutting down thread pool...");
                 
-                // All worker threads should have completed by now since:
-                // - Status_Stop() waits for its threads
-                // - PSB_QueueShutdown() waits for its thread
-                // - BIO_QueueShutdown() waits for its thread
-                // - CapacityTest_Abort() waits for its thread
+                // All worker threads should have completed by now since they all wait for their threads
                 
                 // Just give a small delay to ensure everything is cleaned up
                 ProcessSystemEvents();
