@@ -43,8 +43,10 @@
 #define PSB_BAUD_RATE           9600    // PSB baud rate
 
 #define DTB_COM_PORT            5       // DTB 4848 COM port  
-#define DTB_SLAVE_ADDRESS       1       // DTB Modbus slave address
 #define DTB_BAUD_RATE           9600    // DTB baud rate
+#define DTB1_SLAVE_ADDRESS      1       // DTB Device 1 Modbus slave address
+#define DTB2_SLAVE_ADDRESS      2       // DTB Device 2 Modbus slave address
+#define DTB_NUM_DEVICES         1       // Number of DTB devices to initialize
 
 #define TNY_COM_PORT            6       // Teensy COM port
 

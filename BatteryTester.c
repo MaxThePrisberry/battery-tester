@@ -114,10 +114,16 @@ int main (int argc, char *argv[]) {
 	    }
 	}
 
-	// Initialize DTB queue manager with specific port
+	// Initialize DTB queue manager with multiple devices
 	if (ENABLE_DTB) {
-	    LogMessage("Initializing DTB queue manager on COM%d...", DTB_COM_PORT);
-	    g_dtbQueueMgr = DTB_QueueInit(DTB_COM_PORT, DTB_SLAVE_ADDRESS, DTB_BAUD_RATE);
+	    LogMessage("Initializing DTB queue manager on COM%d with %d devices...", 
+	               DTB_COM_PORT, DTB_NUM_DEVICES);
+	    
+	    // Setup slave addresses array
+	    int dtbSlaveAddresses[DTB_NUM_DEVICES] = {DTB1_SLAVE_ADDRESS, DTB2_SLAVE_ADDRESS};
+	    
+	    g_dtbQueueMgr = DTB_QueueInit(DTB_COM_PORT, DTB_BAUD_RATE, 
+	                                  dtbSlaveAddresses, DTB_NUM_DEVICES);
 	    
 	    if (g_dtbQueueMgr) {
 	        DTB_SetGlobalQueueManager(g_dtbQueueMgr);
@@ -128,40 +134,43 @@ int main (int argc, char *argv[]) {
 	        if (stats.isConnected) {
 	            LogMessage("DTB queue manager initialized and connected on COM%d", DTB_COM_PORT);
 	            
-	            // Check current write access status
-	            int writeEnabled = 0;
-	            int statusResult = DTB_GetWriteAccessStatusQueued(&writeEnabled);
-	            if (statusResult == DTB_SUCCESS) {
-	                LogMessage("DTB write access currently: %s", writeEnabled ? "ENABLED" : "DISABLED");
+	            // Enable write access for all devices
+	            LogMessage("Enabling DTB write access for all devices...");
+	            int writeResult = DTB_EnableWriteAccessAllQueued();
+	            if (writeResult != DTB_SUCCESS) {
+	                LogError("Failed to enable DTB write access for all devices: %s", 
+	                        DTB_GetErrorString(writeResult));
+	            } else {
+	                LogMessage("DTB write access enabled successfully for all devices");
 	            }
 	            
-	            // Enable write access if needed
-	            if (!writeEnabled) {
-	                LogMessage("Enabling DTB write access...");
-	                int writeResult = DTB_EnableWriteAccessQueued();
-	                if (writeResult != DTB_SUCCESS) {
-	                    LogError("Failed to enable DTB write access: %s", 
-	                            DTB_GetErrorString(writeResult));
+	            // Configure all DTB devices for K-type thermocouple with PID control
+	            LogMessage("Configuring all DTB4848 devices for K-type thermocouple with PID control...");
+	            
+	            // Try to configure each device individually to provide better error reporting
+	            for (int i = 0; i < DTB_NUM_DEVICES; i++) {
+	                int slaveAddr = dtbSlaveAddresses[i];
+	                
+	                // Check current write access status for this device
+	                int writeEnabled = 0;
+	                int statusResult = DTB_GetWriteAccessStatusQueued(slaveAddr, &writeEnabled);
+	                if (statusResult == DTB_SUCCESS) {
+	                    LogMessage("DTB slave %d write access currently: %s", 
+	                              slaveAddr, writeEnabled ? "ENABLED" : "DISABLED");
+	                }
+	                
+	                // Configure this device
+	                int configResult = DTB_ConfigureDefaultQueued(slaveAddr);
+	                if (configResult == DTB_SUCCESS) {
+	                    LogMessage("DTB4848 slave %d configured successfully", slaveAddr);
 	                } else {
-	                    LogMessage("DTB write access enabled successfully");
+	                    LogWarning("DTB4848 slave %d configuration failed: %s", 
+	                              slaveAddr, DTB_GetErrorString(configResult));
+	                    // Device may still work with existing configuration
 	                }
 	            }
 	            
-	            // Configure DTB for K-type thermocouple with PID control
-	            LogMessage("Configuring DTB4848 for K-type thermocouple with PID control...");
-	            int configResult = DTB_ConfigureDefaultQueued();
-	            
-	            if (configResult == DTB_SUCCESS) {
-	                LogMessage("DTB4848 configured successfully");
-	                
-	                // Optionally re-enable write protection for safety
-	                // LogMessage("Re-enabling DTB write protection...");
-	                // DTB_DisableWriteAccessQueued(dtbHandle);
-	            } else {
-	                LogWarning("DTB4848 configuration failed: %s", 
-	                          DTB_GetErrorString(configResult));
-	                // Device may still work with existing configuration
-	            }
+	            LogMessage("DTB initialization complete");
 	        } else {
 	            LogWarning("DTB queue manager initialized but not connected on COM%d", DTB_COM_PORT);
 	        }

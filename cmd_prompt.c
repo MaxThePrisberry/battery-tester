@@ -107,6 +107,13 @@ static void DeferredPromptTextboxUpdate(void *callbackData) {
 	}
 }
 
+static int HexCharToInt(char c) {
+	if (c >= '0' && c <= '9') return (c - '0');
+	if (c >= 'A' && c <= 'F') return (c - 'A' + 10);
+	if (c >= 'a' && c <= 'f') return (c - 'a' + 10);
+	return -1;
+}
+
 /******************************************************************************
  * Main prompt processing thread
  ******************************************************************************/
@@ -132,6 +139,7 @@ static int CmdPromptSendThread() {
 	
 	// Check to see if the command is the appropriate length
 	commandLength = strlen(ctx->command);
+	ctx->commandLength = commandLength;
 	if (commandLength < 4) {
 		goto cleanup;
 	} else if (commandLength > MESSAGE_LENGTH_LIMIT) {
@@ -215,8 +223,29 @@ static int TeensyCommandManager(CommandContext *ctx) {
 }
 
 static int DTBCommandManager(CommandContext *ctx) {
+	if (ctx->commandLength < 3) {
+		LogPromptTextbox(CMD_ERROR, "DTB command too short. Specify slave hex.");
+		return -1;
+	}
+	
+	int high = HexCharToInt(ctx->command[0]);
+	int low = HexCharToInt(ctx->command[1]);
+	
+	if (high < 0 || low < 0) {
+		LogPromptTextbox(CMD_ERROR, "Invalid hex slave address given.");
+		return -1;
+	}
+	int slaveAddress = (high << 4) | low;
+	
+	// Remove first two characters slave address
+	char *trimmed = malloc(ctx->commandLength - 1);	// Trim 2 characters but account for the \0 null termination character
+	trimmed = my_strdup(&ctx->command[2]);
+	free(ctx->command);
+	ctx->command = trimmed;
+	ctx->commandLength -= 2;
+	
 	if (strcmp(ctx->command, "RESET") == 0) {
-		int error = DTB_FactoryResetQueued();
+		int error = DTB_FactoryResetQueued(slaveAddress);
 		
 		if (error != SUCCESS) {
 			char message[1024];
@@ -227,7 +256,7 @@ static int DTBCommandManager(CommandContext *ctx) {
 		
 		LogPromptTextbox(CMD_OUTPUT, "Reset command success.");
 	} else if (strcmp(ctx->command, "SETUP") == 0) {
-		int error = DTB_EnableWriteAccessQueued();
+		int error = DTB_EnableWriteAccessQueued(slaveAddress);
 		
 		if (error != SUCCESS) {
 			char message[1024];
@@ -236,7 +265,7 @@ static int DTBCommandManager(CommandContext *ctx) {
 			return -1;
 		}
 		
-		error = DTB_ConfigureDefaultQueued();
+		error = DTB_ConfigureDefaultQueued(slaveAddress);
 		
 		if (error != SUCCESS) {
 			char message[1024];
@@ -247,7 +276,7 @@ static int DTBCommandManager(CommandContext *ctx) {
 		
 		LogPromptTextbox(CMD_OUTPUT, "Setup command success.");
 	} else if (strcmp(ctx->command, "AT") == 0) {
-		int error = DTB_StartAutoTuningQueued();
+		int error = DTB_StartAutoTuningQueued(slaveAddress);
 		
 		if (error != SUCCESS) {
 			char message[1024];

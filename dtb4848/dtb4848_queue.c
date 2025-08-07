@@ -3,6 +3,8 @@
  * 
  * Thread-safe command queue implementation for DTB 4848 Temperature Controller
  * Built on top of the generic device queue system
+ * 
+ * Supports multiple DTB devices on the same COM port with different slave addresses
  ******************************************************************************/
 
 #include "dtb4848_queue.h"
@@ -24,7 +26,7 @@ static const char* g_commandTypeNames[] = {
     "SET_SENSOR_TYPE",
     "SET_TEMPERATURE_LIMITS",
     "SET_ALARM_LIMITS",
-	"SET_HEATING_COOLING",
+    "SET_HEATING_COOLING",
     "CONFIGURE",
     "CONFIGURE_DEFAULT",
     "FACTORY_RESET",
@@ -34,11 +36,11 @@ static const char* g_commandTypeNames[] = {
     "GET_PID_PARAMS",
     "GET_ALARM_STATUS",
     "CLEAR_ALARM",
-	"SET_FRONT_PANEL_LOCK",
-	"GET_FRONT_PANEL_LOCK",
-	"ENABLE_WRITE_ACCESS",
-	"DISABLE_WRITE_ACCESS", 
-	"GET_WRITE_ACCESS_STATUS",
+    "SET_FRONT_PANEL_LOCK",
+    "GET_FRONT_PANEL_LOCK",
+    "ENABLE_WRITE_ACCESS",
+    "DISABLE_WRITE_ACCESS", 
+    "GET_WRITE_ACCESS_STATUS",
     "RAW_MODBUS"
 };
 
@@ -56,14 +58,15 @@ static CommandID DTB_QueueCommandAsync(DTBQueueManager *mgr, DTBCommandType type
                               DTBCommandCallback callback, void *userData);
 
 /******************************************************************************
- * DTB Device Context Structure
+ * DTB Multi-Device Context Structure
  ******************************************************************************/
 
 typedef struct {
-    DTB_Handle handle;
-    int specificPort;
-    int specificBaudRate;
-    int specificSlaveAddress;
+    DTB_Handle handles[MAX_DTB_DEVICES];
+    int slaveAddresses[MAX_DTB_DEVICES];
+    int numDevices;
+    int comPort;
+    int baudRate;
 } DTBDeviceContext;
 
 /******************************************************************************
@@ -73,8 +76,31 @@ typedef struct {
 typedef struct {
     int comPort;
     int baudRate;
-    int slaveAddress;
+    int *slaveAddresses;
+    int numSlaves;
 } DTBConnectionParams;
+
+/******************************************************************************
+ * Helper Functions
+ ******************************************************************************/
+
+static int FindDeviceIndex(DTBDeviceContext *ctx, int slaveAddress) {
+    if (!ctx) return -1;
+    
+    for (int i = 0; i < ctx->numDevices; i++) {
+        if (ctx->slaveAddresses[i] == slaveAddress) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+static DTB_Handle* GetDeviceHandle(DTBDeviceContext *ctx, int slaveAddress) {
+    int index = FindDeviceIndex(ctx, slaveAddress);
+    if (index < 0) return NULL;
+    
+    return &ctx->handles[index];
+}
 
 /******************************************************************************
  * Device Adapter Implementation
@@ -125,29 +151,74 @@ static const DeviceAdapter g_dtbAdapter = {
 static int DTB_AdapterConnect(void *deviceContext, void *connectionParams) {
     DTBDeviceContext *ctx = (DTBDeviceContext*)deviceContext;
     DTBConnectionParams *params = (DTBConnectionParams*)connectionParams;
-    int result;
     
-    // Use specific connection parameters
-    LogMessageEx(LOG_DEVICE_DTB, "Connecting to DTB on COM%d...", params->comPort);
-    result = DTB_Initialize(&ctx->handle, params->comPort, 
-                          params->slaveAddress, params->baudRate);
-    
-    if (result == DTB_SUCCESS) {
-        ctx->specificPort = params->comPort;
-        ctx->specificBaudRate = params->baudRate;
-        ctx->specificSlaveAddress = params->slaveAddress;
+    if (!ctx || !params || !params->slaveAddresses) {
+        LogErrorEx(LOG_DEVICE_DTB, "Invalid parameters for DTB adapter connect");
+        return DTB_ERROR_INVALID_PARAM;
     }
     
-    return result;
+    if (params->numSlaves <= 0 || params->numSlaves > MAX_DTB_DEVICES) {
+        LogErrorEx(LOG_DEVICE_DTB, "Invalid number of slaves: %d (max %d)", 
+                   params->numSlaves, MAX_DTB_DEVICES);
+        return DTB_ERROR_INVALID_PARAM;
+    }
+    
+    // Initialize context
+    ctx->comPort = params->comPort;
+    ctx->baudRate = params->baudRate;
+    ctx->numDevices = params->numSlaves;
+    
+    // Copy slave addresses
+    for (int i = 0; i < params->numSlaves; i++) {
+        ctx->slaveAddresses[i] = params->slaveAddresses[i];
+    }
+    
+    // Initialize each device
+    int successCount = 0;
+    for (int i = 0; i < ctx->numDevices; i++) {
+        LogMessageEx(LOG_DEVICE_DTB, "Connecting to DTB slave %d on COM%d...", 
+                     ctx->slaveAddresses[i], ctx->comPort);
+        
+        int result = DTB_Initialize(&ctx->handles[i], ctx->comPort, 
+                                   ctx->slaveAddresses[i], ctx->baudRate);
+        
+        if (result == DTB_SUCCESS) {
+            LogMessageEx(LOG_DEVICE_DTB, "Successfully connected to DTB slave %d", 
+                         ctx->slaveAddresses[i]);
+            successCount++;
+        } else {
+            LogErrorEx(LOG_DEVICE_DTB, "Failed to connect to DTB slave %d: %s", 
+                       ctx->slaveAddresses[i], DTB_GetErrorString(result));
+            // Continue trying other devices
+        }
+    }
+    
+    if (successCount == 0) {
+        LogErrorEx(LOG_DEVICE_DTB, "Failed to connect to any DTB devices");
+        return DTB_ERROR_COMM;
+    }
+    
+    LogMessageEx(LOG_DEVICE_DTB, "Connected to %d of %d DTB devices", 
+                 successCount, ctx->numDevices);
+    
+    return DTB_SUCCESS;
 }
 
 static int DTB_AdapterDisconnect(void *deviceContext) {
     DTBDeviceContext *ctx = (DTBDeviceContext*)deviceContext;
     
-    if (ctx->handle.isConnected) {
-        // Stop output before disconnecting
-        DTB_SetRunStop(&ctx->handle, 0);
-        DTB_Close(&ctx->handle);
+    if (!ctx) return DTB_SUCCESS;
+    
+    // Disconnect all devices
+    for (int i = 0; i < ctx->numDevices; i++) {
+        if (ctx->handles[i].isConnected) {
+            LogMessageEx(LOG_DEVICE_DTB, "Disconnecting DTB slave %d...", 
+                         ctx->slaveAddresses[i]);
+            
+            // Stop output before disconnecting
+            DTB_SetRunStop(&ctx->handles[i], 0);
+            DTB_Close(&ctx->handles[i]);
+        }
     }
     
     return DTB_SUCCESS;
@@ -155,12 +226,33 @@ static int DTB_AdapterDisconnect(void *deviceContext) {
 
 static int DTB_AdapterTestConnection(void *deviceContext) {
     DTBDeviceContext *ctx = (DTBDeviceContext*)deviceContext;
-    return DTB_TestConnection(&ctx->handle);
+    
+    if (!ctx) return DTB_ERROR_NOT_CONNECTED;
+    
+    // Test connection to all devices
+    int connectedCount = 0;
+    for (int i = 0; i < ctx->numDevices; i++) {
+        if (DTB_TestConnection(&ctx->handles[i]) == DTB_SUCCESS) {
+            connectedCount++;
+        }
+    }
+    
+    return (connectedCount > 0) ? DTB_SUCCESS : DTB_ERROR_NOT_CONNECTED;
 }
 
 static bool DTB_AdapterIsConnected(void *deviceContext) {
     DTBDeviceContext *ctx = (DTBDeviceContext*)deviceContext;
-    return ctx->handle.isConnected;
+    
+    if (!ctx) return false;
+    
+    // Return true if any device is connected
+    for (int i = 0; i < ctx->numDevices; i++) {
+        if (ctx->handles[i].isConnected) {
+            return true;
+        }
+    }
+    
+    return false;
 }
 
 static int DTB_AdapterExecuteCommand(void *deviceContext, int commandType, void *params, void *result) {
@@ -168,238 +260,260 @@ static int DTB_AdapterExecuteCommand(void *deviceContext, int commandType, void 
     DTBCommandParams *cmdParams = (DTBCommandParams*)params;
     DTBCommandResult *cmdResult = (DTBCommandResult*)result;
     
+    if (!ctx || !cmdParams || !cmdResult) {
+        return DTB_ERROR_INVALID_PARAM;
+    }
+	
+	// Find the target device handle
+    DTB_Handle *handle = GetDeviceHandle(ctx, cmdParams->runStop.slaveAddress);
+    if (!handle) {
+        LogWarningEx(LOG_DEVICE_DTB, "Unrecognized slave address: %d", cmdParams->runStop.slaveAddress);
+		
+		DTB_Handle rawHandle = {
+	        .comPort = DTB_COM_PORT,                    // From constants
+	        .slaveAddress = cmdParams->rawModbus.slaveAddress,  // Target address
+	        .baudRate = DTB_BAUD_RATE,                  // From constants
+	        .timeoutMs = DEFAULT_TIMEOUT_MS,            // Default timeout
+	        .isConnected = 1,                          // Mark as connected
+	        .state = DEVICE_STATE_CONNECTED            // Connected state
+	    };
+	    
+	    strcpy(rawHandle.modelNumber, "Raw Modbus");
+		
+		handle = &rawHandle;
+    }
+    
     switch ((DTBCommandType)commandType) {
         case DTB_CMD_SET_RUN_STOP:
-            cmdResult->errorCode = DTB_SetRunStop(&ctx->handle, cmdParams->runStop.run);
+            cmdResult->errorCode = DTB_SetRunStop(handle, cmdParams->runStop.run);
             break;
             
         case DTB_CMD_SET_SETPOINT:
-            cmdResult->errorCode = DTB_SetSetPoint(&ctx->handle, cmdParams->setpoint.temperature);
+            cmdResult->errorCode = DTB_SetSetPoint(handle, cmdParams->setpoint.temperature);
             break;
             
         case DTB_CMD_START_AUTO_TUNING:
-            cmdResult->errorCode = DTB_StartAutoTuning(&ctx->handle);
+            cmdResult->errorCode = DTB_StartAutoTuning(handle);
             break;
             
         case DTB_CMD_STOP_AUTO_TUNING:
-            cmdResult->errorCode = DTB_StopAutoTuning(&ctx->handle);
+            cmdResult->errorCode = DTB_StopAutoTuning(handle);
             break;
             
         case DTB_CMD_SET_CONTROL_METHOD:
-            cmdResult->errorCode = DTB_SetControlMethod(&ctx->handle, cmdParams->controlMethod.method);
+            cmdResult->errorCode = DTB_SetControlMethod(handle, cmdParams->controlMethod.method);
             break;
             
         case DTB_CMD_SET_PID_MODE:
-            cmdResult->errorCode = DTB_SetPIDMode(&ctx->handle, cmdParams->pidMode.mode);
+            cmdResult->errorCode = DTB_SetPIDMode(handle, cmdParams->pidMode.mode);
             break;
             
         case DTB_CMD_SET_SENSOR_TYPE:
-            cmdResult->errorCode = DTB_SetSensorType(&ctx->handle, cmdParams->sensorType.sensorType);
+            cmdResult->errorCode = DTB_SetSensorType(handle, cmdParams->sensorType.sensorType);
             break;
             
         case DTB_CMD_SET_TEMPERATURE_LIMITS:
-            cmdResult->errorCode = DTB_SetTemperatureLimits(&ctx->handle,
+            cmdResult->errorCode = DTB_SetTemperatureLimits(handle,
                 cmdParams->temperatureLimits.upperLimit,
                 cmdParams->temperatureLimits.lowerLimit);
             break;
             
         case DTB_CMD_SET_ALARM_LIMITS:
-            cmdResult->errorCode = DTB_SetAlarmLimits(&ctx->handle,
+            cmdResult->errorCode = DTB_SetAlarmLimits(handle,
                 cmdParams->alarmLimits.upperLimit,
                 cmdParams->alarmLimits.lowerLimit);
             break;
-		
-		case DTB_CMD_SET_HEATING_COOLING:
-		    cmdResult->errorCode = DTB_SetHeatingCooling(&ctx->handle, cmdParams->heatingCooling.mode);
-		    break;
+        
+        case DTB_CMD_SET_HEATING_COOLING:
+            cmdResult->errorCode = DTB_SetHeatingCooling(handle, cmdParams->heatingCooling.mode);
+            break;
             
         case DTB_CMD_CONFIGURE:
-            cmdResult->errorCode = DTB_Configure(&ctx->handle, &cmdParams->configure.config);
+            cmdResult->errorCode = DTB_Configure(handle, &cmdParams->configure.config);
             break;
             
         case DTB_CMD_CONFIGURE_DEFAULT:
-            cmdResult->errorCode = DTB_ConfigureDefault(&ctx->handle);
+            cmdResult->errorCode = DTB_ConfigureDefault(handle);
             break;
             
         case DTB_CMD_FACTORY_RESET:
-            cmdResult->errorCode = DTB_FactoryReset(&ctx->handle);
+            cmdResult->errorCode = DTB_FactoryReset(handle);
             break;
             
         case DTB_CMD_GET_STATUS:
-            cmdResult->errorCode = DTB_GetStatus(&ctx->handle, &cmdResult->data.status);
+            cmdResult->errorCode = DTB_GetStatus(handle, &cmdResult->data.status);
             break;
             
         case DTB_CMD_GET_PROCESS_VALUE:
-            cmdResult->errorCode = DTB_GetProcessValue(&ctx->handle, &cmdResult->data.temperature);
+            cmdResult->errorCode = DTB_GetProcessValue(handle, &cmdResult->data.temperature);
             break;
             
         case DTB_CMD_GET_SETPOINT:
-            cmdResult->errorCode = DTB_GetSetPoint(&ctx->handle, &cmdResult->data.setpoint);
+            cmdResult->errorCode = DTB_GetSetPoint(handle, &cmdResult->data.setpoint);
             break;
             
         case DTB_CMD_GET_PID_PARAMS:
-            cmdResult->errorCode = DTB_GetPIDParams(&ctx->handle, 
+            cmdResult->errorCode = DTB_GetPIDParams(handle, 
                 cmdParams->getPidParams.pidNumber,
                 &cmdResult->data.pidParams);
             break;
             
         case DTB_CMD_GET_ALARM_STATUS:
-            cmdResult->errorCode = DTB_GetAlarmStatus(&ctx->handle, &cmdResult->data.alarmActive);
+            cmdResult->errorCode = DTB_GetAlarmStatus(handle, &cmdResult->data.alarmActive);
             break;
             
         case DTB_CMD_CLEAR_ALARM:
-            cmdResult->errorCode = DTB_ClearAlarm(&ctx->handle);
+            cmdResult->errorCode = DTB_ClearAlarm(handle);
             break;
-			
-		case DTB_CMD_SET_FRONT_PANEL_LOCK:
-		    cmdResult->errorCode = DTB_SetFrontPanelLock(&ctx->handle, 
-		        cmdParams->frontPanelLock.lockMode);
-		    break;
-		    
-		case DTB_CMD_GET_FRONT_PANEL_LOCK:
-		    cmdResult->errorCode = DTB_GetFrontPanelLock(&ctx->handle, 
-		        &cmdResult->data.frontPanelLockMode);
-		    break;
-			
-		case DTB_CMD_ENABLE_WRITE_ACCESS:
-		    cmdResult->errorCode = DTB_EnableWriteAccess(&ctx->handle);
-		    break;
-		    
-		case DTB_CMD_DISABLE_WRITE_ACCESS:
-		    cmdResult->errorCode = DTB_DisableWriteAccess(&ctx->handle);
-		    break;
-		    
-		case DTB_CMD_GET_WRITE_ACCESS_STATUS:
-		    cmdResult->errorCode = DTB_GetWriteAccessStatus(&ctx->handle, 
-		        &cmdResult->data.writeAccessEnabled);
-		    break;
+            
+        case DTB_CMD_SET_FRONT_PANEL_LOCK:
+            cmdResult->errorCode = DTB_SetFrontPanelLock(handle, 
+                cmdParams->frontPanelLock.lockMode);
+            break;
+            
+        case DTB_CMD_GET_FRONT_PANEL_LOCK:
+            cmdResult->errorCode = DTB_GetFrontPanelLock(handle, 
+                &cmdResult->data.frontPanelLockMode);
+            break;
+            
+        case DTB_CMD_ENABLE_WRITE_ACCESS:
+            cmdResult->errorCode = DTB_EnableWriteAccess(handle);
+            break;
+            
+        case DTB_CMD_DISABLE_WRITE_ACCESS:
+            cmdResult->errorCode = DTB_DisableWriteAccess(handle);
+            break;
+            
+        case DTB_CMD_GET_WRITE_ACCESS_STATUS:
+            cmdResult->errorCode = DTB_GetWriteAccessStatus(handle, 
+                &cmdResult->data.writeAccessEnabled);
+            break;
             
         case DTB_CMD_RAW_MODBUS:
-	        // Validate parameters
-	        if (!cmdParams->rawModbus.rxBuffer && cmdParams->rawModbus.rxBufferSize > 0) {
-	            cmdResult->errorCode = DTB_ERROR_INVALID_PARAM;
-	            break;
-	        }
-	        
-	        // Route based on Modbus function code
-	        switch (cmdParams->rawModbus.functionCode) {
-	            case MODBUS_READ_REGISTERS:  // 0x03
-	                {
-	                    unsigned short value;
-	                    cmdResult->errorCode = DTB_ReadRegister(&ctx->handle, 
-	                                                           cmdParams->rawModbus.address, 
-	                                                           &value);
-	                    
-	                    if (cmdResult->errorCode == DTB_SUCCESS) {
-	                        // Store the value in the result
-	                        // For raw response, we need to allocate and format the data
-	                        cmdResult->data.rawResponse.rxLength = 2;  // 2 bytes for register value
-	                        cmdResult->data.rawResponse.rxData = malloc(2);
-	                        if (cmdResult->data.rawResponse.rxData) {
-	                            // Store as big-endian (Modbus standard)
-	                            cmdResult->data.rawResponse.rxData[0] = (value >> 8) & 0xFF;
-	                            cmdResult->data.rawResponse.rxData[1] = value & 0xFF;
-	                        } else {
-	                            cmdResult->errorCode = DTB_ERROR_RESPONSE;
-	                        }
-	                    }
-	                }
-	                break;
-	                
-	            case MODBUS_WRITE_REGISTER:  // 0x06
-	                {
-	                    cmdResult->errorCode = DTB_WriteRegister(&ctx->handle,
-	                                                           cmdParams->rawModbus.address,
-	                                                           cmdParams->rawModbus.data);
-	                    
-	                    if (cmdResult->errorCode == DTB_SUCCESS) {
-	                        // For write register, response echoes the address and data
-	                        cmdResult->data.rawResponse.rxLength = 4;  // 2 bytes address + 2 bytes data
-	                        cmdResult->data.rawResponse.rxData = malloc(4);
-	                        if (cmdResult->data.rawResponse.rxData) {
-	                            // Address (big-endian)
-	                            cmdResult->data.rawResponse.rxData[0] = (cmdParams->rawModbus.address >> 8) & 0xFF;
-	                            cmdResult->data.rawResponse.rxData[1] = cmdParams->rawModbus.address & 0xFF;
-	                            // Data (big-endian)
-	                            cmdResult->data.rawResponse.rxData[2] = (cmdParams->rawModbus.data >> 8) & 0xFF;
-	                            cmdResult->data.rawResponse.rxData[3] = cmdParams->rawModbus.data & 0xFF;
-	                        } else {
-	                            cmdResult->errorCode = DTB_ERROR_RESPONSE;
-	                        }
-	                    }
-	                }
-	                break;
-	                
-	            case MODBUS_READ_BITS:  // 0x02
-	                {
-	                    int bitValue;
-	                    cmdResult->errorCode = DTB_ReadBit(&ctx->handle,
-	                                                     cmdParams->rawModbus.address,
-	                                                     &bitValue);
-	                    
-	                    if (cmdResult->errorCode == DTB_SUCCESS) {
-	                        // For read bits, response is 1 byte containing the bit value
-	                        cmdResult->data.rawResponse.rxLength = 1;
-	                        cmdResult->data.rawResponse.rxData = malloc(1);
-	                        if (cmdResult->data.rawResponse.rxData) {
-	                            cmdResult->data.rawResponse.rxData[0] = bitValue ? 0x01 : 0x00;
-	                        } else {
-	                            cmdResult->errorCode = DTB_ERROR_RESPONSE;
-	                        }
-	                    }
-	                }
-	                break;
-	                
-	            case MODBUS_WRITE_BIT:  // 0x05
-	                {
-	                    // For write bit, data field should be 0xFF00 for ON, 0x0000 for OFF
-	                    int bitValue = (cmdParams->rawModbus.data == 0xFF00) ? 1 : 0;
-	                    
-	                    cmdResult->errorCode = DTB_WriteBit(&ctx->handle,
-	                                                      cmdParams->rawModbus.address,
-	                                                      bitValue);
-	                    
-	                    if (cmdResult->errorCode == DTB_SUCCESS) {
-	                        // For write bit, response echoes the address and data
-	                        cmdResult->data.rawResponse.rxLength = 4;  // 2 bytes address + 2 bytes data
-	                        cmdResult->data.rawResponse.rxData = malloc(4);
-	                        if (cmdResult->data.rawResponse.rxData) {
-	                            // Address (big-endian)
-	                            cmdResult->data.rawResponse.rxData[0] = (cmdParams->rawModbus.address >> 8) & 0xFF;
-	                            cmdResult->data.rawResponse.rxData[1] = cmdParams->rawModbus.address & 0xFF;
-	                            // Data (big-endian) - echo what was sent
-	                            cmdResult->data.rawResponse.rxData[2] = (cmdParams->rawModbus.data >> 8) & 0xFF;
-	                            cmdResult->data.rawResponse.rxData[3] = cmdParams->rawModbus.data & 0xFF;
-	                        } else {
-	                            cmdResult->errorCode = DTB_ERROR_RESPONSE;
-	                        }
-	                    }
-	                }
-	                break;
-	                
-	            default:
-	                LogErrorEx(LOG_DEVICE_DTB, "Unsupported Modbus function code: 0x%02X", 
-	                         cmdParams->rawModbus.functionCode);
-	                cmdResult->errorCode = DTB_ERROR_NOT_SUPPORTED;
-	                break;
-	        }
-	        
-	        // If requested, copy data to the provided buffer
-	        if (cmdResult->errorCode == DTB_SUCCESS && 
-	            cmdParams->rawModbus.rxBuffer && 
-	            cmdParams->rawModbus.rxBufferSize > 0 &&
-	            cmdResult->data.rawResponse.rxData) {
-	            
-	            int copyLen = cmdResult->data.rawResponse.rxLength;
-	            if (copyLen > cmdParams->rawModbus.rxBufferSize) {
-	                copyLen = cmdParams->rawModbus.rxBufferSize;
-	            }
-	            
-	            memcpy(cmdParams->rawModbus.rxBuffer, 
-	                   cmdResult->data.rawResponse.rxData, 
-	                   copyLen);
-			}
-		    break;
+            // Validate parameters
+            if (!cmdParams->rawModbus.rxBuffer && cmdParams->rawModbus.rxBufferSize > 0) {
+                cmdResult->errorCode = DTB_ERROR_INVALID_PARAM;
+                break;
+            }
+            
+            // Route based on Modbus function code
+            switch (cmdParams->rawModbus.functionCode) {
+                case MODBUS_READ_REGISTERS:  // 0x03
+                    {
+                        unsigned short value;
+                        cmdResult->errorCode = DTB_ReadRegister(handle, 
+                                                               cmdParams->rawModbus.address, 
+                                                               &value);
+                        
+                        if (cmdResult->errorCode == DTB_SUCCESS) {
+                            // Store the value in the result
+                            cmdResult->data.rawResponse.rxLength = 2;  // 2 bytes for register value
+                            cmdResult->data.rawResponse.rxData = malloc(2);
+                            if (cmdResult->data.rawResponse.rxData) {
+                                // Store as big-endian (Modbus standard)
+                                cmdResult->data.rawResponse.rxData[0] = (value >> 8) & 0xFF;
+                                cmdResult->data.rawResponse.rxData[1] = value & 0xFF;
+                            } else {
+                                cmdResult->errorCode = DTB_ERROR_RESPONSE;
+                            }
+                        }
+                    }
+                    break;
+                    
+                case MODBUS_WRITE_REGISTER:  // 0x06
+                    {
+                        cmdResult->errorCode = DTB_WriteRegister(handle,
+                                                               cmdParams->rawModbus.address,
+                                                               cmdParams->rawModbus.data);
+                        
+                        if (cmdResult->errorCode == DTB_SUCCESS) {
+                            // For write register, response echoes the address and data
+                            cmdResult->data.rawResponse.rxLength = 4;  // 2 bytes address + 2 bytes data
+                            cmdResult->data.rawResponse.rxData = malloc(4);
+                            if (cmdResult->data.rawResponse.rxData) {
+                                // Address (big-endian)
+                                cmdResult->data.rawResponse.rxData[0] = (cmdParams->rawModbus.address >> 8) & 0xFF;
+                                cmdResult->data.rawResponse.rxData[1] = cmdParams->rawModbus.address & 0xFF;
+                                // Data (big-endian)
+                                cmdResult->data.rawResponse.rxData[2] = (cmdParams->rawModbus.data >> 8) & 0xFF;
+                                cmdResult->data.rawResponse.rxData[3] = cmdParams->rawModbus.data & 0xFF;
+                            } else {
+                                cmdResult->errorCode = DTB_ERROR_RESPONSE;
+                            }
+                        }
+                    }
+                    break;
+                    
+                case MODBUS_READ_BITS:  // 0x02
+                    {
+                        int bitValue;
+                        cmdResult->errorCode = DTB_ReadBit(handle,
+                                                         cmdParams->rawModbus.address,
+                                                         &bitValue);
+                        
+                        if (cmdResult->errorCode == DTB_SUCCESS) {
+                            // For read bits, response is 1 byte containing the bit value
+                            cmdResult->data.rawResponse.rxLength = 1;
+                            cmdResult->data.rawResponse.rxData = malloc(1);
+                            if (cmdResult->data.rawResponse.rxData) {
+                                cmdResult->data.rawResponse.rxData[0] = bitValue ? 0x01 : 0x00;
+                            } else {
+                                cmdResult->errorCode = DTB_ERROR_RESPONSE;
+                            }
+                        }
+                    }
+                    break;
+                    
+                case MODBUS_WRITE_BIT:  // 0x05
+                    {
+                        // For write bit, data field should be 0xFF00 for ON, 0x0000 for OFF
+                        int bitValue = (cmdParams->rawModbus.data == 0xFF00) ? 1 : 0;
+                        
+                        cmdResult->errorCode = DTB_WriteBit(handle,
+                                                          cmdParams->rawModbus.address,
+                                                          bitValue);
+                        
+                        if (cmdResult->errorCode == DTB_SUCCESS) {
+                            // For write bit, response echoes the address and data
+                            cmdResult->data.rawResponse.rxLength = 4;  // 2 bytes address + 2 bytes data
+                            cmdResult->data.rawResponse.rxData = malloc(4);
+                            if (cmdResult->data.rawResponse.rxData) {
+                                // Address (big-endian)
+                                cmdResult->data.rawResponse.rxData[0] = (cmdParams->rawModbus.address >> 8) & 0xFF;
+                                cmdResult->data.rawResponse.rxData[1] = cmdParams->rawModbus.address & 0xFF;
+                                // Data (big-endian) - echo what was sent
+                                cmdResult->data.rawResponse.rxData[2] = (cmdParams->rawModbus.data >> 8) & 0xFF;
+                                cmdResult->data.rawResponse.rxData[3] = cmdParams->rawModbus.data & 0xFF;
+                            } else {
+                                cmdResult->errorCode = DTB_ERROR_RESPONSE;
+                            }
+                        }
+                    }
+                    break;
+                    
+                default:
+                    LogErrorEx(LOG_DEVICE_DTB, "Unsupported Modbus function code: 0x%02X", 
+                             cmdParams->rawModbus.functionCode);
+                    cmdResult->errorCode = DTB_ERROR_NOT_SUPPORTED;
+                    break;
+            }
+            
+            // If requested, copy data to the provided buffer
+            if (cmdResult->errorCode == DTB_SUCCESS && 
+                cmdParams->rawModbus.rxBuffer && 
+                cmdParams->rawModbus.rxBufferSize > 0 &&
+                cmdResult->data.rawResponse.rxData) {
+                
+                int copyLen = cmdResult->data.rawResponse.rxLength;
+                if (copyLen > cmdParams->rawModbus.rxBufferSize) {
+                    copyLen = cmdParams->rawModbus.rxBufferSize;
+                }
+                
+                memcpy(cmdParams->rawModbus.rxBuffer, 
+                       cmdResult->data.rawResponse.rxData, 
+                       copyLen);
+            }
+            break;
             
         default:
             cmdResult->errorCode = DTB_ERROR_INVALID_PARAM;
@@ -410,18 +524,21 @@ static int DTB_AdapterExecuteCommand(void *deviceContext, int commandType, void 
     if (cmdResult->errorCode != DTB_SUCCESS) {
         switch (cmdResult->errorCode) {
             case DTB_ERROR_BUSY:
-                LogWarningEx(LOG_DEVICE_DTB, "Device busy: %s", 
+                LogWarningEx(LOG_DEVICE_DTB, "Device slave %d busy: %s", 
+                           cmdParams->runStop.slaveAddress,
                            DTB_GetErrorString(cmdResult->errorCode));
                 break;
             case DTB_ERROR_TIMEOUT:
             case DTB_ERROR_COMM:
             case DTB_ERROR_NOT_CONNECTED:
-                LogErrorEx(LOG_DEVICE_DTB, "Communication error: %s", 
+                LogErrorEx(LOG_DEVICE_DTB, "Communication error with slave %d: %s", 
+                         cmdParams->runStop.slaveAddress,
                          DTB_GetErrorString(cmdResult->errorCode));
                 break;
             default:
-                LogErrorEx(LOG_DEVICE_DTB, "Command %s failed: %s",
+                LogErrorEx(LOG_DEVICE_DTB, "Command %s failed for slave %d: %s",
                          DTB_QueueGetCommandTypeName(commandType),
+                         cmdParams->runStop.slaveAddress,
                          DTB_GetErrorString(cmdResult->errorCode));
                 break;
         }
@@ -510,7 +627,13 @@ static void DTB_AdapterCopyCommandResult(int commandType, void *dest, void *src)
  * Queue Manager Functions
  ******************************************************************************/
 
-DTBQueueManager* DTB_QueueInit(int comPort, int slaveAddress, int baudRate) {
+DTBQueueManager* DTB_QueueInit(int comPort, int baudRate, int *slaveAddresses, int numSlaves) {
+    if (!slaveAddresses || numSlaves <= 0 || numSlaves > MAX_DTB_DEVICES) {
+        LogErrorEx(LOG_DEVICE_DTB, "DTB_QueueInit: Invalid parameters (numSlaves=%d, max=%d)", 
+                   numSlaves, MAX_DTB_DEVICES);
+        return NULL;
+    }
+    
     // Create device context
     DTBDeviceContext *context = calloc(1, sizeof(DTBDeviceContext));
     if (!context) {
@@ -526,30 +649,52 @@ DTBQueueManager* DTB_QueueInit(int comPort, int slaveAddress, int baudRate) {
         return NULL;
     }
     
+    // Allocate and copy slave addresses
+    connParams->slaveAddresses = malloc(sizeof(int) * numSlaves);
+    if (!connParams->slaveAddresses) {
+        free(context);
+        free(connParams);
+        LogErrorEx(LOG_DEVICE_DTB, "DTB_QueueInit: Failed to allocate slave address array");
+        return NULL;
+    }
+    
     connParams->comPort = comPort;
-    connParams->slaveAddress = slaveAddress;
     connParams->baudRate = baudRate;
+    connParams->numSlaves = numSlaves;
+    
+    for (int i = 0; i < numSlaves; i++) {
+        connParams->slaveAddresses[i] = slaveAddresses[i];
+        LogMessageEx(LOG_DEVICE_DTB, "DTB_QueueInit: Will initialize slave address %d", 
+                     slaveAddresses[i]);
+    }
     
     // Create the generic device queue
     DTBQueueManager *mgr = DeviceQueue_Create(&g_dtbAdapter, context, connParams, 0);
     
     if (!mgr) {
         free(context);
+        free(connParams->slaveAddresses);
         free(connParams);
+        LogErrorEx(LOG_DEVICE_DTB, "DTB_QueueInit: Failed to create device queue");
         return NULL;
     }
     
     // Set logging device
     DeviceQueue_SetLogDevice(mgr, LOG_DEVICE_DTB);
     
+    LogMessageEx(LOG_DEVICE_DTB, "DTB_QueueInit: Successfully created queue manager for %d devices", 
+                 numSlaves);
+    
     return mgr;
 }
 
-DTB_Handle* DTB_QueueGetHandle(DTBQueueManager *mgr) {
+DTB_Handle* DTB_QueueGetHandle(DTBQueueManager *mgr, int slaveAddress) {
+    if (!mgr) return NULL;
+    
     DTBDeviceContext *context = (DTBDeviceContext*)DeviceQueue_GetDeviceContext(mgr);
     if (!context) return NULL;
     
-    return &context->handle;
+    return GetDeviceHandle(context, slaveAddress);
 }
 
 void DTB_QueueShutdown(DTBQueueManager *mgr) {
@@ -617,7 +762,7 @@ int DTB_QueueCommitTransaction(DTBQueueManager *mgr, TransactionHandle txn,
 }
 
 /******************************************************************************
- * Wrapper Functions
+ * Global Queue Manager Functions
  ******************************************************************************/
 
 void DTB_SetGlobalQueueManager(DTBQueueManager *mgr) {
@@ -628,10 +773,14 @@ DTBQueueManager* DTB_GetGlobalQueueManager(void) {
     return g_dtbQueueManager;
 }
 
-int DTB_SetRunStopQueued(int run) {
+/******************************************************************************
+ * Individual Device Wrapper Functions
+ ******************************************************************************/
+
+int DTB_SetRunStopQueued(int slaveAddress, int run) {
     if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     
-    DTBCommandParams params = {.runStop = {run}};
+    DTBCommandParams params = {.runStop = {slaveAddress, run}};
     DTBCommandResult result;
     
     return DTB_QueueCommandBlocking(g_dtbQueueManager, DTB_CMD_SET_RUN_STOP,
@@ -639,10 +788,10 @@ int DTB_SetRunStopQueued(int run) {
                                   DTB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int DTB_SetSetPointQueued(double temperature) {
+int DTB_SetSetPointQueued(int slaveAddress, double temperature) {
     if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     
-    DTBCommandParams params = {.setpoint = {temperature}};
+    DTBCommandParams params = {.setpoint = {slaveAddress, temperature}};
     DTBCommandResult result;
     
     return DTB_QueueCommandBlocking(g_dtbQueueManager, DTB_CMD_SET_SETPOINT,
@@ -650,10 +799,10 @@ int DTB_SetSetPointQueued(double temperature) {
                                   DTB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int DTB_StartAutoTuningQueued(void) {
+int DTB_StartAutoTuningQueued(int slaveAddress) {
     if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     
-    DTBCommandParams params = {0};
+    DTBCommandParams params = {.runStop = {slaveAddress}};  // Reusing struct with just slaveAddress
     DTBCommandResult result;
     
     return DTB_QueueCommandBlocking(g_dtbQueueManager, DTB_CMD_START_AUTO_TUNING,
@@ -661,10 +810,10 @@ int DTB_StartAutoTuningQueued(void) {
                                   DTB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int DTB_StopAutoTuningQueued(void) {
+int DTB_StopAutoTuningQueued(int slaveAddress) {
     if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     
-    DTBCommandParams params = {0};
+    DTBCommandParams params = {.runStop = {slaveAddress}};  // Reusing struct with just slaveAddress
     DTBCommandResult result;
     
     return DTB_QueueCommandBlocking(g_dtbQueueManager, DTB_CMD_STOP_AUTO_TUNING,
@@ -672,10 +821,10 @@ int DTB_StopAutoTuningQueued(void) {
                                   DTB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int DTB_SetControlMethodQueued(int method) {
+int DTB_SetControlMethodQueued(int slaveAddress, int method) {
     if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     
-    DTBCommandParams params = {.controlMethod = {method}};
+    DTBCommandParams params = {.controlMethod = {slaveAddress, method}};
     DTBCommandResult result;
     
     return DTB_QueueCommandBlocking(g_dtbQueueManager, DTB_CMD_SET_CONTROL_METHOD,
@@ -683,10 +832,10 @@ int DTB_SetControlMethodQueued(int method) {
                                   DTB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int DTB_SetPIDModeQueued(int mode) {
+int DTB_SetPIDModeQueued(int slaveAddress, int mode) {
     if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     
-    DTBCommandParams params = {.pidMode = {mode}};
+    DTBCommandParams params = {.pidMode = {slaveAddress, mode}};
     DTBCommandResult result;
     
     return DTB_QueueCommandBlocking(g_dtbQueueManager, DTB_CMD_SET_PID_MODE,
@@ -694,10 +843,10 @@ int DTB_SetPIDModeQueued(int mode) {
                                   DTB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int DTB_SetSensorTypeQueued(int sensorType) {
+int DTB_SetSensorTypeQueued(int slaveAddress, int sensorType) {
     if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     
-    DTBCommandParams params = {.sensorType = {sensorType}};
+    DTBCommandParams params = {.sensorType = {slaveAddress, sensorType}};
     DTBCommandResult result;
     
     return DTB_QueueCommandBlocking(g_dtbQueueManager, DTB_CMD_SET_SENSOR_TYPE,
@@ -705,10 +854,10 @@ int DTB_SetSensorTypeQueued(int sensorType) {
                                   DTB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int DTB_SetTemperatureLimitsQueued(double upperLimit, double lowerLimit) {
+int DTB_SetTemperatureLimitsQueued(int slaveAddress, double upperLimit, double lowerLimit) {
     if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     
-    DTBCommandParams params = {.temperatureLimits = {upperLimit, lowerLimit}};
+    DTBCommandParams params = {.temperatureLimits = {slaveAddress, upperLimit, lowerLimit}};
     DTBCommandResult result;
     
     return DTB_QueueCommandBlocking(g_dtbQueueManager, DTB_CMD_SET_TEMPERATURE_LIMITS,
@@ -716,10 +865,10 @@ int DTB_SetTemperatureLimitsQueued(double upperLimit, double lowerLimit) {
                                   DTB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int DTB_SetAlarmLimitsQueued(double upperLimit, double lowerLimit) {
+int DTB_SetAlarmLimitsQueued(int slaveAddress, double upperLimit, double lowerLimit) {
     if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     
-    DTBCommandParams params = {.alarmLimits = {upperLimit, lowerLimit}};
+    DTBCommandParams params = {.alarmLimits = {slaveAddress, upperLimit, lowerLimit}};
     DTBCommandResult result;
     
     return DTB_QueueCommandBlocking(g_dtbQueueManager, DTB_CMD_SET_ALARM_LIMITS,
@@ -727,10 +876,10 @@ int DTB_SetAlarmLimitsQueued(double upperLimit, double lowerLimit) {
                                   DTB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int DTB_SetHeatingCoolingQueued(int mode) {
+int DTB_SetHeatingCoolingQueued(int slaveAddress, int mode) {
     if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     
-    DTBCommandParams params = {.heatingCooling = {mode}};
+    DTBCommandParams params = {.heatingCooling = {slaveAddress, mode}};
     DTBCommandResult result;
     
     return DTB_QueueCommandBlocking(g_dtbQueueManager, DTB_CMD_SET_HEATING_COOLING,
@@ -738,11 +887,11 @@ int DTB_SetHeatingCoolingQueued(int mode) {
                                   DTB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int DTB_ConfigureQueued(const DTB_Configuration *config) {
+int DTB_ConfigureQueued(int slaveAddress, const DTB_Configuration *config) {
     if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     if (!config) return ERR_NULL_POINTER;
     
-    DTBCommandParams params = {.configure = {*config}};
+    DTBCommandParams params = {.configure = {slaveAddress, *config}};
     DTBCommandResult result;
     
     return DTB_QueueCommandBlocking(g_dtbQueueManager, DTB_CMD_CONFIGURE,
@@ -750,10 +899,10 @@ int DTB_ConfigureQueued(const DTB_Configuration *config) {
                                   DTB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int DTB_ConfigureDefaultQueued(void) {
+int DTB_ConfigureDefaultQueued(int slaveAddress) {
     if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     
-    DTBCommandParams params = {0};
+    DTBCommandParams params = {.configureDefault = {slaveAddress}};
     DTBCommandResult result;
     
     return DTB_QueueCommandBlocking(g_dtbQueueManager, DTB_CMD_CONFIGURE_DEFAULT,
@@ -761,10 +910,10 @@ int DTB_ConfigureDefaultQueued(void) {
                                   DTB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int DTB_FactoryResetQueued(void) {
+int DTB_FactoryResetQueued(int slaveAddress) {
     if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     
-    DTBCommandParams params = {0};
+    DTBCommandParams params = {.factoryReset = {slaveAddress}};
     DTBCommandResult result;
     
     return DTB_QueueCommandBlocking(g_dtbQueueManager, DTB_CMD_FACTORY_RESET,
@@ -772,11 +921,11 @@ int DTB_FactoryResetQueued(void) {
                                   DTB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int DTB_GetStatusQueued(DTB_Status *status) {
+int DTB_GetStatusQueued(int slaveAddress, DTB_Status *status) {
     if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     if (!status) return ERR_NULL_POINTER;
     
-    DTBCommandParams params = {0};
+    DTBCommandParams params = {.getStatus = {slaveAddress}};
     DTBCommandResult result;
     
     int error = DTB_QueueCommandBlocking(g_dtbQueueManager, DTB_CMD_GET_STATUS,
@@ -789,11 +938,11 @@ int DTB_GetStatusQueued(DTB_Status *status) {
     return error;
 }
 
-int DTB_GetProcessValueQueued(double *temperature) {
+int DTB_GetProcessValueQueued(int slaveAddress, double *temperature) {
     if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     if (!temperature) return ERR_NULL_POINTER;
     
-    DTBCommandParams params = {0};
+    DTBCommandParams params = {.getProcessValue = {slaveAddress}};
     DTBCommandResult result;
     
     int error = DTB_QueueCommandBlocking(g_dtbQueueManager, DTB_CMD_GET_PROCESS_VALUE,
@@ -806,11 +955,11 @@ int DTB_GetProcessValueQueued(double *temperature) {
     return error;
 }
 
-int DTB_GetSetPointQueued(double *setPoint) {
+int DTB_GetSetPointQueued(int slaveAddress, double *setPoint) {
     if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     if (!setPoint) return ERR_NULL_POINTER;
     
-    DTBCommandParams params = {0};
+    DTBCommandParams params = {.getSetpoint = {slaveAddress}};
     DTBCommandResult result;
     
     int error = DTB_QueueCommandBlocking(g_dtbQueueManager, DTB_CMD_GET_SETPOINT,
@@ -823,11 +972,11 @@ int DTB_GetSetPointQueued(double *setPoint) {
     return error;
 }
 
-int DTB_GetPIDParamsQueued(int pidNumber, DTB_PIDParams *pidParams) {
+int DTB_GetPIDParamsQueued(int slaveAddress, int pidNumber, DTB_PIDParams *pidParams) {
     if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     if (!pidParams) return ERR_NULL_POINTER;
     
-    DTBCommandParams params = {.getPidParams = {pidNumber}};
+    DTBCommandParams params = {.getPidParams = {slaveAddress, pidNumber}};
     DTBCommandResult result;
     
     int error = DTB_QueueCommandBlocking(g_dtbQueueManager, DTB_CMD_GET_PID_PARAMS,
@@ -840,11 +989,11 @@ int DTB_GetPIDParamsQueued(int pidNumber, DTB_PIDParams *pidParams) {
     return error;
 }
 
-int DTB_GetAlarmStatusQueued(int *alarmActive) {
+int DTB_GetAlarmStatusQueued(int slaveAddress, int *alarmActive) {
     if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     if (!alarmActive) return ERR_NULL_POINTER;
     
-    DTBCommandParams params = {0};
+    DTBCommandParams params = {.getAlarmStatus = {slaveAddress}};
     DTBCommandResult result;
     
     int error = DTB_QueueCommandBlocking(g_dtbQueueManager, DTB_CMD_GET_ALARM_STATUS,
@@ -857,10 +1006,10 @@ int DTB_GetAlarmStatusQueued(int *alarmActive) {
     return error;
 }
 
-int DTB_ClearAlarmQueued(void) {
+int DTB_ClearAlarmQueued(int slaveAddress) {
     if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     
-    DTBCommandParams params = {0};
+    DTBCommandParams params = {.clearAlarm = {slaveAddress}};
     DTBCommandResult result;
     
     return DTB_QueueCommandBlocking(g_dtbQueueManager, DTB_CMD_CLEAR_ALARM,
@@ -868,10 +1017,10 @@ int DTB_ClearAlarmQueued(void) {
                                   DTB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int DTB_SetFrontPanelLockQueued(int lockMode) {
+int DTB_SetFrontPanelLockQueued(int slaveAddress, int lockMode) {
     if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     
-    DTBCommandParams params = {.frontPanelLock = {lockMode}};
+    DTBCommandParams params = {.frontPanelLock = {slaveAddress, lockMode}};
     DTBCommandResult result;
     
     return DTB_QueueCommandBlocking(g_dtbQueueManager, DTB_CMD_SET_FRONT_PANEL_LOCK,
@@ -879,11 +1028,11 @@ int DTB_SetFrontPanelLockQueued(int lockMode) {
                                   DTB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int DTB_GetFrontPanelLockQueued(int *lockMode) {
+int DTB_GetFrontPanelLockQueued(int slaveAddress, int *lockMode) {
     if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     if (!lockMode) return ERR_NULL_POINTER;
     
-    DTBCommandParams params = {0};
+    DTBCommandParams params = {.getFrontPanelLock = {slaveAddress}};
     DTBCommandResult result;
     
     int error = DTB_QueueCommandBlocking(g_dtbQueueManager, DTB_CMD_GET_FRONT_PANEL_LOCK,
@@ -896,19 +1045,19 @@ int DTB_GetFrontPanelLockQueued(int *lockMode) {
     return error;
 }
 
-int DTB_UnlockFrontPanelQueued(void) {
-    return DTB_SetFrontPanelLockQueued(FRONT_PANEL_UNLOCKED);
+int DTB_UnlockFrontPanelQueued(int slaveAddress) {
+    return DTB_SetFrontPanelLockQueued(slaveAddress, FRONT_PANEL_UNLOCKED);
 }
 
-int DTB_LockFrontPanelQueued(int allowSetpointChange) {
+int DTB_LockFrontPanelQueued(int slaveAddress, int allowSetpointChange) {
     int lockMode = allowSetpointChange ? FRONT_PANEL_LOCK_EXCEPT_SV : FRONT_PANEL_LOCK_ALL;
-    return DTB_SetFrontPanelLockQueued(lockMode);
+    return DTB_SetFrontPanelLockQueued(slaveAddress, lockMode);
 }
 
-int DTB_EnableWriteAccessQueued(void) {
+int DTB_EnableWriteAccessQueued(int slaveAddress) {
     if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     
-    DTBCommandParams params = {0};
+    DTBCommandParams params = {.enableWriteAccess = {slaveAddress}};
     DTBCommandResult result;
     
     return DTB_QueueCommandBlocking(g_dtbQueueManager, DTB_CMD_ENABLE_WRITE_ACCESS,
@@ -916,10 +1065,10 @@ int DTB_EnableWriteAccessQueued(void) {
                                   DTB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int DTB_DisableWriteAccessQueued(void) {
+int DTB_DisableWriteAccessQueued(int slaveAddress) {
     if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     
-    DTBCommandParams params = {0};
+    DTBCommandParams params = {.disableWriteAccess = {slaveAddress}};
     DTBCommandResult result;
     
     return DTB_QueueCommandBlocking(g_dtbQueueManager, DTB_CMD_DISABLE_WRITE_ACCESS,
@@ -927,11 +1076,11 @@ int DTB_DisableWriteAccessQueued(void) {
                                   DTB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int DTB_GetWriteAccessStatusQueued(int *isEnabled) {
+int DTB_GetWriteAccessStatusQueued(int slaveAddress, int *isEnabled) {
     if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     if (!isEnabled) return ERR_NULL_POINTER;
     
-    DTBCommandParams params = {0};
+    DTBCommandParams params = {.getWriteAccessStatus = {slaveAddress}};
     DTBCommandResult result;
     
     int error = DTB_QueueCommandBlocking(g_dtbQueueManager, DTB_CMD_GET_WRITE_ACCESS_STATUS,
@@ -944,13 +1093,14 @@ int DTB_GetWriteAccessStatusQueued(int *isEnabled) {
     return error;
 }
 
-int DTB_SendRawModbusQueued(unsigned char functionCode,
+int DTB_SendRawModbusQueued(int slaveAddress, unsigned char functionCode,
                            unsigned short address, unsigned short data,
                            unsigned char *rxBuffer, int rxBufferSize) {
     if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     
     DTBCommandParams params = {
         .rawModbus = {
+            .slaveAddress = slaveAddress,
             .functionCode = functionCode,
             .address = address,
             .data = data,
@@ -970,40 +1120,144 @@ int DTB_SendRawModbusQueued(unsigned char functionCode,
 }
 
 /******************************************************************************
+ * "All Devices" Convenience Functions
+ ******************************************************************************/
+
+int DTB_SetRunStopAllQueued(int run) {
+    if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
+    
+    DTBDeviceContext *ctx = (DTBDeviceContext*)DeviceQueue_GetDeviceContext(g_dtbQueueManager);
+    if (!ctx) return ERR_QUEUE_NOT_INIT;
+    
+    int allSuccess = DTB_SUCCESS;
+    int failureCount = 0;
+    
+    LogMessageEx(LOG_DEVICE_DTB, "Setting run/stop to %s for all %d DTB devices...", 
+                 run ? "RUN" : "STOP", ctx->numDevices);
+    
+    for (int i = 0; i < ctx->numDevices; i++) {
+        int result = DTB_SetRunStopQueued(ctx->slaveAddresses[i], run);
+        if (result != DTB_SUCCESS) {
+            LogErrorEx(LOG_DEVICE_DTB, "Failed to set run/stop for slave %d: %s", 
+                       ctx->slaveAddresses[i], DTB_GetErrorString(result));
+            if (allSuccess == DTB_SUCCESS) {
+                allSuccess = result;  // Store first failure
+            }
+            failureCount++;
+        }
+    }
+    
+    if (failureCount == 0) {
+        LogMessageEx(LOG_DEVICE_DTB, "Successfully set run/stop for all DTB devices");
+    } else {
+        LogErrorEx(LOG_DEVICE_DTB, "Failed to set run/stop for %d of %d DTB devices", 
+                   failureCount, ctx->numDevices);
+    }
+    
+    return allSuccess;
+}
+
+int DTB_ConfigureAllDefaultQueued() {
+    if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
+    
+    DTBDeviceContext *ctx = (DTBDeviceContext*)DeviceQueue_GetDeviceContext(g_dtbQueueManager);
+    if (!ctx) return ERR_QUEUE_NOT_INIT;
+    
+    int allSuccess = DTB_SUCCESS;
+    int failureCount = 0;
+    
+    LogMessageEx(LOG_DEVICE_DTB, "Configuring all %d DTB devices...", ctx->numDevices);
+    
+    for (int i = 0; i < ctx->numDevices; i++) {
+        int result = DTB_ConfigureDefaultQueued(ctx->slaveAddresses[i]);
+        if (result != DTB_SUCCESS) {
+            LogErrorEx(LOG_DEVICE_DTB, "Failed to configure slave %d: %s", 
+                       ctx->slaveAddresses[i], DTB_GetErrorString(result));
+            if (allSuccess == DTB_SUCCESS) {
+                allSuccess = result;  // Store first failure
+            }
+            failureCount++;
+        }
+    }
+    
+    if (failureCount == 0) {
+        LogMessageEx(LOG_DEVICE_DTB, "Successfully configured all DTB devices");
+    } else {
+        LogErrorEx(LOG_DEVICE_DTB, "Failed to configure %d of %d DTB devices", 
+                   failureCount, ctx->numDevices);
+    }
+    
+    return allSuccess;
+}
+
+int DTB_EnableWriteAccessAllQueued(void) {
+    if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
+    
+    DTBDeviceContext *ctx = (DTBDeviceContext*)DeviceQueue_GetDeviceContext(g_dtbQueueManager);
+    if (!ctx) return ERR_QUEUE_NOT_INIT;
+    
+    int allSuccess = DTB_SUCCESS;
+    int failureCount = 0;
+    
+    LogMessageEx(LOG_DEVICE_DTB, "Enabling write access for all %d DTB devices...", ctx->numDevices);
+    
+    for (int i = 0; i < ctx->numDevices; i++) {
+        int result = DTB_EnableWriteAccessQueued(ctx->slaveAddresses[i]);
+        if (result != DTB_SUCCESS) {
+            LogErrorEx(LOG_DEVICE_DTB, "Failed to enable write access for slave %d: %s", 
+                       ctx->slaveAddresses[i], DTB_GetErrorString(result));
+            if (allSuccess == DTB_SUCCESS) {
+                allSuccess = result;  // Store first failure
+            }
+            failureCount++;
+        }
+    }
+    
+    if (failureCount == 0) {
+        LogMessageEx(LOG_DEVICE_DTB, "Successfully enabled write access for all DTB devices");
+    } else {
+        LogErrorEx(LOG_DEVICE_DTB, "Failed to enable write access for %d of %d DTB devices", 
+                   failureCount, ctx->numDevices);
+    }
+    
+    return allSuccess;
+}
+
+/******************************************************************************
  * Async Command Function Implementations
  ******************************************************************************/
 
-CommandID DTB_GetStatusAsync(DTBCommandCallback callback, void *userData) {
+CommandID DTB_GetStatusAsync(int slaveAddress, DTBCommandCallback callback, void *userData) {
     DTBQueueManager *mgr = DTB_GetGlobalQueueManager();
     if (!mgr) {
         return ERR_QUEUE_NOT_INIT;
     }
     
-    DTBCommandParams params = {0};
+    DTBCommandParams params = {.getStatus = {slaveAddress}};
     
     return DTB_QueueCommandAsync(mgr, DTB_CMD_GET_STATUS, &params,
                                 DTB_PRIORITY_NORMAL, callback, userData);
 }
 
-CommandID DTB_SetRunStopAsync(int run, DTBCommandCallback callback, void *userData) {
+CommandID DTB_SetRunStopAsync(int slaveAddress, int run, DTBCommandCallback callback, void *userData) {
     DTBQueueManager *mgr = DTB_GetGlobalQueueManager();
     if (!mgr) {
         return ERR_QUEUE_NOT_INIT;
     }
     
-    DTBCommandParams params = {.runStop = {run}};
+    DTBCommandParams params = {.runStop = {slaveAddress, run}};
     
     return DTB_QueueCommandAsync(mgr, DTB_CMD_SET_RUN_STOP, &params,
                                 DTB_PRIORITY_HIGH, callback, userData);
 }
 
-CommandID DTB_SetSetPointAsync(double temperature, DTBCommandCallback callback, void *userData) {
+CommandID DTB_SetSetPointAsync(int slaveAddress, double temperature, DTBCommandCallback callback, void *userData) {
     DTBQueueManager *mgr = DTB_GetGlobalQueueManager();
     if (!mgr) {
         return ERR_QUEUE_NOT_INIT;
     }
     
-    DTBCommandParams params = {.setpoint = {temperature}};
+    DTBCommandParams params = {.setpoint = {slaveAddress, temperature}};
     
     return DTB_QueueCommandAsync(mgr, DTB_CMD_SET_SETPOINT, &params,
                                 DTB_PRIORITY_HIGH, callback, userData);
@@ -1035,14 +1289,14 @@ int DTB_QueueGetCommandDelay(DTBCommandType type) {
         case DTB_CMD_SET_CONTROL_METHOD:
         case DTB_CMD_SET_PID_MODE:
         case DTB_CMD_SET_SENSOR_TYPE:
-		case DTB_CMD_SET_HEATING_COOLING:
+        case DTB_CMD_SET_HEATING_COOLING:
         case DTB_CMD_CONFIGURE:
         case DTB_CMD_CONFIGURE_DEFAULT:
             return DTB_DELAY_CONFIG_CHANGE;
             
         case DTB_CMD_SET_TEMPERATURE_LIMITS:
         case DTB_CMD_SET_ALARM_LIMITS:
-		case DTB_CMD_SET_FRONT_PANEL_LOCK:
+        case DTB_CMD_SET_FRONT_PANEL_LOCK:
             return DTB_DELAY_AFTER_WRITE_REGISTER;
             
         case DTB_CMD_FACTORY_RESET:
@@ -1053,14 +1307,14 @@ int DTB_QueueGetCommandDelay(DTBCommandType type) {
         case DTB_CMD_GET_SETPOINT:
         case DTB_CMD_GET_PID_PARAMS:
         case DTB_CMD_GET_ALARM_STATUS:
-		case DTB_CMD_GET_FRONT_PANEL_LOCK:
+        case DTB_CMD_GET_FRONT_PANEL_LOCK:
             return DTB_DELAY_AFTER_READ;
             
         case DTB_CMD_CLEAR_ALARM:
             return DTB_DELAY_AFTER_WRITE_BIT;
         
-		case DTB_CMD_RAW_MODBUS:
-    		return DTB_DELAY_RECOVERY;
+        case DTB_CMD_RAW_MODBUS:
+            return DTB_DELAY_RECOVERY;
 
         default:
             return DTB_DELAY_RECOVERY;
@@ -1091,7 +1345,7 @@ int DTB_QueueCancelTransaction(DTBQueueManager *mgr, TransactionHandle txn) {
  * Advanced Transaction-Based Functions
  ******************************************************************************/
 
-int DTB_ConfigureAtomic(const DTB_Configuration *config,
+int DTB_ConfigureAtomic(int slaveAddress, const DTB_Configuration *config,
                        DTBTransactionCallback callback, void *userData) {
     DTBQueueManager *queueMgr = DTB_GetGlobalQueueManager();
     if (!queueMgr) {
@@ -1105,7 +1359,8 @@ int DTB_ConfigureAtomic(const DTB_Configuration *config,
     // Create transaction
     TransactionHandle txn = DTB_QueueBeginTransaction(queueMgr);
     if (txn == 0) {
-        LogErrorEx(LOG_DEVICE_DTB, "Failed to begin configuration transaction");
+        LogErrorEx(LOG_DEVICE_DTB, "Failed to begin configuration transaction for slave %d", 
+                   slaveAddress);
         return ERR_QUEUE_NOT_INIT;
     }
     
@@ -1115,28 +1370,33 @@ int DTB_ConfigureAtomic(const DTB_Configuration *config,
     // Add all configuration commands to transaction
     
     // 1. Set sensor type
+    params.sensorType.slaveAddress = slaveAddress;
     params.sensorType.sensorType = config->sensorType;
     result = DTB_QueueAddToTransaction(queueMgr, txn, DTB_CMD_SET_SENSOR_TYPE, &params);
     if (result != SUCCESS) goto cleanup;
     
     // 2. Set heating/cooling mode
+    params.heatingCooling.slaveAddress = slaveAddress;
     params.heatingCooling.mode = config->heatingCoolingMode;
     result = DTB_QueueAddToTransaction(queueMgr, txn, DTB_CMD_SET_HEATING_COOLING, &params);
     if (result != SUCCESS) goto cleanup;
     
     // 3. Set temperature limits
+    params.temperatureLimits.slaveAddress = slaveAddress;
     params.temperatureLimits.upperLimit = config->upperTempLimit;
     params.temperatureLimits.lowerLimit = config->lowerTempLimit;
     result = DTB_QueueAddToTransaction(queueMgr, txn, DTB_CMD_SET_TEMPERATURE_LIMITS, &params);
     if (result != SUCCESS) goto cleanup;
     
     // 4. Set control method
+    params.controlMethod.slaveAddress = slaveAddress;
     params.controlMethod.method = config->controlMethod;
     result = DTB_QueueAddToTransaction(queueMgr, txn, DTB_CMD_SET_CONTROL_METHOD, &params);
     if (result != SUCCESS) goto cleanup;
     
     // 5. Set PID mode (if using PID control)
     if (config->controlMethod == CONTROL_METHOD_PID) {
+        params.pidMode.slaveAddress = slaveAddress;
         params.pidMode.mode = config->pidMode;
         result = DTB_QueueAddToTransaction(queueMgr, txn, DTB_CMD_SET_PID_MODE, &params);
         if (result != SUCCESS) goto cleanup;
@@ -1144,6 +1404,7 @@ int DTB_ConfigureAtomic(const DTB_Configuration *config,
     
     // 6. Configure alarm if enabled
     if (config->alarmType != ALARM_DISABLED) {
+        params.alarmLimits.slaveAddress = slaveAddress;
         params.alarmLimits.upperLimit = config->alarmUpperLimit;
         params.alarmLimits.lowerLimit = config->alarmLowerLimit;
         result = DTB_QueueAddToTransaction(queueMgr, txn, DTB_CMD_SET_ALARM_LIMITS, &params);
@@ -1157,17 +1418,19 @@ int DTB_ConfigureAtomic(const DTB_Configuration *config,
     // Commit transaction
     result = DTB_QueueCommitTransaction(queueMgr, txn, callback, userData);
     if (result == SUCCESS) {
-        LogMessageEx(LOG_DEVICE_DTB, "Configuration transaction committed");
+        LogMessageEx(LOG_DEVICE_DTB, "Configuration transaction committed for slave %d", 
+                     slaveAddress);
         return SUCCESS;
     }
     
 cleanup:
     DTB_QueueCancelTransaction(queueMgr, txn);
-    LogErrorEx(LOG_DEVICE_DTB, "Failed to create configuration transaction");
+    LogErrorEx(LOG_DEVICE_DTB, "Failed to create configuration transaction for slave %d", 
+               slaveAddress);
     return result;
 }
 
-int DTB_SetControlMethodWithParams(int method, int pidMode,
+int DTB_SetControlMethodWithParams(int slaveAddress, int method, int pidMode,
                                   const DTB_PIDParams *pidParams) {
     DTBQueueManager *queueMgr = DTB_GetGlobalQueueManager();
     if (!queueMgr) {
@@ -1177,13 +1440,14 @@ int DTB_SetControlMethodWithParams(int method, int pidMode,
     
     // For non-PID methods, just set the control method
     if (method != CONTROL_METHOD_PID) {
-        return DTB_SetControlMethodQueued(method);
+        return DTB_SetControlMethodQueued(slaveAddress, method);
     }
     
     // For PID control, use transaction to ensure consistency
     TransactionHandle txn = DTB_QueueBeginTransaction(queueMgr);
     if (txn == 0) {
-        LogErrorEx(LOG_DEVICE_DTB, "Failed to begin control method transaction");
+        LogErrorEx(LOG_DEVICE_DTB, "Failed to begin control method transaction for slave %d", 
+                   slaveAddress);
         return ERR_QUEUE_NOT_INIT;
     }
     
@@ -1191,11 +1455,13 @@ int DTB_SetControlMethodWithParams(int method, int pidMode,
     int result = SUCCESS;
     
     // 1. Set control method to PID
+    params.controlMethod.slaveAddress = slaveAddress;
     params.controlMethod.method = CONTROL_METHOD_PID;
     result = DTB_QueueAddToTransaction(queueMgr, txn, DTB_CMD_SET_CONTROL_METHOD, &params);
     if (result != SUCCESS) goto cleanup;
     
     // 2. Set PID mode
+    params.pidMode.slaveAddress = slaveAddress;
     params.pidMode.mode = pidMode;
     result = DTB_QueueAddToTransaction(queueMgr, txn, DTB_CMD_SET_PID_MODE, &params);
     if (result != SUCCESS) goto cleanup;
@@ -1207,12 +1473,13 @@ int DTB_SetControlMethodWithParams(int method, int pidMode,
     // Commit transaction
     result = DTB_QueueCommitTransaction(queueMgr, txn, NULL, NULL);
     if (result == SUCCESS) {
-        LogMessageEx(LOG_DEVICE_DTB, "Control method changed to PID mode %d", pidMode);
+        LogMessageEx(LOG_DEVICE_DTB, "Control method changed to PID mode %d for slave %d", 
+                     pidMode, slaveAddress);
         return SUCCESS;
     }
     
 cleanup:
     DTB_QueueCancelTransaction(queueMgr, txn);
-    LogErrorEx(LOG_DEVICE_DTB, "Failed to change control method");
+    LogErrorEx(LOG_DEVICE_DTB, "Failed to change control method for slave %d", slaveAddress);
     return result;
 }

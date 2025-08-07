@@ -3,6 +3,8 @@
  * 
  * Thread-safe command queue implementation for DTB 4848 Temperature Controller
  * Built on top of the generic device queue system
+ * 
+ * Supports multiple DTB devices on the same COM port with different slave addresses
  ******************************************************************************/
 
 #ifndef DTB4848_QUEUE_H
@@ -15,6 +17,9 @@
 /******************************************************************************
  * Configuration Constants
  ******************************************************************************/
+
+// Maximum number of DTB devices supported on one COM port
+#define MAX_DTB_DEVICES             4
 
 // Command delays (milliseconds)
 #define DTB_DELAY_AFTER_WRITE_BIT       50    // After write single bit (run/stop, auto-tune)
@@ -63,7 +68,7 @@ typedef enum {
     DTB_CMD_SET_SENSOR_TYPE,
     DTB_CMD_SET_TEMPERATURE_LIMITS,
     DTB_CMD_SET_ALARM_LIMITS,
-	DTB_CMD_SET_HEATING_COOLING,
+    DTB_CMD_SET_HEATING_COOLING,
     DTB_CMD_CONFIGURE,
     DTB_CMD_CONFIGURE_DEFAULT,
     DTB_CMD_FACTORY_RESET,
@@ -77,15 +82,15 @@ typedef enum {
     
     // Alarm commands
     DTB_CMD_CLEAR_ALARM,
-	
-	// Front panel lock commands
+    
+    // Front panel lock commands
     DTB_CMD_SET_FRONT_PANEL_LOCK,
     DTB_CMD_GET_FRONT_PANEL_LOCK,
-	
-	// Write access commands
-	DTB_CMD_ENABLE_WRITE_ACCESS,
-	DTB_CMD_DISABLE_WRITE_ACCESS,
-	DTB_CMD_GET_WRITE_ACCESS_STATUS,
+    
+    // Write access commands
+    DTB_CMD_ENABLE_WRITE_ACCESS,
+    DTB_CMD_DISABLE_WRITE_ACCESS,
+    DTB_CMD_GET_WRITE_ACCESS_STATUS,
     
     // Raw Modbus commands
     DTB_CMD_RAW_MODBUS,
@@ -95,18 +100,30 @@ typedef enum {
 
 // Command parameters union
 typedef union {
-    struct { int run; } runStop;
-    struct { double temperature; } setpoint;
-    struct { int method; } controlMethod;
-    struct { int mode; } pidMode;
-    struct { int sensorType; } sensorType;
-    struct { double upperLimit; double lowerLimit; } temperatureLimits;
-    struct { double upperLimit; double lowerLimit; } alarmLimits;
-    struct { DTB_Configuration config; } configure;
-    struct { int pidNumber; } getPidParams;
-	struct { int lockMode; } frontPanelLock;
-	struct { int mode; } heatingCooling;
+    struct { int slaveAddress; int run; } runStop;
+    struct { int slaveAddress; double temperature; } setpoint;
+    struct { int slaveAddress; int method; } controlMethod;
+    struct { int slaveAddress; int mode; } pidMode;
+    struct { int slaveAddress; int sensorType; } sensorType;
+    struct { int slaveAddress; double upperLimit; double lowerLimit; } temperatureLimits;
+    struct { int slaveAddress; double upperLimit; double lowerLimit; } alarmLimits;
+    struct { int slaveAddress; DTB_Configuration config; } configure;
+    struct { int slaveAddress; } configureDefault;
+    struct { int slaveAddress; } factoryReset;
+    struct { int slaveAddress; int pidNumber; } getPidParams;
+    struct { int slaveAddress; int lockMode; } frontPanelLock;
+    struct { int slaveAddress; int mode; } heatingCooling;
+    struct { int slaveAddress; } getStatus;
+    struct { int slaveAddress; } getProcessValue;
+    struct { int slaveAddress; } getSetpoint;
+    struct { int slaveAddress; } getAlarmStatus;
+    struct { int slaveAddress; } clearAlarm;
+    struct { int slaveAddress; } getFrontPanelLock;
+    struct { int slaveAddress; } enableWriteAccess;
+    struct { int slaveAddress; } disableWriteAccess;
+    struct { int slaveAddress; } getWriteAccessStatus;
     struct { 
+        int slaveAddress;
         unsigned char functionCode;
         unsigned short address;
         unsigned short data;
@@ -124,8 +141,8 @@ typedef struct {
         double setpoint;
         DTB_PIDParams pidParams;
         int alarmActive;
-		int frontPanelLockMode;
-		int writeAccessEnabled;
+        int frontPanelLockMode;
+        int writeAccessEnabled;
         struct { unsigned char *rxData; int rxLength; } rawResponse;
     } data;
 } DTBCommandResult;
@@ -135,20 +152,22 @@ typedef struct {
  ******************************************************************************/
 
 /**
- * Initialize the queue manager with specific connection parameters
+ * Initialize the queue manager with multiple devices on the same COM port
  * @param comPort - COM port number (1-16)
- * @param slaveAddress - Modbus slave address
  * @param baudRate - Baud rate (e.g., 9600)
+ * @param slaveAddresses - Array of Modbus slave addresses
+ * @param numSlaves - Number of slave addresses (1 to MAX_DTB_DEVICES)
  * @return Queue manager instance or NULL on failure
  */
-DTBQueueManager* DTB_QueueInit(int comPort, int slaveAddress, int baudRate);
+DTBQueueManager* DTB_QueueInit(int comPort, int baudRate, int *slaveAddresses, int numSlaves);
 
 /**
- * Get the DTB handle from the queue manager
+ * Get the DTB handle for a specific slave address
  * @param mgr - Queue manager instance
- * @return DTB handle or NULL if not connected
+ * @param slaveAddress - Modbus slave address
+ * @return DTB handle or NULL if slave address not found or not connected
  */
-DTB_Handle* DTB_QueueGetHandle(DTBQueueManager *mgr);
+DTB_Handle* DTB_QueueGetHandle(DTBQueueManager *mgr, int slaveAddress);
 
 // Shutdown the queue manager
 void DTB_QueueShutdown(DTBQueueManager *mgr);
@@ -191,52 +210,75 @@ int DTB_QueueCommitTransaction(DTBQueueManager *mgr, TransactionHandle txn,
 int DTB_QueueCancelTransaction(DTBQueueManager *mgr, TransactionHandle txn);
 
 /******************************************************************************
- * Wrapper Functions (Global queue manager required)
+ * Individual Device Functions (Global queue manager required)
  * Note: These functions require DTB_SetGlobalQueueManager() to be called first
  ******************************************************************************/
 
 // Control functions
-int DTB_SetRunStopQueued(int run);
-int DTB_SetSetPointQueued(double temperature);
-int DTB_StartAutoTuningQueued(void);
-int DTB_StopAutoTuningQueued(void);
+int DTB_SetRunStopQueued(int slaveAddress, int run);
+int DTB_SetSetPointQueued(int slaveAddress, double temperature);
+int DTB_StartAutoTuningQueued(int slaveAddress);
+int DTB_StopAutoTuningQueued(int slaveAddress);
 
 // Configuration functions
-int DTB_SetControlMethodQueued(int method);
-int DTB_SetPIDModeQueued(int mode);
-int DTB_SetSensorTypeQueued(int sensorType);
-int DTB_SetTemperatureLimitsQueued(double upperLimit, double lowerLimit);
-int DTB_SetAlarmLimitsQueued(double upperLimit, double lowerLimit);
-int DTB_SetHeatingCoolingQueued(int mode);
-int DTB_ConfigureQueued(const DTB_Configuration *config);
-int DTB_ConfigureDefaultQueued(void);
-int DTB_FactoryResetQueued(void);
+int DTB_SetControlMethodQueued(int slaveAddress, int method);
+int DTB_SetPIDModeQueued(int slaveAddress, int mode);
+int DTB_SetSensorTypeQueued(int slaveAddress, int sensorType);
+int DTB_SetTemperatureLimitsQueued(int slaveAddress, double upperLimit, double lowerLimit);
+int DTB_SetAlarmLimitsQueued(int slaveAddress, double upperLimit, double lowerLimit);
+int DTB_SetHeatingCoolingQueued(int slaveAddress, int mode);
+int DTB_ConfigureQueued(int slaveAddress, const DTB_Configuration *config);
+int DTB_ConfigureDefaultQueued(int slaveAddress);
+int DTB_FactoryResetQueued(int slaveAddress);
 
 // Read functions
-int DTB_GetStatusQueued(DTB_Status *status);
-int DTB_GetProcessValueQueued(double *temperature);
-int DTB_GetSetPointQueued(double *setPoint);
-int DTB_GetPIDParamsQueued(int pidNumber, DTB_PIDParams *params);
-int DTB_GetAlarmStatusQueued(int *alarmActive);
+int DTB_GetStatusQueued(int slaveAddress, DTB_Status *status);
+int DTB_GetProcessValueQueued(int slaveAddress, double *temperature);
+int DTB_GetSetPointQueued(int slaveAddress, double *setPoint);
+int DTB_GetPIDParamsQueued(int slaveAddress, int pidNumber, DTB_PIDParams *params);
+int DTB_GetAlarmStatusQueued(int slaveAddress, int *alarmActive);
 
 // Alarm functions
-int DTB_ClearAlarmQueued(void);
+int DTB_ClearAlarmQueued(int slaveAddress);
 
 // Front panel lock functions
-int DTB_SetFrontPanelLockQueued(int lockMode);
-int DTB_GetFrontPanelLockQueued(int *lockMode);
-int DTB_UnlockFrontPanelQueued(void);
-int DTB_LockFrontPanelQueued(int allowSetpointChange);
+int DTB_SetFrontPanelLockQueued(int slaveAddress, int lockMode);
+int DTB_GetFrontPanelLockQueued(int slaveAddress, int *lockMode);
+int DTB_UnlockFrontPanelQueued(int slaveAddress);
+int DTB_LockFrontPanelQueued(int slaveAddress, int allowSetpointChange);
 
 // Write protection functions
-int DTB_EnableWriteAccessQueued(void);
-int DTB_DisableWriteAccessQueued(void);
-int DTB_GetWriteAccessStatusQueued(int *isEnabled);
+int DTB_EnableWriteAccessQueued(int slaveAddress);
+int DTB_DisableWriteAccessQueued(int slaveAddress);
+int DTB_GetWriteAccessStatusQueued(int slaveAddress, int *isEnabled);
 
 // Raw command support
-int DTB_SendRawModbusQueued(unsigned char functionCode,
+int DTB_SendRawModbusQueued(int slaveAddress, unsigned char functionCode,
                            unsigned short address, unsigned short data,
                            unsigned char *rxBuffer, int rxBufferSize);
+
+/******************************************************************************
+ * "All Devices" Convenience Functions
+ ******************************************************************************/
+
+/**
+ * Set run/stop state for all initialized DTB devices
+ * @param run - 1 to run, 0 to stop
+ * @return DTB_SUCCESS if all devices succeeded, error code of first failure otherwise
+ */
+int DTB_SetRunStopAllQueued(int run);
+
+/**
+ * Configure all initialized DTB devices with the same default configuration
+ * @return DTB_SUCCESS if all devices succeeded, error code of first failure otherwise
+ */
+int DTB_ConfigureAllDefaultQueued();
+
+/**
+ * Enable write access for all initialized DTB devices
+ * @return DTB_SUCCESS if all devices succeeded, error code of first failure otherwise
+ */
+int DTB_EnableWriteAccessAllQueued(void);
 
 /******************************************************************************
  * Async Command Functions
@@ -247,29 +289,32 @@ int DTB_SendRawModbusQueued(unsigned char functionCode,
 
 /**
  * Get DTB status asynchronously
+ * @param slaveAddress - Modbus slave address of target device
  * @param callback - Callback function to be called when command completes
  * @param userData - User data passed to callback
  * @return Command ID on success or ERR_QUEUE_NOT_INIT if queue not initialized
  */
-CommandID DTB_GetStatusAsync(DTBCommandCallback callback, void *userData);
+CommandID DTB_GetStatusAsync(int slaveAddress, DTBCommandCallback callback, void *userData);
 
 /**
  * Set DTB run/stop state asynchronously
+ * @param slaveAddress - Modbus slave address of target device
  * @param run - 1 to run, 0 to stop
  * @param callback - Callback function to be called when command completes
  * @param userData - User data passed to callback
  * @return Command ID on success or ERR_QUEUE_NOT_INIT if queue not initialized
  */
-CommandID DTB_SetRunStopAsync(int run, DTBCommandCallback callback, void *userData);
+CommandID DTB_SetRunStopAsync(int slaveAddress, int run, DTBCommandCallback callback, void *userData);
 
 /**
  * Set DTB temperature setpoint asynchronously
+ * @param slaveAddress - Modbus slave address of target device
  * @param temperature - Target temperature in degrees Celsius
  * @param callback - Callback function to be called when command completes
  * @param userData - User data passed to callback
  * @return Command ID on success or ERR_QUEUE_NOT_INIT if queue not initialized
  */
-CommandID DTB_SetSetPointAsync(double temperature, DTBCommandCallback callback, void *userData);
+CommandID DTB_SetSetPointAsync(int slaveAddress, double temperature, DTBCommandCallback callback, void *userData);
 
 /******************************************************************************
  * Utility Functions
@@ -289,24 +334,26 @@ DTBQueueManager* DTB_GetGlobalQueueManager(void);
  * Safely configure temperature controller with atomic transaction
  * This ensures all configuration parameters are set together
  * 
+ * @param slaveAddress - Modbus slave address of target device
  * @param config - Complete configuration structure
  * @param callback - Optional callback for transaction completion
  * @param userData - User data for callback
  * @return SUCCESS or error code
  */
-int DTB_ConfigureAtomic(const DTB_Configuration *config,
+int DTB_ConfigureAtomic(int slaveAddress, const DTB_Configuration *config,
                        DTBTransactionCallback callback, void *userData);
 
 /**
  * Safely change control method with PID parameters
  * Uses transaction to ensure consistent state
  * 
+ * @param slaveAddress - Modbus slave address of target device
  * @param method - Control method (PID, ON/OFF, etc.)
  * @param pidMode - PID mode (if method is PID)
  * @param pidParams - PID parameters (if method is PID, can be NULL)
  * @return SUCCESS or error code
  */
-int DTB_SetControlMethodWithParams(int method, int pidMode,
+int DTB_SetControlMethodWithParams(int slaveAddress, int method, int pidMode,
                                   const DTB_PIDParams *pidParams);
 
 #endif // DTB4848_QUEUE_H

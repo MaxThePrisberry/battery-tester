@@ -144,7 +144,7 @@ void Controls_UpdateFromDeviceStates(void) {
         DTBQueueManager *dtbQueueMgr = DTB_GetGlobalQueueManager();
         if (dtbQueueMgr) {
             DTB_Status status;
-            if (DTB_GetStatusQueued(&status) == DTB_SUCCESS) {
+            if (DTB_GetStatusQueued(DTB1_SLAVE_ADDRESS, &status) == DTB_SUCCESS) {
                 int stateChanged = (status.outputEnabled != g_controls.lastKnownDTBRunState);
                 int setpointChanged = (fabs(status.setPoint - g_controls.lastKnownDTBSetpoint) >= 0.1);
                 
@@ -326,7 +326,7 @@ int CVICALLBACK DTBRunStopCallback(int panel, int control, int event,
                 LogMessage("Stopping DTB temperature control...");
                 
                 // Queue stop command
-				CommandID cmdId = DTB_SetRunStopAsync(0, DTBRunStopQueueCallback, NULL);
+				CommandID cmdId = DTB_SetRunStopAsync(DTB1_SLAVE_ADDRESS, 0, DTBRunStopQueueCallback, NULL);
                 
                 if (cmdId == 0) {
                     LogError("Failed to queue DTB stop command");
@@ -351,7 +351,7 @@ int CVICALLBACK DTBRunStopCallback(int panel, int control, int event,
                 g_controls.lastKnownDTBSetpoint = setpoint;
                 
                 // Queue setpoint command first
-				CommandID cmdId = DTB_SetSetPointAsync(setpoint, DTBSetpointCallback, NULL);
+				CommandID cmdId = DTB_SetSetPointAsync(DTB1_SLAVE_ADDRESS, setpoint, DTBSetpointCallback, NULL);
                 
                 if (cmdId == 0) {
                     LogError("Failed to queue DTB setpoint command");
@@ -377,7 +377,7 @@ static void DTBSetpointCallback(CommandID cmdId, DTBCommandType type,
         if (dtbQueueMgr) {
             LogMessage("Starting DTB temperature control...");
             
-			CommandID cmdId = DTB_SetRunStopAsync(1, DTBRunStopQueueCallback, NULL);
+			CommandID cmdId = DTB_SetRunStopAsync(DTB1_SLAVE_ADDRESS, 1, DTBRunStopQueueCallback, NULL);
             
             if (cmdId == 0) {
                 LogError("Failed to queue DTB start command");

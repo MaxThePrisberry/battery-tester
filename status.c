@@ -375,7 +375,7 @@ static void Status_TimerUpdate(void) {
             } else if (stats.isConnected && g_status.lastDTBState == CONN_STATE_ERROR) {
                 // Just connected - get initial status
                 DTB_Status status;
-                if (DTB_GetStatusQueued(&status) == DTB_SUCCESS) {
+                if (DTB_GetStatusQueued(DTB1_SLAVE_ADDRESS, &status) == DTB_SUCCESS) {
                     UpdateDTBValues(&status);
                     // Set state based on output enabled
                     g_status.lastDTBState = status.outputEnabled ? CONN_STATE_CONNECTED : CONN_STATE_IDLE;
@@ -385,7 +385,7 @@ static void Status_TimerUpdate(void) {
             
             // Queue periodic status update if connected (async call)
             if (stats.isConnected && !DTB_QueueHasCommandType(dtbQueueMgr, DTB_CMD_GET_STATUS)) {
-				DTB_GetStatusAsync(DTBStatusCallback, NULL);
+				DTB_GetStatusAsync(DTB1_SLAVE_ADDRESS, DTBStatusCallback, NULL);
             }
         }
     }
