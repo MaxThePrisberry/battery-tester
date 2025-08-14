@@ -495,7 +495,7 @@ static int SOCEISExperimentThread(void *functionData) {
     ctx->testEndTime = Timer();
     
     ctx->state = SOCEIS_STATE_COMPLETED;
-    LogMessage("=== SOCEIS Experiment Completed Successfully ===");
+    LogMessage("=== SOCEIS Experiment Completed ===");
     
     // Write results file
     result = WriteResultsFile(ctx);
@@ -817,55 +817,78 @@ static int SetRelayState(int pin, int state) {
 static int SwitchToBioLogic(SOCEISTestContext *ctx) {
     int result;
     
-    LogDebug("Switching to BioLogic...");
+    LogMessage("Switching to BioLogic...");
     
+    // Disable PSB output first for safety
+    LogMessage("Disabling PSB output...");
     PSB_SetOutputEnableQueued(0);
     
-    // Disconnect PSB
+    // Wait briefly for PSB to disable output
+    Delay(0.5);
+    
+    // Disconnect PSB first
+    LogMessage("Disconnecting PSB relay...");
     result = SetRelayState(SOCEIS_RELAY_PSB_PIN, SOCEIS_RELAY_STATE_DISCONNECTED);
-    if (result != SUCCESS) return result;
-    
-    // Wait
-    Delay(SOCEIS_RELAY_SWITCH_DELAY_MS / 1000.0);
-    
-    // Connect BioLogic
-    result = SetRelayState(SOCEIS_RELAY_BIOLOGIC_PIN, SOCEIS_RELAY_STATE_CONNECTED);
-    if (result != SUCCESS) return result;
-    
-    // Wait
-    Delay(SOCEIS_RELAY_SWITCH_DELAY_MS / 1000.0);
-    
-    // Verify BioLogic connection
-    result = BIO_TestConnectionQueued(ctx->biologicID);
     if (result != SUCCESS) {
-        LogError("BioLogic connection test failed after relay switch");
+        LogError("Failed to disconnect PSB relay: %s", GetErrorString(result));
         return result;
     }
     
-    LogDebug("Switched to BioLogic successfully");
+    // Wait for relay to settle
+    Delay(SOCEIS_RELAY_SWITCH_DELAY_MS / 1000.0);
+    
+    // Connect BioLogic
+    LogMessage("Connecting BioLogic relay...");
+    result = SetRelayState(SOCEIS_RELAY_BIOLOGIC_PIN, SOCEIS_RELAY_STATE_CONNECTED);
+    if (result != SUCCESS) {
+        LogError("Failed to connect BioLogic relay: %s", GetErrorString(result));
+        return result;
+    }
+    
+    // Wait for relay to settle
+    Delay(SOCEIS_RELAY_SWITCH_DELAY_MS / 1000.0);
+    
+    // Verify BioLogic connection
+    LogMessage("Verifying BioLogic connection...");
+    result = BIO_TestConnectionQueued(ctx->biologicID);
+    if (result != SUCCESS) {
+        LogError("BioLogic connection test failed after relay switch: %s", BIO_GetErrorString(result));
+        LogError("This suggests the relay may not have switched properly or BioLogic communication failed");
+        return result;
+    }
+    
+    LogMessage("Successfully switched to BioLogic and verified connection");
     return SUCCESS;
 }
 
 static int SwitchToPSB(SOCEISTestContext *ctx) {
     int result;
     
-    LogDebug("Switching to PSB...");
+    LogMessage("Switching to PSB...");
     
-    // Disconnect BioLogic
+    // Disconnect BioLogic first
+    LogMessage("Disconnecting BioLogic relay...");
     result = SetRelayState(SOCEIS_RELAY_BIOLOGIC_PIN, SOCEIS_RELAY_STATE_DISCONNECTED);
-    if (result != SUCCESS) return result;
+    if (result != SUCCESS) {
+        LogError("Failed to disconnect BioLogic relay: %s", GetErrorString(result));
+        return result;
+    }
     
-    // Wait
+    // Wait for relay to settle
     Delay(SOCEIS_RELAY_SWITCH_DELAY_MS / 1000.0);
     
     // Connect PSB
+    LogMessage("Connecting PSB relay...");
     result = SetRelayState(SOCEIS_RELAY_PSB_PIN, SOCEIS_RELAY_STATE_CONNECTED);
-    if (result != SUCCESS) return result;
+    if (result != SUCCESS) {
+        LogError("Failed to connect PSB relay: %s", GetErrorString(result));
+        return result;
+    }
     
-    // Wait
+    // Wait for relay to settle
     Delay(SOCEIS_RELAY_SWITCH_DELAY_MS / 1000.0);
     
-    LogDebug("Switched to PSB successfully");
+    LogMessage("Successfully switched to PSB");
     return SUCCESS;
 }
 
@@ -991,7 +1014,7 @@ static int RunOCVMeasurement(SOCEISTestContext *ctx, EISMeasurement *measurement
                             SOCEIS_OCV_E_RANGE,
                             true,  // process data
                             &measurement->ocvData,
-                            (int)(SOCEIS_OCV_DURATION_S * 1000 + 5000),  // timeout
+                            SOCEIS_OCV_TIMEOUT_MS,
                             NULL, NULL);
     
     if (result != SUCCESS) {
@@ -1034,7 +1057,7 @@ static int RunGEISMeasurement(SOCEISTestContext *ctx, EISMeasurement *measuremen
     
     // Run GEIS
     result = BIO_RunGEISQueued(ctx->biologicID, 0,  // channel 0
-                             true,  // vs initial (OCV)
+                             SOCEIS_GEIS_VS_INITIAL,  // vs initial
                              SOCEIS_GEIS_INITIAL_CURRENT,
                              SOCEIS_GEIS_DURATION_S,
                              SOCEIS_GEIS_RECORD_EVERY_DT,
@@ -1050,11 +1073,11 @@ static int RunGEISMeasurement(SOCEISTestContext *ctx, EISMeasurement *measuremen
                              SOCEIS_GEIS_I_RANGE,
                              true,  // process data
                              &measurement->geisData,
-                             (int)(SOCEIS_GEIS_DURATION_S * 1000 * SOCEIS_GEIS_FREQ_NUMBER + 10000),
+                             SOCEIS_GEIS_TIMEOUT_MS,
                              NULL, NULL);
     
     if (result != SUCCESS) {
-        LogError("GEIS measurement failed: %s", BIO_GetErrorString(result));
+        LogError("GEIS measurement failed: %d %s", result, GetErrorString(result));
         return result;
     }
     
@@ -1260,14 +1283,30 @@ static int RunChargingPhase(SOCEISTestContext *ctx) {
     // Write CSV header
     fprintf(ctx->currentLogFile, "Time_s,Voltage_V,Current_A,Power_W,SOC_Percent\n");
     
-    // Switch to PSB
+    // Switch to PSB with proper logging
+    LogMessage("Switching to PSB for charging...");
     result = SwitchToPSB(ctx);
     if (result != SUCCESS) {
+        LogError("Failed to switch to PSB for charging");
         fclose(ctx->currentLogFile);
         return result;
     }
     
+    // Verify PSB connection with a status read
+    PSB_Status preChargeStatus;
+    result = PSB_GetStatusQueued(&preChargeStatus);
+    if (result != PSB_SUCCESS) {
+        LogError("Failed to read PSB status before charging: %s", PSB_GetErrorString(result));
+        fclose(ctx->currentLogFile);
+        return result;
+    }
+    
+    LogMessage("Pre-charge battery voltage: %.3f V", preChargeStatus.voltage);
+    
     // Set charging parameters
+    LogMessage("Setting charge parameters: %.2f V, %.2f A", 
+               ctx->params.chargeVoltage, ctx->params.chargeCurrent);
+    
     result = PSB_SetVoltageQueued(ctx->params.chargeVoltage);
     if (result != PSB_SUCCESS) {
         LogError("Failed to set charge voltage: %s", PSB_GetErrorString(result));
@@ -1281,17 +1320,47 @@ static int RunChargingPhase(SOCEISTestContext *ctx) {
         fclose(ctx->currentLogFile);
         return result;
     }
+	
+	result = PSB_SetPowerQueued(SOCEIS_MAX_POWER);
+    if (result != PSB_SUCCESS) {
+        LogError("Failed to set power value: %s", PSB_GetErrorString(result));
+        fclose(ctx->currentLogFile);
+        return result;
+    }
     
     // Enable PSB output
-    PSB_SetOutputEnableQueued(1);
-	
+    LogMessage("Enabling PSB output...");
+    result = PSB_SetOutputEnableQueued(1);
     if (result != PSB_SUCCESS) {
         LogError("Failed to enable output: %s", PSB_GetErrorString(result));
         fclose(ctx->currentLogFile);
         return result;
     }
     
-    LogMessage("Charging started");
+    // Wait for PSB to establish output before checking current
+    LogMessage("Waiting for PSB output to stabilize...");
+    Delay(2.0);  // Give PSB time to establish output
+    
+    // Verify PSB is actually outputting
+    PSB_Status initialStatus;
+    result = PSB_GetStatusQueued(&initialStatus);
+    if (result != PSB_SUCCESS) {
+        LogError("Failed to read initial PSB status: %s", PSB_GetErrorString(result));
+        fclose(ctx->currentLogFile);
+        return result;
+    }
+    
+    LogMessage("Initial charging status - Voltage: %.3f V, Current: %.3f A, Power: %.3f W",
+               initialStatus.voltage, initialStatus.current, initialStatus.power);
+    
+    // Check if current is actually flowing
+    if (fabs(initialStatus.current) < 0.01) {  // Less than 10mA suggests no connection
+        LogWarning("Warning: Very low current detected (%.3f A) - possible connection issue", 
+                   initialStatus.current);
+        LogWarning("Continuing anyway, but check relay connections...");
+    }
+    
+    LogMessage("Charging started - monitoring current threshold: %.3f A", ctx->params.currentThreshold);
     
     // Initialize timing and SOC tracking
     ctx->phaseStartTime = Timer();
@@ -1306,6 +1375,10 @@ static int RunChargingPhase(SOCEISTestContext *ctx) {
     ctx->state = SOCEIS_STATE_CHARGING;
     SetCtrlVal(ctx->mainPanelHandle, PANEL_STR_PSB_STATUS, "Charging battery...");
     
+    // Track consecutive low current readings to avoid premature termination
+    int lowCurrentReadings = 0;
+    const int MIN_LOW_CURRENT_READINGS = 5;  // Require 5 consecutive readings below threshold
+    
     // Main charging loop - continue until current threshold
     while (1) {
         // Check for cancellation
@@ -1319,8 +1392,8 @@ static int RunChargingPhase(SOCEISTestContext *ctx) {
         
         // Get current status
         PSB_Status status;
-		result = PSB_GetStatusQueued(&status);
-		
+        result = PSB_GetStatusQueued(&status);
+        
         if (result != PSB_SUCCESS) {
             LogError("Failed to read status: %s", PSB_GetErrorString(result));
             break;
@@ -1338,6 +1411,12 @@ static int RunChargingPhase(SOCEISTestContext *ctx) {
             
             // Update SOC display
             SetCtrlVal(ctx->tabPanelHandle, ctx->socControl, ctx->currentSOC);
+            
+            // Periodic status logging
+            if ((int)elapsedTime % 60 == 0 && elapsedTime > 0) {  // Every minute
+                LogMessage("Charging progress - Time: %.1f min, SOC: %.1f%%, Current: %.3f A",
+                          elapsedTime / 60.0, ctx->currentSOC, status.current);
+            }
         }
         
         // Update graph if needed
@@ -1389,48 +1468,74 @@ static int RunChargingPhase(SOCEISTestContext *ctx) {
             ctx->state = SOCEIS_STATE_CHARGING;
             SetCtrlVal(ctx->mainPanelHandle, PANEL_STR_PSB_STATUS, "Charging battery...");
             
+            LogMessage("Resuming charging after EIS measurement...");
             result = SwitchToPSB(ctx);
             if (result != SUCCESS) break;
             
-            // Re-enable PSB output
+            // Re-enable PSB output and wait for stabilization
             PSB_SetOutputEnableQueued(1);
+            Delay(1.0);  // Give PSB time to re-establish output
+            
+            // Reset low current counter after resuming
+            lowCurrentReadings = 0;
         }
         
-        // Check current threshold for charge completion
+        // Check current threshold for charge completion with debouncing
         if (fabs(status.current) < ctx->params.currentThreshold) {
-            LogMessage("Charging completed - current below threshold (%.3f A < %.3f A)",
-                      fabs(status.current), ctx->params.currentThreshold);
-            LogMessage("Final SOC: %.1f%%", ctx->currentSOC);
+            lowCurrentReadings++;
+            LogDebug("Low current reading %d/%d: %.3f A < %.3f A", 
+                    lowCurrentReadings, MIN_LOW_CURRENT_READINGS,
+                    fabs(status.current), ctx->params.currentThreshold);
             
-            // Perform final measurement at actual final SOC
-            PSB_SetOutputEnableQueued(0);
-            
-            // Add final measurement if not already at a target
-            int needFinalMeasurement = 1;
-            if (nextTargetIndex > 0 && nextTargetIndex <= ctx->numTargetSOCs) {
-                double lastMeasuredSOC = ctx->measurements[ctx->measurementCount - 1].actualSOC;
-                if (fabs(ctx->currentSOC - lastMeasuredSOC) < 1.0) {
-                    needFinalMeasurement = 0;  // Already have a measurement very close
-                }
-            }
-            
-            if (needFinalMeasurement) {
-                LogMessage("Taking final EIS measurement at %.1f%% SOC", ctx->currentSOC);
-                ctx->state = SOCEIS_STATE_MEASURING_EIS;
+            if (lowCurrentReadings >= MIN_LOW_CURRENT_READINGS) {
+                LogMessage("Charging completed - current below threshold for %d consecutive readings", 
+                          MIN_LOW_CURRENT_READINGS);
+                LogMessage("Final current: %.3f A < %.3f A", fabs(status.current), ctx->params.currentThreshold);
+                LogMessage("Final SOC: %.1f%%", ctx->currentSOC);
                 
-                // Add this as a dynamic target
-                result = AddDynamicTargetSOC(ctx, ctx->currentSOC);
-                if (result == SUCCESS) {
-                    result = PerformEISMeasurement(ctx, ctx->currentSOC);
+                // Perform final measurement at actual final SOC
+                PSB_SetOutputEnableQueued(0);
+                
+                // Add final measurement if not already at a target
+                int needFinalMeasurement = 1;
+                if (nextTargetIndex > 0 && nextTargetIndex <= ctx->numTargetSOCs) {
+                    double lastMeasuredSOC = ctx->measurements[ctx->measurementCount - 1].actualSOC;
+                    if (fabs(ctx->currentSOC - lastMeasuredSOC) < 1.0) {
+                        needFinalMeasurement = 0;  // Already have a measurement very close
+                    }
                 }
+                
+                if (needFinalMeasurement) {
+                    LogMessage("Taking final EIS measurement at %.1f%% SOC", ctx->currentSOC);
+                    ctx->state = SOCEIS_STATE_MEASURING_EIS;
+                    
+                    // Add this as a dynamic target
+                    result = AddDynamicTargetSOC(ctx, ctx->currentSOC);
+                    if (result == SUCCESS) {
+                        result = PerformEISMeasurement(ctx, ctx->currentSOC);
+                    }
+                }
+                
+                break;
             }
-            
+        } else {
+            // Reset counter if current is above threshold
+            if (lowCurrentReadings > 0) {
+                LogDebug("Current above threshold, resetting low current counter");
+                lowCurrentReadings = 0;
+            }
+        }
+        
+        // Safety check - if charging takes too long, abort
+        if (elapsedTime > SOCEIS_TIMEOUT_SEC) {
+            LogError("Charging timeout - aborting after %.1f hours", elapsedTime / 3600.0);
+            ctx->state = SOCEIS_STATE_ERROR;
             break;
         }
         
         // Process events and delay
         ProcessSystemEvents();
-        Delay(0.1);
+        Delay(0.5);  // Increased from 0.1s to reduce CPU usage and improve stability
     }
     
     // Disable output

@@ -33,21 +33,24 @@
 #define SOCEIS_OCV_RECORD_EVERY_DE    1.0    // mV threshold
 #define SOCEIS_OCV_RECORD_EVERY_DT    1.0    // seconds threshold
 #define SOCEIS_OCV_E_RANGE            KBIO_ERANGE_AUTO  // Auto range
+#define SOCEIS_OCV_TIMEOUT_MS         60000   // 1 minute
 
-// GEIS parameters (short test values)
-#define SOCEIS_GEIS_INITIAL_CURRENT   0.0    // vs OCV
-#define SOCEIS_GEIS_DURATION_S        1.0    // Step duration
-#define SOCEIS_GEIS_RECORD_EVERY_DT   0.1    // seconds
-#define SOCEIS_GEIS_RECORD_EVERY_DE   0.001  // V
-#define SOCEIS_GEIS_INITIAL_FREQ      100000.0  // 100 kHz
-#define SOCEIS_GEIS_FINAL_FREQ        10.0     // 10 Hz
+// GEIS parameters
+#define SOCEIS_GEIS_VS_INITIAL        true   // vs initial
+#define SOCEIS_GEIS_INITIAL_CURRENT   0.0
+#define SOCEIS_GEIS_DURATION_S        1.0    // Step duration 
+#define SOCEIS_GEIS_RECORD_EVERY_DT   0.0    // 0.000 seconds
+#define SOCEIS_GEIS_RECORD_EVERY_DE   0.01    // 0.000 V
+#define SOCEIS_GEIS_INITIAL_FREQ      10000.0  // 10.000 kHz
+#define SOCEIS_GEIS_FINAL_FREQ        0.1      // 100.000 mHz = 0.1 Hz
 #define SOCEIS_GEIS_SWEEP_LINEAR      false    // Logarithmic
-#define SOCEIS_GEIS_AMPLITUDE_I       0.01     // 10 mA
-#define SOCEIS_GEIS_FREQ_NUMBER       10       // Number of frequencies
-#define SOCEIS_GEIS_AVERAGE_N         1        // No averaging for speed
-#define SOCEIS_GEIS_CORRECTION        false    // No correction
-#define SOCEIS_GEIS_WAIT_FOR_STEADY   0.0      // No wait
-#define SOCEIS_GEIS_I_RANGE           KBIO_IRANGE_10mA  // 10mA range
+#define SOCEIS_GEIS_AMPLITUDE_I       0.5      // 500mA
+#define SOCEIS_GEIS_FREQ_NUMBER       31       // 5 decades * 6 points per decade + 1 final
+#define SOCEIS_GEIS_AVERAGE_N         2        // Average N = 2
+#define SOCEIS_GEIS_CORRECTION        false    // No drift correction
+#define SOCEIS_GEIS_WAIT_FOR_STEADY   0.1      // 0.10 period before each frequency
+#define SOCEIS_GEIS_I_RANGE           KBIO_IRANGE_1A  // 1A range
+#define SOCEIS_GEIS_TIMEOUT_MS        300000  // 5 minutes
 
 // Other Constants
 #define SOCEIS_VOLTAGE_MARGIN         0.1     // V - same as capacity test
@@ -55,6 +58,8 @@
 #define SOCEIS_RESULTS_FILE           "summary.txt"
 #define SOCEIS_DETAILS_FILE_PREFIX    "details_"
 #define SOCEIS_MAX_EIS_RETRY          1       // Retry failed measurements once
+#define SOCEIS_MAX_POWER              30      // 30 Watts
+#define SOCEIS_TIMEOUT_SEC            36000   // Experiment timeout in seconds
 
 /******************************************************************************
  * Type Definitions
