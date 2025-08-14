@@ -389,60 +389,93 @@ int BIO_StartSGEIS(int ID, uint8_t channel,
                   BIO_TechniqueContext **context);
 
 // ============================================================================
-// Error Codes (for reference)
+// Error Codes
 // ============================================================================
+
+// Success
 #define BIO_SUCCESS                          0
-#define BIO_ERR_NOINSTRUMENTCONNECTED       -1
-#define BIO_ERR_CONNECTIONINPROGRESS        -2
-#define BIO_ERR_CHANNELNOTPLUGGED           -3
-#define BIO_ERR_INVALIDPARAMETERS           -4
-#define BIO_ERR_FILENOTEXISTS               -5
-#define BIO_ERR_FUNCTIONFAILED              -6
-#define BIO_ERR_NOCHANNELSELECTED           -7
-#define BIO_ERR_INVALIDCONFIGURATION        -8
-#define BIO_ERR_ECLABFIRMWARE               -9
-#define BIO_ERR_LIBRARYNOTLOADED           -10
-#define BIO_ERR_USBLIBRARYNOTLOADED        -11
-#define BIO_ERR_FUNCTIONINPROGRESS         -12
-#define BIO_ERR_CHANNELALREADYUSED         -13
-#define BIO_ERR_DEVICENOTALLOWED           -14
-#define BIO_ERR_INVALIDUPDATEPARAMETERS    -15
 
-// Instrument errors (offset -100)
-#define BIO_ERR_INSTRUMENT_COMMFAILED      -101
-#define BIO_ERR_INSTRUMENT_TOOMANYDATA     -102
-#define BIO_ERR_INSTRUMENT_NOTPLUGGED      -103
-#define BIO_ERR_INSTRUMENT_INVALIDRESPONSE -104
-#define BIO_ERR_INSTRUMENT_INVALIDSIZE     -105
+// Raw Device Error Codes (returned directly by BioLogic device - DO NOT OFFSET)
+// These are the actual codes returned by the EClib.dll functions
+#define BIO_DEV_NOINSTRUMENTCONNECTED       -1
+#define BIO_DEV_CONNECTIONINPROGRESS        -2
+#define BIO_DEV_CHANNELNOTPLUGGED           -3
+#define BIO_DEV_INVALIDPARAMETERS           -4
+#define BIO_DEV_FILENOTEXISTS               -5
+#define BIO_DEV_FUNCTIONFAILED              -6
+#define BIO_DEV_NOCHANNELSELECTED           -7
+#define BIO_DEV_INVALIDCONFIGURATION        -8
+#define BIO_DEV_ECLABFIRMWARE               -9
+#define BIO_DEV_LIBRARYNOTLOADED           -10
+#define BIO_DEV_USBLIBRARYNOTLOADED        -11
+#define BIO_DEV_FUNCTIONINPROGRESS         -12
+#define BIO_DEV_CHANNELALREADYUSED         -13
+#define BIO_DEV_DEVICENOTALLOWED           -14
+#define BIO_DEV_INVALIDUPDATEPARAMETERS    -15
 
-// Communication errors (offset -200)
-#define BIO_ERR_COMM_FAILED                -200
-#define BIO_ERR_COMM_CONNECTIONFAILED      -201
-#define BIO_ERR_COMM_WAITINGRESPONSE       -202
-#define BIO_ERR_COMM_INVALIDADDRESS        -203
-#define BIO_ERR_COMM_ALLOCMEMORY           -204
-#define BIO_ERR_COMM_LOADFIRMWARE          -205
-#define BIO_ERR_COMM_INCOMPATIBLE          -206
-#define BIO_ERR_COMM_MAXCONNECTIONS        -207
+// Device instrument errors (offset -100)
+#define BIO_DEV_INSTRUMENT_COMMFAILED      -101
+#define BIO_DEV_INSTRUMENT_TOOMANYDATA     -102
+#define BIO_DEV_INSTRUMENT_NOTPLUGGED      -103
+#define BIO_DEV_INSTRUMENT_INVALIDRESPONSE -104
+#define BIO_DEV_INSTRUMENT_INVALIDSIZE     -105
 
-// Firmware errors (offset -300)
-#define BIO_ERR_FIRM_KERNELNOTFOUND        -300
-#define BIO_ERR_FIRM_KERNELREAD            -301
-#define BIO_ERR_FIRM_KERNELINVALID         -302
-#define BIO_ERR_FIRM_KERNELLOAD            -303
-#define BIO_ERR_FIRM_XLXNOTFOUND           -304
-#define BIO_ERR_FIRM_XLXREAD               -305
-#define BIO_ERR_FIRM_XLXINVALID            -306
-#define BIO_ERR_FIRM_XLXLOAD               -307
-#define BIO_ERR_FIRM_FIRMWARENOTLOADED     -308
-#define BIO_ERR_FIRM_INCOMPATIBLE          -309
+// Device communication errors (offset -200)
+#define BIO_DEV_COMM_FAILED                -200
+#define BIO_DEV_COMM_CONNECTIONFAILED      -201
+#define BIO_DEV_COMM_WAITINGRESPONSE       -202
+#define BIO_DEV_COMM_INVALIDADDRESS        -203
+#define BIO_DEV_COMM_ALLOCMEMORY           -204
+#define BIO_DEV_COMM_LOADFIRMWARE          -205
+#define BIO_DEV_COMM_INCOMPATIBLE          -206
+#define BIO_DEV_COMM_MAXCONNECTIONS        -207
 
-// Technique errors (offset -400)
-#define BIO_ERR_TECH_ECCFILENOTFOUND       -400
-#define BIO_ERR_TECH_INCOMPATIBLE          -401
-#define BIO_ERR_TECH_ECCFILECORRUPTED      -402
-#define BIO_ERR_TECH_LOADTECHNIQUE         -403
-#define BIO_ERR_TECH_DATACORRUPTED         -404
-#define BIO_ERR_TECH_MEMFULL               -405
+// Device firmware errors (offset -300)
+#define BIO_DEV_FIRM_KERNELNOTFOUND        -300
+#define BIO_DEV_FIRM_KERNELREAD            -301
+#define BIO_DEV_FIRM_KERNELINVALID         -302
+#define BIO_DEV_FIRM_KERNELLOAD            -303
+#define BIO_DEV_FIRM_XLXNOTFOUND           -304
+#define BIO_DEV_FIRM_XLXREAD               -305
+#define BIO_DEV_FIRM_XLXINVALID            -306
+#define BIO_DEV_FIRM_XLXLOAD               -307
+#define BIO_DEV_FIRM_FIRMWARENOTLOADED     -308
+#define BIO_DEV_FIRM_INCOMPATIBLE          -309
+
+// Device technique errors (offset -400)
+#define BIO_DEV_TECH_ECCFILENOTFOUND       -400
+#define BIO_DEV_TECH_INCOMPATIBLE          -401
+#define BIO_DEV_TECH_ECCFILECORRUPTED      -402
+#define BIO_DEV_TECH_LOADTECHNIQUE         -403
+#define BIO_DEV_TECH_DATACORRUPTED         -404
+#define BIO_DEV_TECH_MEMFULL               -405
+
+// Program-Specific Error Codes (using ERR_BASE_BIOLOGIC offset from common.h)
+// Data retrieval errors
+#define BIO_ERR_NO_DATA_RETRIEVED          (ERR_BASE_BIOLOGIC - 1)
+#define BIO_ERR_NO_MEMORY_FILLED           (ERR_BASE_BIOLOGIC - 2)
+#define BIO_ERR_WRONG_PROCESS_INDEX        (ERR_BASE_BIOLOGIC - 3)
+#define BIO_ERR_DATA_COPY_FAILED           (ERR_BASE_BIOLOGIC - 4)
+#define BIO_ERR_INVALID_DATA_BUFFER        (ERR_BASE_BIOLOGIC - 5)
+
+// Technique state machine errors
+#define BIO_ERR_TECHNIQUE_NOT_COMPLETE     (ERR_BASE_BIOLOGIC - 10)
+#define BIO_ERR_TECHNIQUE_TIMEOUT          (ERR_BASE_BIOLOGIC - 11)
+#define BIO_ERR_TECHNIQUE_CANCELLED        (ERR_BASE_BIOLOGIC - 12)
+#define BIO_ERR_INVALID_TECHNIQUE_STATE    (ERR_BASE_BIOLOGIC - 13)
+
+// Data processing errors
+#define BIO_ERR_DATA_CONVERSION_FAILED     (ERR_BASE_BIOLOGIC - 20)
+#define BIO_ERR_UNKNOWN_TECHNIQUE_ID       (ERR_BASE_BIOLOGIC - 21)
+#define BIO_ERR_INVALID_VARIABLE_COUNT     (ERR_BASE_BIOLOGIC - 22)
+#define BIO_ERR_MEMORY_ALLOCATION_FAILED   (ERR_BASE_BIOLOGIC - 23)
+
+// Context and parameter errors
+#define BIO_ERR_INVALID_CONTEXT            (ERR_BASE_BIOLOGIC - 30)
+#define BIO_ERR_CONTEXT_NOT_INITIALIZED    (ERR_BASE_BIOLOGIC - 31)
+#define BIO_ERR_INVALID_CHANNEL_TYPE       (ERR_BASE_BIOLOGIC - 32)
+
+// Partial data (special case)
+#define BIO_ERR_PARTIAL_DATA               (ERR_BASE_BIOLOGIC - 50)
 
 #endif // BIOLOGIC_H

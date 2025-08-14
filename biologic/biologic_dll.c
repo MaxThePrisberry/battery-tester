@@ -481,62 +481,108 @@ bool IsBIOFindInitialized(void) {
 
 // Error code to string conversion
 const char* BIO_GetErrorString(int errorCode) {
+    // Handle success
+    if (errorCode == BIO_SUCCESS) return "Success";
+    
+    // Handle program-specific errors (ERR_BASE_BIOLOGIC offset)
+    if (errorCode <= ERR_BASE_BIOLOGIC && errorCode > ERR_BASE_BIOLOGIC - 1000) {
+        switch(errorCode) {
+            // Data retrieval errors
+            case BIO_ERR_NO_DATA_RETRIEVED: return "No data retrieved from technique";
+            case BIO_ERR_NO_MEMORY_FILLED: return "Device memory contains no data";
+            case BIO_ERR_WRONG_PROCESS_INDEX: return "Technique produced unexpected process data";
+            case BIO_ERR_DATA_COPY_FAILED: return "Failed to copy data from device buffer";
+            case BIO_ERR_INVALID_DATA_BUFFER: return "Invalid or empty data buffer";
+            
+            // Technique state machine errors
+            case BIO_ERR_TECHNIQUE_NOT_COMPLETE: return "Technique has not completed";
+            case BIO_ERR_TECHNIQUE_TIMEOUT: return "Technique execution timed out";
+            case BIO_ERR_TECHNIQUE_CANCELLED: return "Technique was cancelled";
+            case BIO_ERR_INVALID_TECHNIQUE_STATE: return "Technique is in invalid state";
+            
+            // Data processing errors
+            case BIO_ERR_DATA_CONVERSION_FAILED: return "Failed to convert raw data";
+            case BIO_ERR_UNKNOWN_TECHNIQUE_ID: return "Unknown technique ID in data";
+            case BIO_ERR_INVALID_VARIABLE_COUNT: return "Unexpected number of variables in data";
+            case BIO_ERR_MEMORY_ALLOCATION_FAILED: return "Memory allocation failed during data processing";
+            
+            // Context and parameter errors
+            case BIO_ERR_INVALID_CONTEXT: return "Invalid technique context";
+            case BIO_ERR_CONTEXT_NOT_INITIALIZED: return "Technique context not properly initialized";
+            case BIO_ERR_INVALID_CHANNEL_TYPE: return "Invalid channel type for data conversion";
+            
+            // Partial data
+            case BIO_ERR_PARTIAL_DATA: return "Partial data retrieved (technique stopped with error)";
+            
+            default: {
+                static char unknownError[64];
+                sprintf(unknownError, "Unknown BioLogic program error (code: %d)", errorCode);
+                return unknownError;
+            }
+        }
+    }
+    
+    // Handle raw device error codes (negative values without offset)
     switch(errorCode) {
-        case 0: return "Success";
-        case -1: return "No instrument connected";
-        case -2: return "Connection in progress";
-        case -3: return "Selected channel(s) unplugged";
-        case -4: return "Invalid function parameters";
-        case -5: return "Selected file does not exist";
-        case -6: return "Function failed";
-        case -7: return "No channel selected";
-        case -8: return "Invalid instrument configuration";
-        case -9: return "EC-Lab firmware loaded on the instrument";
-        case -10: return "Library not correctly loaded in memory";
-        case -11: return "USB library not correctly loaded in memory";
-        case -12: return "Function of the library already in progress";
-        case -13: return "Selected channel(s) already used";
-        case -14: return "Device not allowed";
-        case -15: return "Invalid update function parameters";
+        // Basic device errors
+        case BIO_DEV_NOINSTRUMENTCONNECTED: return "No instrument connected";
+        case BIO_DEV_CONNECTIONINPROGRESS: return "Connection in progress";
+        case BIO_DEV_CHANNELNOTPLUGGED: return "Selected channel(s) unplugged";
+        case BIO_DEV_INVALIDPARAMETERS: return "Invalid function parameters";
+        case BIO_DEV_FILENOTEXISTS: return "Selected file does not exist";
+        case BIO_DEV_FUNCTIONFAILED: return "Device function failed";
+        case BIO_DEV_NOCHANNELSELECTED: return "No channel selected";
+        case BIO_DEV_INVALIDCONFIGURATION: return "Invalid instrument configuration";
+        case BIO_DEV_ECLABFIRMWARE: return "EC-Lab firmware loaded on the instrument";
+        case BIO_DEV_LIBRARYNOTLOADED: return "Library not correctly loaded in memory";
+        case BIO_DEV_USBLIBRARYNOTLOADED: return "USB library not correctly loaded in memory";
+        case BIO_DEV_FUNCTIONINPROGRESS: return "Function of the library already in progress";
+        case BIO_DEV_CHANNELALREADYUSED: return "Selected channel(s) already used";
+        case BIO_DEV_DEVICENOTALLOWED: return "Device not allowed";
+        case BIO_DEV_INVALIDUPDATEPARAMETERS: return "Invalid update function parameters";
         
-        // Instrument errors
-        case -101: return "Internal instrument communication failed";
-        case -102: return "Too many data to transfer from the instrument";
-        case -103: return "Selected channel(s) unplugged (device error)";
-        case -104: return "Instrument response error";
-        case -105: return "Invalid message size";
+        // Device instrument errors
+        case BIO_DEV_INSTRUMENT_COMMFAILED: return "Internal instrument communication failed";
+        case BIO_DEV_INSTRUMENT_TOOMANYDATA: return "Too many data to transfer from the instrument";
+        case BIO_DEV_INSTRUMENT_NOTPLUGGED: return "Selected channel(s) unplugged (device error)";
+        case BIO_DEV_INSTRUMENT_INVALIDRESPONSE: return "Instrument response error";
+        case BIO_DEV_INSTRUMENT_INVALIDSIZE: return "Invalid message size";
         
-        // Communication errors
-        case -200: return "Communication failed with the instrument";
-        case -201: return "Cannot establish connection with the instrument";
-        case -202: return "Waiting for the instrument response";
-        case -203: return "Invalid IP address";
-        case -204: return "Cannot allocate memory in the instrument";
-        case -205: return "Cannot load firmware into selected channel(s)";
-        case -206: return "Communication firmware not compatible with the library";
-        case -207: return "Maximum number of allowed connections reached";
+        // Device communication errors
+        case BIO_DEV_COMM_FAILED: return "Communication failed with the instrument";
+        case BIO_DEV_COMM_CONNECTIONFAILED: return "Cannot establish connection with the instrument";
+        case BIO_DEV_COMM_WAITINGRESPONSE: return "Waiting for the instrument response";
+        case BIO_DEV_COMM_INVALIDADDRESS: return "Invalid IP address";
+        case BIO_DEV_COMM_ALLOCMEMORY: return "Cannot allocate memory in the instrument";
+        case BIO_DEV_COMM_LOADFIRMWARE: return "Cannot load firmware into selected channel(s)";
+        case BIO_DEV_COMM_INCOMPATIBLE: return "Communication firmware not compatible with the library";
+        case BIO_DEV_COMM_MAXCONNECTIONS: return "Maximum number of allowed connections reached";
         
-        // Firmware errors
-        case -300: return "Cannot find kernel.bin file";
-        case -301: return "Cannot read kernel.bin file";
-        case -302: return "Invalid kernel.bin file";
-        case -303: return "Cannot load kernel.bin on the selected channel(s)";
-        case -304: return "Cannot find x100_01.txt file";
-        case -305: return "Cannot read x100_01.txt file";
-        case -306: return "Invalid x100_01.txt file";
-        case -307: return "Cannot load x100_01.txt file on the selected channel(s)";
-        case -308: return "No firmware loaded on the selected channel(s)";
-        case -309: return "Loaded firmware not compatible with the library";
+        // Device firmware errors
+        case BIO_DEV_FIRM_KERNELNOTFOUND: return "Cannot find kernel.bin file";
+        case BIO_DEV_FIRM_KERNELREAD: return "Cannot read kernel.bin file";
+        case BIO_DEV_FIRM_KERNELINVALID: return "Invalid kernel.bin file";
+        case BIO_DEV_FIRM_KERNELLOAD: return "Cannot load kernel.bin on the selected channel(s)";
+        case BIO_DEV_FIRM_XLXNOTFOUND: return "Cannot find x100_01.txt file";
+        case BIO_DEV_FIRM_XLXREAD: return "Cannot read x100_01.txt file";
+        case BIO_DEV_FIRM_XLXINVALID: return "Invalid x100_01.txt file";
+        case BIO_DEV_FIRM_XLXLOAD: return "Cannot load x100_01.txt file on the selected channel(s)";
+        case BIO_DEV_FIRM_FIRMWARENOTLOADED: return "No firmware loaded on the selected channel(s)";
+        case BIO_DEV_FIRM_INCOMPATIBLE: return "Loaded firmware not compatible with the library";
         
-        // Technique errors
-        case -400: return "Cannot find the selected ECC file";
-        case -401: return "ECC file not compatible with the channel firmware";
-        case -402: return "ECC file corrupted";
-        case -403: return "Cannot load the ECC file";
-        case -404: return "Data returned by the instrument are corrupted";
-        case -405: return "Cannot load techniques: full memory";
+        // Device technique errors
+        case BIO_DEV_TECH_ECCFILENOTFOUND: return "Cannot find the selected ECC file";
+        case BIO_DEV_TECH_INCOMPATIBLE: return "ECC file not compatible with the channel firmware";
+        case BIO_DEV_TECH_ECCFILECORRUPTED: return "ECC file corrupted";
+        case BIO_DEV_TECH_LOADTECHNIQUE: return "Cannot load the ECC file";
+        case BIO_DEV_TECH_DATACORRUPTED: return "Data returned by the instrument are corrupted";
+        case BIO_DEV_TECH_MEMFULL: return "Cannot load techniques: full memory";
         
-        default: return "Unknown Biologic error";
+        default: {
+            static char unknownError[64];
+            sprintf(unknownError, "Unknown BioLogic device error (code: %d)", errorCode);
+            return unknownError;
+        }
     }
 }
 
@@ -548,26 +594,26 @@ const char* BIO_GetErrorString(int errorCode) {
 int BIO_Connect(const char* address, uint8_t timeout, int* pID, TDeviceInfos_t* pInfos) {
     int result = BIO_EnsureInitialized();
     if (result != SUCCESS) return result;
-    if (g_BL_Connect == NULL) return BIO_ERR_LIBRARYNOTLOADED;
+    if (g_BL_Connect == NULL) return BIO_DEV_LIBRARYNOTLOADED;
     return g_BL_Connect(address, timeout, pID, pInfos);
 }
 
 int BIO_Disconnect(int ID) {
-    if (!IsBioLogicInitialized() || g_BL_Disconnect == NULL) return BIO_ERR_LIBRARYNOTLOADED;
+    if (!IsBioLogicInitialized() || g_BL_Disconnect == NULL) return BIO_DEV_LIBRARYNOTLOADED;
     return g_BL_Disconnect(ID);
 }
 
 int BIO_TestConnection(int ID) {
     int result = BIO_EnsureInitialized();
     if (result != SUCCESS) return result;
-    if (g_BL_TestConnection == NULL) return BIO_ERR_LIBRARYNOTLOADED;
+    if (g_BL_TestConnection == NULL) return BIO_DEV_LIBRARYNOTLOADED;
     return g_BL_TestConnection(ID);
 }
 
 int BIO_TestCommSpeed(int ID, uint8_t channel, int* spd_rcvt, int* spd_kernel) {
     int result = BIO_EnsureInitialized();
     if (result != SUCCESS) return result;
-    if (g_BL_TestCommSpeed == NULL) return BIO_ERR_LIBRARYNOTLOADED;
+    if (g_BL_TestCommSpeed == NULL) return BIO_DEV_LIBRARYNOTLOADED;
     return g_BL_TestCommSpeed(ID, channel, spd_rcvt, spd_kernel);
 }
 
@@ -575,7 +621,7 @@ int BIO_TestCommSpeed(int ID, uint8_t channel, int* spd_rcvt, int* spd_kernel) {
 int BIO_GetLibVersion(char* pVersion, unsigned int* psize) {
     int result = BIO_EnsureInitialized();
     if (result != SUCCESS) return result;
-    if (g_BL_GetLibVersion == NULL) return BIO_ERR_LIBRARYNOTLOADED;
+    if (g_BL_GetLibVersion == NULL) return BIO_DEV_LIBRARYNOTLOADED;
     return g_BL_GetLibVersion(pVersion, psize);
 }
 
@@ -588,7 +634,7 @@ unsigned int BIO_GetVolumeSerialNumber(void) {
 int BIO_GetErrorMsg(int errorcode, char* pmsg, unsigned int* psize) {
     int result = BIO_EnsureInitialized();
     if (result != SUCCESS) return result;
-    if (g_BL_GetErrorMsg == NULL) return BIO_ERR_LIBRARYNOTLOADED;
+    if (g_BL_GetErrorMsg == NULL) return BIO_DEV_LIBRARYNOTLOADED;
     return g_BL_GetErrorMsg(errorcode, pmsg, psize);
 }
 
@@ -604,14 +650,14 @@ int BIO_LoadFirmware(int ID, uint8_t* pChannels, int* pResults, uint8_t Length,
                     bool ShowGauge, bool ForceReload, const char* BinFile, const char* XlxFile) {
     int result = BIO_EnsureInitialized();
     if (result != SUCCESS) return result;
-    if (g_BL_LoadFirmware == NULL) return BIO_ERR_LIBRARYNOTLOADED;
+    if (g_BL_LoadFirmware == NULL) return BIO_DEV_LIBRARYNOTLOADED;
     return g_BL_LoadFirmware(ID, pChannels, pResults, Length, ShowGauge, ForceReload, BinFile, XlxFile);
 }
 
 int BIO_LoadFlash(int ID, const char* pfname, bool ShowGauge) {
     int result = BIO_EnsureInitialized();
     if (result != SUCCESS) return result;
-    if (g_BL_LoadFlash == NULL) return BIO_ERR_LIBRARYNOTLOADED;
+    if (g_BL_LoadFlash == NULL) return BIO_DEV_LIBRARYNOTLOADED;
     return g_BL_LoadFlash(ID, pfname, ShowGauge);
 }
 
@@ -625,42 +671,42 @@ bool BIO_IsChannelPlugged(int ID, uint8_t ch) {
 int BIO_GetChannelsPlugged(int ID, uint8_t* pChPlugged, uint8_t Size) {
     int result = BIO_EnsureInitialized();
     if (result != SUCCESS) return result;
-    if (g_BL_GetChannelsPlugged == NULL) return BIO_ERR_LIBRARYNOTLOADED;
+    if (g_BL_GetChannelsPlugged == NULL) return BIO_DEV_LIBRARYNOTLOADED;
     return g_BL_GetChannelsPlugged(ID, pChPlugged, Size);
 }
 
 int BIO_GetChannelInfos(int ID, uint8_t ch, TChannelInfos_t* pInfos) {
     int result = BIO_EnsureInitialized();
     if (result != SUCCESS) return result;
-    if (g_BL_GetChannelInfos == NULL) return BIO_ERR_LIBRARYNOTLOADED;
+    if (g_BL_GetChannelInfos == NULL) return BIO_DEV_LIBRARYNOTLOADED;
     return g_BL_GetChannelInfos(ID, ch, pInfos);
 }
 
 int BIO_GetMessage(int ID, uint8_t ch, char* msg, unsigned int* size) {
     int result = BIO_EnsureInitialized();
     if (result != SUCCESS) return result;
-    if (g_BL_GetMessage == NULL) return BIO_ERR_LIBRARYNOTLOADED;
+    if (g_BL_GetMessage == NULL) return BIO_DEV_LIBRARYNOTLOADED;
     return g_BL_GetMessage(ID, ch, msg, size);
 }
 
 int BIO_GetHardConf(int ID, uint8_t ch, THardwareConf_t* pHardConf) {
     int result = BIO_EnsureInitialized();
     if (result != SUCCESS) return result;
-    if (g_BL_GetHardConf == NULL) return BIO_ERR_LIBRARYNOTLOADED;
+    if (g_BL_GetHardConf == NULL) return BIO_DEV_LIBRARYNOTLOADED;
     return g_BL_GetHardConf(ID, ch, pHardConf);
 }
 
 int BIO_SetHardConf(int ID, uint8_t ch, THardwareConf_t HardConf) {
     int result = BIO_EnsureInitialized();
     if (result != SUCCESS) return result;
-    if (g_BL_SetHardConf == NULL) return BIO_ERR_LIBRARYNOTLOADED;
+    if (g_BL_SetHardConf == NULL) return BIO_DEV_LIBRARYNOTLOADED;
     return g_BL_SetHardConf(ID, ch, HardConf);
 }
 
 int BIO_GetChannelBoardType(int ID, uint8_t Channel, uint32_t* pChannelType) {
     int result = BIO_EnsureInitialized();
     if (result != SUCCESS) return result;
-    if (g_BL_GetChannelBoardType == NULL) return BIO_ERR_LIBRARYNOTLOADED;
+    if (g_BL_GetChannelBoardType == NULL) return BIO_DEV_LIBRARYNOTLOADED;
     return g_BL_GetChannelBoardType(ID, Channel, pChannelType);
 }
 
@@ -674,14 +720,14 @@ bool BIO_IsModulePlugged(int ID, uint8_t module) {
 int BIO_GetModulesPlugged(int ID, uint8_t* pModPlugged, uint8_t Size) {
     int result = BIO_EnsureInitialized();
     if (result != SUCCESS) return result;
-    if (g_BL_GetModulesPlugged == NULL) return BIO_ERR_LIBRARYNOTLOADED;
+    if (g_BL_GetModulesPlugged == NULL) return BIO_DEV_LIBRARYNOTLOADED;
     return g_BL_GetModulesPlugged(ID, pModPlugged, Size);
 }
 
 int BIO_GetModuleInfos(int ID, uint8_t module, void* pInfos) {
     int result = BIO_EnsureInitialized();
     if (result != SUCCESS) return result;
-    if (g_BL_GetModuleInfos == NULL) return BIO_ERR_LIBRARYNOTLOADED;
+    if (g_BL_GetModuleInfos == NULL) return BIO_DEV_LIBRARYNOTLOADED;
     return g_BL_GetModuleInfos(ID, module, pInfos);
 }
 
@@ -690,49 +736,49 @@ int BIO_LoadTechnique(int ID, uint8_t channel, const char* pFName, TEccParams_t 
                      bool FirstTechnique, bool LastTechnique, bool DisplayParams) {
     int result = BIO_EnsureInitialized();
     if (result != SUCCESS) return result;
-    if (g_BL_LoadTechnique == NULL) return BIO_ERR_LIBRARYNOTLOADED;
+    if (g_BL_LoadTechnique == NULL) return BIO_DEV_LIBRARYNOTLOADED;
     return g_BL_LoadTechnique(ID, channel, pFName, Params, FirstTechnique, LastTechnique, DisplayParams);
 }
 
 int BIO_DefineBoolParameter(const char* lbl, bool value, int index, TEccParam_t* pParam) {
     int result = BIO_EnsureInitialized();
     if (result != SUCCESS) return result;
-    if (g_BL_DefineBoolParameter == NULL) return BIO_ERR_LIBRARYNOTLOADED;
+    if (g_BL_DefineBoolParameter == NULL) return BIO_DEV_LIBRARYNOTLOADED;
     return g_BL_DefineBoolParameter(lbl, value, index, pParam);
 }
 
 int BIO_DefineSglParameter(const char* lbl, float value, int index, TEccParam_t* pParam) {
     int result = BIO_EnsureInitialized();
     if (result != SUCCESS) return result;
-    if (g_BL_DefineSglParameter == NULL) return BIO_ERR_LIBRARYNOTLOADED;
+    if (g_BL_DefineSglParameter == NULL) return BIO_DEV_LIBRARYNOTLOADED;
     return g_BL_DefineSglParameter(lbl, value, index, pParam);
 }
 
 int BIO_DefineIntParameter(const char* lbl, int value, int index, TEccParam_t* pParam) {
     int result = BIO_EnsureInitialized();
     if (result != SUCCESS) return result;
-    if (g_BL_DefineIntParameter == NULL) return BIO_ERR_LIBRARYNOTLOADED;
+    if (g_BL_DefineIntParameter == NULL) return BIO_DEV_LIBRARYNOTLOADED;
     return g_BL_DefineIntParameter(lbl, value, index, pParam);
 }
 
 int BIO_UpdateParameters(int ID, uint8_t channel, int TechIndx, TEccParams_t Params, const char* EccFileName) {
     int result = BIO_EnsureInitialized();
     if (result != SUCCESS) return result;
-    if (g_BL_UpdateParameters == NULL) return BIO_ERR_LIBRARYNOTLOADED;
+    if (g_BL_UpdateParameters == NULL) return BIO_DEV_LIBRARYNOTLOADED;
     return g_BL_UpdateParameters(ID, channel, TechIndx, Params, EccFileName);
 }
 
 int BIO_GetTechniqueInfos(int ID, uint8_t channel, int TechIndx, void* pInfos) {
     int result = BIO_EnsureInitialized();
     if (result != SUCCESS) return result;
-    if (g_BL_GetTechniqueInfos == NULL) return BIO_ERR_LIBRARYNOTLOADED;
+    if (g_BL_GetTechniqueInfos == NULL) return BIO_DEV_LIBRARYNOTLOADED;
     return g_BL_GetTechniqueInfos(ID, channel, TechIndx, pInfos);
 }
 
 int BIO_GetParamInfos(int ID, uint8_t channel, int TechIndx, int ParamIndx, void* pInfos) {
     int result = BIO_EnsureInitialized();
     if (result != SUCCESS) return result;
-    if (g_BL_GetParamInfos == NULL) return BIO_ERR_LIBRARYNOTLOADED;
+    if (g_BL_GetParamInfos == NULL) return BIO_DEV_LIBRARYNOTLOADED;
     return g_BL_GetParamInfos(ID, channel, TechIndx, ParamIndx, pInfos);
 }
 
@@ -740,28 +786,28 @@ int BIO_GetParamInfos(int ID, uint8_t channel, int TechIndx, int ParamIndx, void
 int BIO_StartChannel(int ID, uint8_t channel) {
     int result = BIO_EnsureInitialized();
     if (result != SUCCESS) return result;
-    if (g_BL_StartChannel == NULL) return BIO_ERR_LIBRARYNOTLOADED;
+    if (g_BL_StartChannel == NULL) return BIO_DEV_LIBRARYNOTLOADED;
     return g_BL_StartChannel(ID, channel);
 }
 
 int BIO_StartChannels(int ID, uint8_t* pChannels, int* pResults, uint8_t length) {
     int result = BIO_EnsureInitialized();
     if (result != SUCCESS) return result;
-    if (g_BL_StartChannels == NULL) return BIO_ERR_LIBRARYNOTLOADED;
+    if (g_BL_StartChannels == NULL) return BIO_DEV_LIBRARYNOTLOADED;
     return g_BL_StartChannels(ID, pChannels, pResults, length);
 }
 
 int BIO_StopChannel(int ID, uint8_t channel) {
     int result = BIO_EnsureInitialized();
     if (result != SUCCESS) return result;
-    if (g_BL_StopChannel == NULL) return BIO_ERR_LIBRARYNOTLOADED;
+    if (g_BL_StopChannel == NULL) return BIO_DEV_LIBRARYNOTLOADED;
     return g_BL_StopChannel(ID, channel);
 }
 
 int BIO_StopChannels(int ID, uint8_t* pChannels, int* pResults, uint8_t length) {
     int result = BIO_EnsureInitialized();
     if (result != SUCCESS) return result;
-    if (g_BL_StopChannels == NULL) return BIO_ERR_LIBRARYNOTLOADED;
+    if (g_BL_StopChannels == NULL) return BIO_DEV_LIBRARYNOTLOADED;
     return g_BL_StopChannels(ID, pChannels, pResults, length);
 }
 
@@ -769,42 +815,42 @@ int BIO_StopChannels(int ID, uint8_t* pChannels, int* pResults, uint8_t length) 
 int BIO_GetCurrentValues(int ID, uint8_t channel, TCurrentValues_t* pValues) {
     int result = BIO_EnsureInitialized();
     if (result != SUCCESS) return result;
-    if (g_BL_GetCurrentValues == NULL) return BIO_ERR_LIBRARYNOTLOADED;
+    if (g_BL_GetCurrentValues == NULL) return BIO_DEV_LIBRARYNOTLOADED;
     return g_BL_GetCurrentValues(ID, channel, pValues);
 }
 
 int BIO_GetData(int ID, uint8_t channel, TDataBuffer_t* pBuf, TDataInfos_t* pInfos, TCurrentValues_t* pValues) {
     int result = BIO_EnsureInitialized();
     if (result != SUCCESS) return result;
-    if (g_BL_GetData == NULL) return BIO_ERR_LIBRARYNOTLOADED;
+    if (g_BL_GetData == NULL) return BIO_DEV_LIBRARYNOTLOADED;
     return g_BL_GetData(ID, channel, pBuf, pInfos, pValues);
 }
 
 int BIO_GetFCTData(int ID, uint8_t channel, TDataBuffer_t* pBuf, TDataInfos_t* pInfos, TCurrentValues_t* pValues) {
     int result = BIO_EnsureInitialized();
     if (result != SUCCESS) return result;
-    if (g_BL_GetFCTData == NULL) return BIO_ERR_LIBRARYNOTLOADED;
+    if (g_BL_GetFCTData == NULL) return BIO_DEV_LIBRARYNOTLOADED;
     return g_BL_GetFCTData(ID, channel, pBuf, pInfos, pValues);
 }
 
 int BIO_ConvertNumericIntoSingle(unsigned int num, float* psgl) {
     int result = BIO_EnsureInitialized();
     if (result != SUCCESS) return result;
-    if (g_BL_ConvertNumericIntoSingle == NULL) return BIO_ERR_LIBRARYNOTLOADED;
+    if (g_BL_ConvertNumericIntoSingle == NULL) return BIO_DEV_LIBRARYNOTLOADED;
     return g_BL_ConvertNumericIntoSingle(num, psgl);
 }
 
 int BIO_ConvertChannelNumericIntoSingle(uint32_t num, float* pRetFloat, uint32_t ChannelType) {
     int result = BIO_EnsureInitialized();
     if (result != SUCCESS) return result;
-    if (g_BL_ConvertChannelNumericIntoSingle == NULL) return BIO_ERR_LIBRARYNOTLOADED;
+    if (g_BL_ConvertChannelNumericIntoSingle == NULL) return BIO_DEV_LIBRARYNOTLOADED;
     return g_BL_ConvertChannelNumericIntoSingle(num, pRetFloat, ChannelType);
 }
 
 int BIO_ConvertTimeChannelNumericIntoSeconds(uint32_t* pnum, double* pRetTime, float Timebase, uint32_t ChannelType) {
     int result = BIO_EnsureInitialized();
     if (result != SUCCESS) return result;
-    if (g_BL_ConvertTimeChannelNumericIntoSeconds == NULL) return BIO_ERR_LIBRARYNOTLOADED;
+    if (g_BL_ConvertTimeChannelNumericIntoSeconds == NULL) return BIO_DEV_LIBRARYNOTLOADED;
     return g_BL_ConvertTimeChannelNumericIntoSeconds(pnum, pRetTime, Timebase, ChannelType);
 }
 
@@ -812,28 +858,28 @@ int BIO_ConvertTimeChannelNumericIntoSeconds(uint32_t* pnum, double* pRetTime, f
 int BIO_GetCurrentValuesBk(int ID, uint8_t channel, void* pValues) {
     int result = BIO_EnsureInitialized();
     if (result != SUCCESS) return result;
-    if (g_BL_GetCurrentValuesBk == NULL) return BIO_ERR_LIBRARYNOTLOADED;
+    if (g_BL_GetCurrentValuesBk == NULL) return BIO_DEV_LIBRARYNOTLOADED;
     return g_BL_GetCurrentValuesBk(ID, channel, pValues);
 }
 
 int BIO_GetDataBk(int ID, uint8_t channel, void* pBuf, void* pInfos, void* pValues) {
     int result = BIO_EnsureInitialized();
     if (result != SUCCESS) return result;
-    if (g_BL_GetDataBk == NULL) return BIO_ERR_LIBRARYNOTLOADED;
+    if (g_BL_GetDataBk == NULL) return BIO_DEV_LIBRARYNOTLOADED;
     return g_BL_GetDataBk(ID, channel, pBuf, pInfos, pValues);
 }
 
 int BIO_GetData_LV(int ID, uint8_t channel, void* pBuf, void* pInfos, void* pValues) {
     int result = BIO_EnsureInitialized();
     if (result != SUCCESS) return result;
-    if (g_BL_GetData_LV == NULL) return BIO_ERR_LIBRARYNOTLOADED;
+    if (g_BL_GetData_LV == NULL) return BIO_DEV_LIBRARYNOTLOADED;
     return g_BL_GetData_LV(ID, channel, pBuf, pInfos, pValues);
 }
 
 int BIO_GetData_VEE(int ID, uint8_t channel, void* pBuf, void* pInfos, void* pValues) {
     int result = BIO_EnsureInitialized();
     if (result != SUCCESS) return result;
-    if (g_BL_GetData_VEE == NULL) return BIO_ERR_LIBRARYNOTLOADED;
+    if (g_BL_GetData_VEE == NULL) return BIO_DEV_LIBRARYNOTLOADED;
     return g_BL_GetData_VEE(ID, channel, pBuf, pInfos, pValues);
 }
 
@@ -841,14 +887,14 @@ int BIO_GetData_VEE(int ID, uint8_t channel, void* pBuf, void* pInfos, void* pVa
 int BIO_SetExperimentInfos(int ID, uint8_t channel, TExperimentInfos_t TExpInfos) {
     int result = BIO_EnsureInitialized();
     if (result != SUCCESS) return result;
-    if (g_BL_SetExperimentInfos == NULL) return BIO_ERR_LIBRARYNOTLOADED;
+    if (g_BL_SetExperimentInfos == NULL) return BIO_DEV_LIBRARYNOTLOADED;
     return g_BL_SetExperimentInfos(ID, channel, TExpInfos);
 }
 
 int BIO_GetExperimentInfos(int ID, uint8_t channel, TExperimentInfos_t* TExpInfos) {
     int result = BIO_EnsureInitialized();
     if (result != SUCCESS) return result;
-    if (g_BL_GetExperimentInfos == NULL) return BIO_ERR_LIBRARYNOTLOADED;
+    if (g_BL_GetExperimentInfos == NULL) return BIO_DEV_LIBRARYNOTLOADED;
     return g_BL_GetExperimentInfos(ID, channel, TExpInfos);
 }
 
@@ -856,35 +902,35 @@ int BIO_GetExperimentInfos(int ID, uint8_t channel, TExperimentInfos_t* TExpInfo
 int BIO_SendMsg(int ID, uint8_t ch, void* pBuf, unsigned int* pLen) {
     int result = BIO_EnsureInitialized();
     if (result != SUCCESS) return result;
-    if (g_BL_SendMsg == NULL) return BIO_ERR_LIBRARYNOTLOADED;
+    if (g_BL_SendMsg == NULL) return BIO_DEV_LIBRARYNOTLOADED;
     return g_BL_SendMsg(ID, ch, pBuf, pLen);
 }
 
 int BIO_SendMsgToRcvt(int ID, void* pBuf, unsigned int* pLen) {
     int result = BIO_EnsureInitialized();
     if (result != SUCCESS) return result;
-    if (g_BL_SendMsgToRcvt == NULL) return BIO_ERR_LIBRARYNOTLOADED;
+    if (g_BL_SendMsgToRcvt == NULL) return BIO_DEV_LIBRARYNOTLOADED;
     return g_BL_SendMsgToRcvt(ID, pBuf, pLen);
 }
 
 int BIO_SendMsgToRcvt_g(int ID, uint8_t ch, void* pBuf, unsigned int* pLen) {
     int result = BIO_EnsureInitialized();
     if (result != SUCCESS) return result;
-    if (g_BL_SendMsgToRcvt_g == NULL) return BIO_ERR_LIBRARYNOTLOADED;
+    if (g_BL_SendMsgToRcvt_g == NULL) return BIO_DEV_LIBRARYNOTLOADED;
     return g_BL_SendMsgToRcvt_g(ID, ch, pBuf, pLen);
 }
 
 int BIO_SendEcalMsg(int ID, uint8_t ch, void* pBuf, unsigned int* pLen) {
     int result = BIO_EnsureInitialized();
     if (result != SUCCESS) return result;
-    if (g_BL_SendEcalMsg == NULL) return BIO_ERR_LIBRARYNOTLOADED;
+    if (g_BL_SendEcalMsg == NULL) return BIO_DEV_LIBRARYNOTLOADED;
     return g_BL_SendEcalMsg(ID, ch, pBuf, pLen);
 }
 
 int BIO_SendEcalMsgGroup(int ID, uint8_t* pChannels, uint8_t length, void* pBuf, unsigned int* pLen) {
     int result = BIO_EnsureInitialized();
     if (result != SUCCESS) return result;
-    if (g_BL_SendEcalMsgGroup == NULL) return BIO_ERR_LIBRARYNOTLOADED;
+    if (g_BL_SendEcalMsgGroup == NULL) return BIO_DEV_LIBRARYNOTLOADED;
     return g_BL_SendEcalMsgGroup(ID, pChannels, length, pBuf, pLen);
 }
 
@@ -892,42 +938,42 @@ int BIO_SendEcalMsgGroup(int ID, uint8_t* pChannels, uint8_t length, void* pBuf,
 int BIO_GetFPGAVer(int ID, uint8_t channel, uint32_t* pVersion) {
     int result = BIO_EnsureInitialized();
     if (result != SUCCESS) return result;
-    if (g_BL_GetFPGAVer == NULL) return BIO_ERR_LIBRARYNOTLOADED;
+    if (g_BL_GetFPGAVer == NULL) return BIO_DEV_LIBRARYNOTLOADED;
     return g_BL_GetFPGAVer(ID, channel, pVersion);
 }
 
 int BIO_GetOptErr(int ID, uint8_t channel, int* pOptErr, int* pOptPos) {
     int result = BIO_EnsureInitialized();
     if (result != SUCCESS) return result;
-    if (g_BL_GetOptErr == NULL) return BIO_ERR_LIBRARYNOTLOADED;
+    if (g_BL_GetOptErr == NULL) return BIO_DEV_LIBRARYNOTLOADED;
     return g_BL_GetOptErr(ID, channel, pOptErr, pOptPos);
 }
 
 int BIO_ReadParameters(int ID, uint8_t channel, void* pParams) {
     int result = BIO_EnsureInitialized();
     if (result != SUCCESS) return result;
-    if (g_BL_ReadParameters == NULL) return BIO_ERR_LIBRARYNOTLOADED;
+    if (g_BL_ReadParameters == NULL) return BIO_DEV_LIBRARYNOTLOADED;
     return g_BL_ReadParameters(ID, channel, pParams);
 }
 
 int BIO_GetChannelFloatFormat(int ID, uint8_t channel, int* pFormat) {
     int result = BIO_EnsureInitialized();
     if (result != SUCCESS) return result;
-    if (g_BL_GetChannelFloatFormat == NULL) return BIO_ERR_LIBRARYNOTLOADED;
+    if (g_BL_GetChannelFloatFormat == NULL) return BIO_DEV_LIBRARYNOTLOADED;
     return g_BL_GetChannelFloatFormat(ID, channel, pFormat);
 }
 
 int BIO_ConvertNumericIntoFloat(unsigned int num, double* pdbl) {
     int result = BIO_EnsureInitialized();
     if (result != SUCCESS) return result;
-    if (g_BL_ConvertNumericIntoFloat == NULL) return BIO_ERR_LIBRARYNOTLOADED;
+    if (g_BL_ConvertNumericIntoFloat == NULL) return BIO_DEV_LIBRARYNOTLOADED;
     return g_BL_ConvertNumericIntoFloat(num, pdbl);
 }
 
 int BIO_ConvertTimeChannelNumericIntoTimebases(uint32_t* pnum, double* pRetTime, float* pTimebases, uint32_t ChannelType) {
     int result = BIO_EnsureInitialized();
     if (result != SUCCESS) return result;
-    if (g_BL_ConvertTimeChannelNumericIntoTimebases == NULL) return BIO_ERR_LIBRARYNOTLOADED;
+    if (g_BL_ConvertTimeChannelNumericIntoTimebases == NULL) return BIO_DEV_LIBRARYNOTLOADED;
     return g_BL_ConvertTimeChannelNumericIntoTimebases(pnum, pRetTime, pTimebases, ChannelType);
 }
 
@@ -936,7 +982,7 @@ int BIO_LoadTechnique_LV(int ID, uint8_t channel, const char* pFName, void* Para
                        bool FirstTechnique, bool LastTechnique, bool DisplayParams) {
     int result = BIO_EnsureInitialized();
     if (result != SUCCESS) return result;
-    if (g_BL_LoadTechnique_LV == NULL) return BIO_ERR_LIBRARYNOTLOADED;
+    if (g_BL_LoadTechnique_LV == NULL) return BIO_DEV_LIBRARYNOTLOADED;
     return g_BL_LoadTechnique_LV(ID, channel, pFName, Params, FirstTechnique, LastTechnique, DisplayParams);
 }
 
@@ -944,21 +990,21 @@ int BIO_LoadTechnique_VEE(int ID, uint8_t channel, const char* pFName, void* Par
                         bool FirstTechnique, bool LastTechnique, bool DisplayParams) {
     int result = BIO_EnsureInitialized();
     if (result != SUCCESS) return result;
-    if (g_BL_LoadTechnique_VEE == NULL) return BIO_ERR_LIBRARYNOTLOADED;
+    if (g_BL_LoadTechnique_VEE == NULL) return BIO_DEV_LIBRARYNOTLOADED;
     return g_BL_LoadTechnique_VEE(ID, channel, pFName, Params, FirstTechnique, LastTechnique, DisplayParams);
 }
 
 int BIO_UpdateParameters_LV(int ID, uint8_t channel, int TechIndx, void* Params, const char* EccFileName) {
     int result = BIO_EnsureInitialized();
     if (result != SUCCESS) return result;
-    if (g_BL_UpdateParameters_LV == NULL) return BIO_ERR_LIBRARYNOTLOADED;
+    if (g_BL_UpdateParameters_LV == NULL) return BIO_DEV_LIBRARYNOTLOADED;
     return g_BL_UpdateParameters_LV(ID, channel, TechIndx, Params, EccFileName);
 }
 
 int BIO_UpdateParameters_VEE(int ID, uint8_t channel, int TechIndx, void* Params, const char* EccFileName) {
     int result = BIO_EnsureInitialized();
     if (result != SUCCESS) return result;
-    if (g_BL_UpdateParameters_VEE == NULL) return BIO_ERR_LIBRARYNOTLOADED;
+    if (g_BL_UpdateParameters_VEE == NULL) return BIO_DEV_LIBRARYNOTLOADED;
     return g_BL_UpdateParameters_VEE(ID, channel, TechIndx, Params, EccFileName);
 }
 
@@ -967,64 +1013,64 @@ int BIO_UpdateParameters_VEE(int ID, uint8_t channel, int TechIndx, void* Params
 // ============================================================================
 
 int BIO_FindEChemDev(char* pLstDev, unsigned int* pSize, unsigned int* pNbrDevice) {
-    if (!IsBIOFindInitialized() || g_BL_FindEChemDev == NULL) return BIO_ERR_LIBRARYNOTLOADED;
+    if (!IsBIOFindInitialized() || g_BL_FindEChemDev == NULL) return BIO_DEV_LIBRARYNOTLOADED;
     return g_BL_FindEChemDev(pLstDev, pSize, pNbrDevice);
 }
 
 int BIO_FindEChemEthDev(char* pLstDev, unsigned int* pSize, unsigned int* pNbrDevice) {
-    if (!IsBIOFindInitialized() || g_BL_FindEChemEthDev == NULL) return BIO_ERR_LIBRARYNOTLOADED;
+    if (!IsBIOFindInitialized() || g_BL_FindEChemEthDev == NULL) return BIO_DEV_LIBRARYNOTLOADED;
     return g_BL_FindEChemEthDev(pLstDev, pSize, pNbrDevice);
 }
 
 int BIO_FindEChemUsbDev(char* pLstDev, unsigned int* pSize, unsigned int* pNbrDevice) {
-    if (!IsBIOFindInitialized() || g_BL_FindEChemUsbDev == NULL) return BIO_ERR_LIBRARYNOTLOADED;
+    if (!IsBIOFindInitialized() || g_BL_FindEChemUsbDev == NULL) return BIO_DEV_LIBRARYNOTLOADED;
     return g_BL_FindEChemUsbDev(pLstDev, pSize, pNbrDevice);
 }
 
 int BIO_SetConfig(char* pIp, char* pCfg) {
-    if (!IsBIOFindInitialized() || g_BL_SetConfig == NULL) return BIO_ERR_LIBRARYNOTLOADED;
+    if (!IsBIOFindInitialized() || g_BL_SetConfig == NULL) return BIO_DEV_LIBRARYNOTLOADED;
     return g_BL_SetConfig(pIp, pCfg);
 }
 
 // Additional blfind functions
 int BIO_FindEChemBCSDev(char* pLstDev, unsigned int* pSize, unsigned int* pNbrDevice) {
-    if (!IsBIOFindInitialized() || g_BL_FindEChemBCSDev == NULL) return BIO_ERR_LIBRARYNOTLOADED;
+    if (!IsBIOFindInitialized() || g_BL_FindEChemBCSDev == NULL) return BIO_DEV_LIBRARYNOTLOADED;
     return g_BL_FindEChemBCSDev(pLstDev, pSize, pNbrDevice);
 }
 
 int BIO_EChemBCSEthDEV(void* param1, void* param2) {
-    if (!IsBIOFindInitialized() || g_BL_EChemBCSEthDEV == NULL) return BIO_ERR_LIBRARYNOTLOADED;
+    if (!IsBIOFindInitialized() || g_BL_EChemBCSEthDEV == NULL) return BIO_DEV_LIBRARYNOTLOADED;
     return g_BL_EChemBCSEthDEV(param1, param2);
 }
 
 int BIO_FindKineticDev(char* pLstDev, unsigned int* pSize, unsigned int* pNbrDevice) {
-    if (!IsBIOFindInitialized() || g_BL_FindKineticDev == NULL) return BIO_ERR_LIBRARYNOTLOADED;
+    if (!IsBIOFindInitialized() || g_BL_FindKineticDev == NULL) return BIO_DEV_LIBRARYNOTLOADED;
     return g_BL_FindKineticDev(pLstDev, pSize, pNbrDevice);
 }
 
 int BIO_FindKineticEthDev(char* pLstDev, unsigned int* pSize, unsigned int* pNbrDevice) {
-    if (!IsBIOFindInitialized() || g_BL_FindKineticEthDev == NULL) return BIO_ERR_LIBRARYNOTLOADED;
+    if (!IsBIOFindInitialized() || g_BL_FindKineticEthDev == NULL) return BIO_DEV_LIBRARYNOTLOADED;
     return g_BL_FindKineticEthDev(pLstDev, pSize, pNbrDevice);
 }
 
 int BIO_FindKineticUsbDev(char* pLstDev, unsigned int* pSize, unsigned int* pNbrDevice) {
-    if (!IsBIOFindInitialized() || g_BL_FindKineticUsbDev == NULL) return BIO_ERR_LIBRARYNOTLOADED;
+    if (!IsBIOFindInitialized() || g_BL_FindKineticUsbDev == NULL) return BIO_DEV_LIBRARYNOTLOADED;
     return g_BL_FindKineticUsbDev(pLstDev, pSize, pNbrDevice);
 }
 
 int BIO_Init_Path(const char* path) {
-    if (!IsBIOFindInitialized() || g_BL_Init_Path == NULL) return BIO_ERR_LIBRARYNOTLOADED;
+    if (!IsBIOFindInitialized() || g_BL_Init_Path == NULL) return BIO_DEV_LIBRARYNOTLOADED;
     return g_BL_Init_Path(path);
 }
 
 int BIO_SetMAC(char* mac) {
-    if (!IsBIOFindInitialized() || g_BL_SetMAC == NULL) return BIO_ERR_LIBRARYNOTLOADED;
+    if (!IsBIOFindInitialized() || g_BL_SetMAC == NULL) return BIO_DEV_LIBRARYNOTLOADED;
     return g_BL_SetMAC(mac);
 }
 
 // BIOFind error message function
 int BIOFind_GetErrorMsg(int errorcode, char* pmsg, unsigned int* psize) {
-    if (!IsBIOFindInitialized() || g_BLFind_GetErrorMsg == NULL) return BIO_ERR_LIBRARYNOTLOADED;
+    if (!IsBIOFindInitialized() || g_BLFind_GetErrorMsg == NULL) return BIO_DEV_LIBRARYNOTLOADED;
     return g_BLFind_GetErrorMsg(errorcode, pmsg, psize);
 }
 
@@ -1232,7 +1278,7 @@ void BIO_FreeTechniqueContext(BIO_TechniqueContext *context) {
 
 // Update technique state machine
 int BIO_UpdateTechnique(BIO_TechniqueContext *context) {
-    if (!context) return BIO_ERR_INVALIDPARAMETERS;
+    if (!context) return BIO_DEV_INVALIDPARAMETERS;
     
     int result;
     TCurrentValues_t currentValues;
@@ -1286,15 +1332,29 @@ int BIO_UpdateTechnique(BIO_TechniqueContext *context) {
             if (currentValues.State == KBIO_STATE_STOP) {
                 LogDebugEx(LOG_DEVICE_BIO, "Technique completed, retrieving data...");
                 
-                // Get data with timeout protection
-                TDataBuffer_t dataBuffer;
-                TDataInfos_t dataInfo;
+                // Calculate timeout for data retrieval
+                double currentTime = Timer();
+                double techniqueElapsed = currentTime - context->startTime;
+                double maxTechniqueTime = 300.0; // Default 5 minutes if no specific timeout set
                 
-                // For impedance techniques, try to get the right process data
-                bool gotData = false;
-                int targetProcessIndex = -1;
+                // Try to get a reasonable timeout from technique configuration
+                if (context->config.key.duration_s > 0) {
+                    // For time-based techniques like OCV, add buffer time
+                    maxTechniqueTime = context->config.key.duration_s + 60.0; // 1 minute buffer
+                } else {
+                    // For impedance techniques, use a larger default
+                    maxTechniqueTime = 600.0; // 10 minutes default
+                }
+                
+                // Calculate remaining time for data retrieval (at least 30 seconds)
+                double remainingTime = MAX(30.0, maxTechniqueTime - techniqueElapsed);
+                double dataRetrievalStartTime = currentTime;
+                double dataRetrievalTimeout = dataRetrievalStartTime + remainingTime;
+                
+                LogDebugEx(LOG_DEVICE_BIO, "Data retrieval timeout: %.1f seconds remaining", remainingTime);
                 
                 // Determine target process based on technique type
+                int targetProcessIndex = -1;
                 if (context->config.type == BIO_TECHNIQUE_PEIS || 
                     context->config.type == BIO_TECHNIQUE_SPEIS ||
                     context->config.type == BIO_TECHNIQUE_GEIS || 
@@ -1304,20 +1364,42 @@ int BIO_UpdateTechnique(BIO_TechniqueContext *context) {
                     targetProcessIndex = 0;  // Default to process 0
                 }
                 
-                // Try to get data up to 3 times
-                for (int attempt = 0; attempt < 3; attempt++) {
+                // Time-based retry loop for data retrieval
+                bool gotData = false;
+                int attemptCount = 0;
+                const double retryInterval = 0.5; // 500ms between attempts
+                const double minRetryInterval = 0.1; // Minimum 100ms
+                
+                while (!gotData && Timer() < dataRetrievalTimeout) {
+                    attemptCount++;
+                    
                     // Check if there's data available
                     if (currentValues.MemFilled == 0) {
-                        LogWarningEx(LOG_DEVICE_BIO, "No data in device memory");
-                        break;
+                        LogWarningEx(LOG_DEVICE_BIO, "No data in device memory on attempt %d", attemptCount);
+                        
+                        // For no data, wait a bit longer between attempts
+                        Delay(MAX(retryInterval, minRetryInterval));
+                        
+                        // Get fresh current values for next iteration
+                        result = BIO_GetCurrentValues(context->deviceID, context->channel, &currentValues);
+                        if (result != SUCCESS) {
+                            LogWarningEx(LOG_DEVICE_BIO, "Failed to get current values during data retrieval: %s", 
+                                       BIO_GetErrorString(result));
+                            break;
+                        }
+                        continue;
                     }
+                    
+                    // Try to get data
+                    TDataBuffer_t dataBuffer;
+                    TDataInfos_t dataInfo;
                     
                     result = BIO_GetData(context->deviceID, context->channel, 
                                       &dataBuffer, &dataInfo, &currentValues);
                     
                     if (result == SUCCESS) {
-                        LogDebugEx(LOG_DEVICE_BIO, "Retrieved data - TechniqueID: %d, ProcessIndex: %d, Points: %d, Cols: %d",
-                                 dataInfo.TechniqueID, dataInfo.ProcessIndex, dataInfo.NbRows, dataInfo.NbCols);
+                        LogDebugEx(LOG_DEVICE_BIO, "Retrieved data on attempt %d - TechniqueID: %d, ProcessIndex: %d, Points: %d, Cols: %d",
+                                 attemptCount, dataInfo.TechniqueID, dataInfo.ProcessIndex, dataInfo.NbRows, dataInfo.NbCols);
                         
                         // Check if this is the process we want
                         if (targetProcessIndex == -1 || dataInfo.ProcessIndex == targetProcessIndex) {
@@ -1345,33 +1427,56 @@ int BIO_UpdateTechnique(BIO_TechniqueContext *context) {
                                 
                                 gotData = true;
                                 
-                                LogDebugEx(LOG_DEVICE_BIO, "Stored %d data points with %d variables (Process %d)",
-                                         dataInfo.NbRows, dataInfo.NbCols, dataInfo.ProcessIndex);
-                                
-                                // For single-process techniques, break after first data
-                                if (targetProcessIndex == 0) {
-                                    break;
-                                }
+                                LogDebugEx(LOG_DEVICE_BIO, "Successfully stored %d data points with %d variables (Process %d) after %d attempts",
+                                         dataInfo.NbRows, dataInfo.NbCols, dataInfo.ProcessIndex, attemptCount);
+                                break;
+                            } else {
+                                LogErrorEx(LOG_DEVICE_BIO, "Failed to allocate memory for raw data");
+                                context->lastError = BIO_ERR_MEMORY_ALLOCATION_FAILED;
+                                context->state = BIO_TECH_STATE_ERROR;
+                                return context->lastError;
                             }
                         } else {
-                            LogDebugEx(LOG_DEVICE_BIO, "Skipping process %d data (looking for process %d)",
-                                     dataInfo.ProcessIndex, targetProcessIndex);
+                            // Wrong process - for impedance techniques, this is common
+                            // Process 0 (time series) often comes before Process 1 (impedance)
+                            LogDebugEx(LOG_DEVICE_BIO, "Attempt %d: Got process %d, waiting for process %d",
+                                     attemptCount, dataInfo.ProcessIndex, targetProcessIndex);
+                            
+                            // For multi-process techniques, wait and retry
+                            Delay(MAX(retryInterval, minRetryInterval));
+                            continue;
                         }
-                        
-                        // For multi-process techniques, continue if we haven't found target process
-                        if (gotData && dataInfo.ProcessIndex == targetProcessIndex) {
-                            break;
-                        }
-                    } else if (result == BIO_ERR_TECH_DATACORRUPTED) {
-                        LogWarningEx(LOG_DEVICE_BIO, "Data corrupted on attempt %d", attempt + 1);
-                        // Don't retry on data corruption
+                    } else if (result == BIO_DEV_TECH_DATACORRUPTED) {
+                        LogWarningEx(LOG_DEVICE_BIO, "Data corrupted on attempt %d", attemptCount);
+                        // Don't retry on data corruption - this is a permanent error
                         break;
                     } else {
                         LogWarningEx(LOG_DEVICE_BIO, "Failed to get data on attempt %d: %s", 
-                                   attempt + 1, BIO_GetErrorString(result));
-                        // For other errors, break immediately
-                        break;
+                                   attemptCount, BIO_GetErrorString(result));
+                        
+                        // For other errors, wait a bit and retry
+                        Delay(MAX(retryInterval * 0.5, minRetryInterval));
+                        continue;
                     }
+                }
+                
+                // Check if we timed out
+                if (!gotData && Timer() >= dataRetrievalTimeout) {
+                    LogWarningEx(LOG_DEVICE_BIO, "Data retrieval timed out after %d attempts (%.1f seconds). Expected process %d.", 
+                               attemptCount, remainingTime, targetProcessIndex);
+                    
+                    // If we have some data but wrong process, it's still a partial success
+                    if (currentValues.MemFilled > 0) {
+                        context->lastError = BIO_ERR_WRONG_PROCESS_INDEX;
+                        snprintf(context->errorMessage, sizeof(context->errorMessage),
+                               "Timeout waiting for process %d data after %d attempts", targetProcessIndex, attemptCount);
+                    } else {
+                        context->lastError = BIO_ERR_NO_DATA_RETRIEVED;
+                        snprintf(context->errorMessage, sizeof(context->errorMessage),
+                               "No data available after %d attempts", attemptCount);
+                    }
+                    context->state = BIO_TECH_STATE_ERROR;
+                    return context->lastError;
                 }
                 
                 // Process data if requested and we have data
@@ -1403,6 +1508,9 @@ int BIO_UpdateTechnique(BIO_TechniqueContext *context) {
                         } else {
                             LogWarningEx(LOG_DEVICE_BIO, "Failed to process data: %d", result);
                         }
+                    } else {
+                        LogWarningEx(LOG_DEVICE_BIO, "Failed to get channel type for data processing: %s", 
+                                   BIO_GetErrorString(result));
                     }
                 }
                 
@@ -1420,15 +1528,14 @@ int BIO_UpdateTechnique(BIO_TechniqueContext *context) {
                 // Determine final state
                 if (gotData) {
                     context->state = BIO_TECH_STATE_COMPLETED;
+                    LogDebugEx(LOG_DEVICE_BIO, "Technique completed successfully with data");
                 } else if (currentValues.OptErr != 0) {
-                    context->lastError = currentValues.OptErr;
+                    context->lastError = currentValues.OptErr;  // Keep device error
                     snprintf(context->errorMessage, sizeof(context->errorMessage),
-                           "Technique stopped with OptErr=%d", currentValues.OptErr);
+                           "Technique stopped with device error: OptErr=%d", currentValues.OptErr);
                     context->state = BIO_TECH_STATE_ERROR;
                 } else {
-                    context->lastError = BIO_ERR_FUNCTIONFAILED;
-                    snprintf(context->errorMessage, sizeof(context->errorMessage),
-                           "No data retrieved from technique");
+                    // lastError and errorMessage should already be set from the timeout handling above
                     context->state = BIO_TECH_STATE_ERROR;
                 }
             }
@@ -1459,7 +1566,7 @@ bool BIO_IsTechniqueComplete(BIO_TechniqueContext *context) {
 
 // Stop technique
 int BIO_StopTechnique(BIO_TechniqueContext *context) {
-    if (!context) return BIO_ERR_INVALIDPARAMETERS;
+    if (!context) return BIO_DEV_INVALIDPARAMETERS;
     
     int result = BIO_StopChannel(context->deviceID, context->channel);
     
@@ -1471,28 +1578,31 @@ int BIO_StopTechnique(BIO_TechniqueContext *context) {
     return result;
 }
 
-// Get raw data
 int BIO_GetTechniqueRawData(BIO_TechniqueContext *context, BIO_RawDataBuffer **data) {
-    if (!context || !data) return BIO_ERR_INVALIDPARAMETERS;
+    if (!context || !data) return BIO_DEV_INVALIDPARAMETERS;
     
-    if (context->rawData.rawData && context->rawData.numPoints > 0) {
-        *data = &context->rawData;
-        return SUCCESS;
+    if (!context->rawData.rawData) {
+        return BIO_ERR_INVALID_DATA_BUFFER;
     }
     
-    return BIO_ERR_FUNCTIONFAILED;
+    if (context->rawData.numPoints == 0) {
+        return BIO_ERR_NO_DATA_RETRIEVED;
+    }
+    
+    *data = &context->rawData;
+    return SUCCESS;
 }
 
 int BIO_ProcessTechniqueData(BIO_RawDataBuffer *rawData, int techniqueID, int processIndex,
                            uint32_t channelType, float timebase,
                            BIO_ConvertedData **convertedData) {
     if (!rawData || !convertedData || rawData->numPoints == 0) {
-        return BIO_ERR_INVALIDPARAMETERS;
+        return BIO_DEV_INVALIDPARAMETERS;
     }
     
     // Allocate converted data structure
     BIO_ConvertedData *converted = calloc(1, sizeof(BIO_ConvertedData));
-    if (!converted) return BIO_ERR_FUNCTIONFAILED;
+    if (!converted) return BIO_ERR_MEMORY_ALLOCATION_FAILED;
     
     converted->techniqueID = techniqueID;
     converted->processIndex = processIndex;
@@ -1828,11 +1938,11 @@ void BIO_FreeTechniqueData(BIO_TechniqueData *data) {
 }
 
 int BIO_GetTechniqueData(BIO_TechniqueContext *context, BIO_TechniqueData **data) {
-    if (!context || !data) return BIO_ERR_INVALIDPARAMETERS;
+    if (!context || !data) return BIO_DEV_INVALIDPARAMETERS;
     
     if (context->rawData.rawData && context->rawData.numPoints > 0) {
         BIO_TechniqueData *techData = calloc(1, sizeof(BIO_TechniqueData));
-        if (!techData) return BIO_ERR_FUNCTIONFAILED;
+        if (!techData) return BIO_ERR_MEMORY_ALLOCATION_FAILED;
         
         // Copy raw data
         techData->rawData = BIO_CopyRawDataBuffer(&context->rawData);
@@ -1848,7 +1958,7 @@ int BIO_GetTechniqueData(BIO_TechniqueContext *context, BIO_TechniqueData **data
         return SUCCESS;
     }
     
-    return BIO_ERR_FUNCTIONFAILED;
+    return BIO_ERR_NO_DATA_RETRIEVED;
 }
 
 // Start OCV measurement
@@ -1861,13 +1971,13 @@ int BIO_StartOCV(int ID, uint8_t channel,
                 bool processData,
                 BIO_TechniqueContext **context) {
     
-    if (!context) return BIO_ERR_INVALIDPARAMETERS;
+    if (!context) return BIO_DEV_INVALIDPARAMETERS;
     
     int result;
     
     // Create context
     BIO_TechniqueContext *ctx = BIO_CreateTechniqueContext(ID, channel, BIO_TECHNIQUE_OCV);
-    if (!ctx) return BIO_ERR_FUNCTIONFAILED;
+    if (!ctx) return BIO_ERR_MEMORY_ALLOCATION_FAILED;
     
     // Store key parameters
     ctx->config.key.duration_s = duration_s;
@@ -1906,7 +2016,7 @@ int BIO_StartOCV(int ID, uint8_t channel,
     
     // Stop channel if running
     result = BIO_StopChannel(ID, channel);
-    if (result != SUCCESS && result != BIO_ERR_CHANNELNOTPLUGGED) {
+    if (result != SUCCESS && result != BIO_DEV_CHANNELNOTPLUGGED) {
         LogWarningEx(LOG_DEVICE_BIO, "Failed to stop channel: %s", BIO_GetErrorString(result));
     }
     
@@ -1958,13 +2068,13 @@ int BIO_StartPEIS(int ID, uint8_t channel,
                  bool processData,
                  BIO_TechniqueContext **context) {
     
-    if (!context) return BIO_ERR_INVALIDPARAMETERS;
+    if (!context) return BIO_DEV_INVALIDPARAMETERS;
     
     int result;
     
     // Create context
     BIO_TechniqueContext *ctx = BIO_CreateTechniqueContext(ID, channel, BIO_TECHNIQUE_PEIS);
-    if (!ctx) return BIO_ERR_FUNCTIONFAILED;
+    if (!ctx) return BIO_ERR_MEMORY_ALLOCATION_FAILED;
     
     // Store key parameters
     ctx->config.key.freqStart = initial_freq;
@@ -2042,7 +2152,7 @@ int BIO_StartPEIS(int ID, uint8_t channel,
     
     // Stop channel if running
     result = BIO_StopChannel(ID, channel);
-    if (result != SUCCESS && result != BIO_ERR_CHANNELNOTPLUGGED) {
+    if (result != SUCCESS && result != BIO_DEV_CHANNELNOTPLUGGED) {
         LogWarningEx(LOG_DEVICE_BIO, "Failed to stop channel: %s", BIO_GetErrorString(result));
     }
     
@@ -2097,13 +2207,13 @@ int BIO_StartSPEIS(int ID, uint8_t channel,
                   bool processData,
                   BIO_TechniqueContext **context) {
     
-    if (!context) return BIO_ERR_INVALIDPARAMETERS;
+    if (!context) return BIO_DEV_INVALIDPARAMETERS;
     
     int result;
     
     // Create context
     BIO_TechniqueContext *ctx = BIO_CreateTechniqueContext(ID, channel, BIO_TECHNIQUE_SPEIS);
-    if (!ctx) return BIO_ERR_FUNCTIONFAILED;
+    if (!ctx) return BIO_ERR_MEMORY_ALLOCATION_FAILED;
     
     // Store key parameters
     ctx->config.key.freqStart = initial_freq;
@@ -2193,7 +2303,7 @@ int BIO_StartSPEIS(int ID, uint8_t channel,
     
     // Stop channel if running
     result = BIO_StopChannel(ID, channel);
-    if (result != SUCCESS && result != BIO_ERR_CHANNELNOTPLUGGED) {
+    if (result != SUCCESS && result != BIO_DEV_CHANNELNOTPLUGGED) {
         LogWarningEx(LOG_DEVICE_BIO, "Failed to stop channel: %s", BIO_GetErrorString(result));
     }
     
@@ -2246,19 +2356,19 @@ int BIO_StartGEIS(int ID, uint8_t channel,
                  bool processData,
                  BIO_TechniqueContext **context) {
     
-    if (!context) return BIO_ERR_INVALIDPARAMETERS;
+    if (!context) return BIO_DEV_INVALIDPARAMETERS;
     
     // Validate i_range (cannot be auto)
     if (i_range == KBIO_IRANGE_AUTO) {
         LogErrorEx(LOG_DEVICE_BIO, "GEIS: Auto range not allowed for current range");
-        return BIO_ERR_INVALIDPARAMETERS;
+        return BIO_DEV_INVALIDPARAMETERS;
     }
     
     int result;
     
     // Create context
     BIO_TechniqueContext *ctx = BIO_CreateTechniqueContext(ID, channel, BIO_TECHNIQUE_GEIS);
-    if (!ctx) return BIO_ERR_FUNCTIONFAILED;
+    if (!ctx) return BIO_ERR_MEMORY_ALLOCATION_FAILED;
     
     // Store key parameters
     ctx->config.key.freqStart = initial_freq;
@@ -2340,7 +2450,7 @@ int BIO_StartGEIS(int ID, uint8_t channel,
     
     // Stop channel if running
     result = BIO_StopChannel(ID, channel);
-    if (result != SUCCESS && result != BIO_ERR_CHANNELNOTPLUGGED) {
+    if (result != SUCCESS && result != BIO_DEV_CHANNELNOTPLUGGED) {
         LogWarningEx(LOG_DEVICE_BIO, "Failed to stop channel: %s", BIO_GetErrorString(result));
     }
     
@@ -2396,19 +2506,19 @@ int BIO_StartSGEIS(int ID, uint8_t channel,
                   bool processData,
                   BIO_TechniqueContext **context) {
     
-    if (!context) return BIO_ERR_INVALIDPARAMETERS;
+    if (!context) return BIO_DEV_INVALIDPARAMETERS;
     
     // Validate i_range (cannot be auto)
     if (i_range == KBIO_IRANGE_AUTO) {
         LogErrorEx(LOG_DEVICE_BIO, "SGEIS: Auto range not allowed for current range");
-        return BIO_ERR_INVALIDPARAMETERS;
+        return BIO_DEV_INVALIDPARAMETERS;
     }
     
     int result;
     
     // Create context
     BIO_TechniqueContext *ctx = BIO_CreateTechniqueContext(ID, channel, BIO_TECHNIQUE_SGEIS);
-    if (!ctx) return BIO_ERR_FUNCTIONFAILED;
+    if (!ctx) return BIO_ERR_MEMORY_ALLOCATION_FAILED;
     
     // Store key parameters
     ctx->config.key.freqStart = initial_freq;
@@ -2502,7 +2612,7 @@ int BIO_StartSGEIS(int ID, uint8_t channel,
     
     // Stop channel if running
     result = BIO_StopChannel(ID, channel);
-    if (result != SUCCESS && result != BIO_ERR_CHANNELNOTPLUGGED) {
+    if (result != SUCCESS && result != BIO_DEV_CHANNELNOTPLUGGED) {
         LogWarningEx(LOG_DEVICE_BIO, "Failed to stop channel: %s", BIO_GetErrorString(result));
     }
     

@@ -194,7 +194,7 @@ static int BIO_AdapterConnect(void *deviceContext, void *connectionParams) {
         
         if (result == SUCCESS) {
             LogMessageEx(LOG_DEVICE_BIO, "Firmware loaded successfully");
-        } else if (result == BIO_ERR_FIRM_FIRMWARENOTLOADED) {
+        } else if (result == BIO_DEV_FIRM_FIRMWARENOTLOADED) {
             LogMessageEx(LOG_DEVICE_BIO, "Firmware already loaded");
         } else {
             LogWarningEx(LOG_DEVICE_BIO, "Firmware load failed: %s - continuing anyway", 
@@ -229,7 +229,7 @@ static int BIO_AdapterTestConnection(void *deviceContext) {
     BioLogicDeviceContext *ctx = (BioLogicDeviceContext*)deviceContext;
     
     if (!ctx->isConnected || ctx->deviceID < 0) {
-        return BIO_ERR_NOINSTRUMENTCONNECTED;
+        return BIO_DEV_NOINSTRUMENTCONNECTED;
     }
     
     return BIO_TestConnection(ctx->deviceID);
@@ -246,17 +246,17 @@ static int BIO_AdapterExecuteCommand(void *deviceContext, int commandType, void 
     
     // Check connection for most commands
     if (commandType != BIO_CMD_CONNECT && (!ctx->isConnected || ctx->deviceID < 0)) {
-        cmdResult->errorCode = BIO_ERR_NOINSTRUMENTCONNECTED;
+        cmdResult->errorCode = BIO_DEV_NOINSTRUMENTCONNECTED;
         return cmdResult->errorCode;
     }
     
     switch ((BioCommandType)commandType) {
         case BIO_CMD_CONNECT: {
-		    // Connection is handled by the adapter connect function
-		    cmdResult->errorCode = SUCCESS;
-		    break;
-		}   
-		
+            // Connection is handled by the adapter connect function
+            cmdResult->errorCode = SUCCESS;
+            break;
+        }   
+        
         case BIO_CMD_DISCONNECT: {
             cmdResult->errorCode = BIO_Disconnect(ctx->deviceID);
             if (cmdResult->errorCode == SUCCESS) {
@@ -285,7 +285,7 @@ static int BIO_AdapterExecuteCommand(void *deviceContext, int commandType, void 
                 cmd->record_every_dE,
                 cmd->record_every_dT,
                 cmd->e_range,
-				cmd->processData,
+                cmd->processData,
                 &techContext
             );
             
@@ -306,7 +306,7 @@ static int BIO_AdapterExecuteCommand(void *deviceContext, int commandType, void 
             // Create combined result
             BIO_TechniqueData *combinedResult = calloc(1, sizeof(BIO_TechniqueData));
             if (!combinedResult) {
-                cmdResult->errorCode = BIO_ERR_FUNCTIONFAILED;
+                cmdResult->errorCode = BIO_ERR_MEMORY_ALLOCATION_FAILED;
                 BIO_FreeTechniqueContext(techContext);
                 break;
             }
@@ -326,13 +326,19 @@ static int BIO_AdapterExecuteCommand(void *deviceContext, int commandType, void 
                 if (BIO_GetTechniqueRawData(techContext, &rawData) == SUCCESS) {
                     cmdResult->errorCode = SUCCESS;
                 } else {
-                    cmdResult->errorCode = BIO_ERR_FUNCTIONFAILED;
+                    cmdResult->errorCode = BIO_ERR_NO_DATA_RETRIEVED;
                 }
             }
             
             // Copy data to combined result
             if (rawData) {
                 combinedResult->rawData = BIO_CopyRawDataBuffer(rawData);
+                if (!combinedResult->rawData) {
+                    cmdResult->errorCode = BIO_ERR_DATA_COPY_FAILED;
+                    free(combinedResult);
+                    BIO_FreeTechniqueContext(techContext);
+                    break;
+                }
                 
                 // Transfer converted data ownership if available
                 if (techContext->convertedData) {
@@ -345,6 +351,9 @@ static int BIO_AdapterExecuteCommand(void *deviceContext, int commandType, void 
                 cmdResult->data.techniqueResult.finalState = techContext->state;
                 cmdResult->data.techniqueResult.partialData = partialData;
             } else {
+                if (cmdResult->errorCode == SUCCESS) {
+                    cmdResult->errorCode = BIO_ERR_NO_DATA_RETRIEVED;
+                }
                 free(combinedResult);
             }
             
@@ -375,7 +384,7 @@ static int BIO_AdapterExecuteCommand(void *deviceContext, int commandType, void 
                 cmd->average_n_times,
                 cmd->correction,
                 cmd->wait_for_steady,
-				cmd->processData,
+                cmd->processData,
                 &techContext
             );
             
@@ -396,7 +405,7 @@ static int BIO_AdapterExecuteCommand(void *deviceContext, int commandType, void 
             // Create combined result
             BIO_TechniqueData *combinedResult = calloc(1, sizeof(BIO_TechniqueData));
             if (!combinedResult) {
-                cmdResult->errorCode = BIO_ERR_FUNCTIONFAILED;
+                cmdResult->errorCode = BIO_ERR_MEMORY_ALLOCATION_FAILED;
                 BIO_FreeTechniqueContext(techContext);
                 break;
             }
@@ -416,13 +425,19 @@ static int BIO_AdapterExecuteCommand(void *deviceContext, int commandType, void 
                 if (BIO_GetTechniqueRawData(techContext, &rawData) == SUCCESS) {
                     cmdResult->errorCode = SUCCESS;
                 } else {
-                    cmdResult->errorCode = BIO_ERR_FUNCTIONFAILED;
+                    cmdResult->errorCode = BIO_ERR_NO_DATA_RETRIEVED;
                 }
             }
             
             // Copy data to combined result
             if (rawData) {
                 combinedResult->rawData = BIO_CopyRawDataBuffer(rawData);
+                if (!combinedResult->rawData) {
+                    cmdResult->errorCode = BIO_ERR_DATA_COPY_FAILED;
+                    free(combinedResult);
+                    BIO_FreeTechniqueContext(techContext);
+                    break;
+                }
                 
                 // Transfer converted data ownership if available
                 if (techContext->convertedData) {
@@ -435,6 +450,9 @@ static int BIO_AdapterExecuteCommand(void *deviceContext, int commandType, void 
                 cmdResult->data.techniqueResult.finalState = techContext->state;
                 cmdResult->data.techniqueResult.partialData = partialData;
             } else {
+                if (cmdResult->errorCode == SUCCESS) {
+                    cmdResult->errorCode = BIO_ERR_NO_DATA_RETRIEVED;
+                }
                 free(combinedResult);
             }
             
@@ -442,284 +460,311 @@ static int BIO_AdapterExecuteCommand(void *deviceContext, int commandType, void 
             BIO_FreeTechniqueContext(techContext);
             break;
         }
-		
-		case BIO_CMD_RUN_SPEIS: {
-		    BioSPEISCommand *cmd = (BioSPEISCommand*)params;
-		    BIO_TechniqueContext *techContext = NULL;
-		    double startTime = Timer();
-		    
-		    // Start SPEIS
-		    cmdResult->errorCode = BIO_StartSPEIS(
-		        ctx->deviceID,
-		        cmd->base.channel,
-		        cmd->vs_initial,
-		        cmd->vs_final,
-		        cmd->initial_voltage_step,
-		        cmd->final_voltage_step,
-		        cmd->duration_step,
-		        cmd->step_number,
-		        cmd->record_every_dT,
-		        cmd->record_every_dI,
-		        cmd->initial_freq,
-		        cmd->final_freq,
-		        cmd->sweep_linear,
-		        cmd->amplitude_voltage,
-		        cmd->frequency_number,
-		        cmd->average_n_times,
-		        cmd->correction,
-		        cmd->wait_for_steady,
-				cmd->processData,
-		        &techContext
-		    );
-		    
-		    if (cmdResult->errorCode != SUCCESS) break;
-		    
-		    // Set up progress callback if provided
-		    if (cmd->base.progressCallback) {
-		        techContext->progressCallback = cmd->base.progressCallback;
-		        techContext->userData = cmd->base.userData;
-		    }
-		    
-		    // Poll until complete
-		    while (!BIO_IsTechniqueComplete(techContext)) {
-		        BIO_UpdateTechnique(techContext);
-		        Delay(0.1);
-		    }
-		    
-		    // Create combined result
-		    BIO_TechniqueData *combinedResult = calloc(1, sizeof(BIO_TechniqueData));
-		    if (!combinedResult) {
-		        cmdResult->errorCode = BIO_ERR_FUNCTIONFAILED;
-		        BIO_FreeTechniqueContext(techContext);
-		        break;
-		    }
-		    
-		    // Get results
-		    BIO_RawDataBuffer *rawData = NULL;
-		    bool partialData = false;
-		    
-		    if (techContext->state == BIO_TECH_STATE_ERROR) {
-		        if (BIO_GetTechniqueRawData(techContext, &rawData) == SUCCESS && rawData) {
-		            partialData = true;
-		            cmdResult->errorCode = BIO_ERR_PARTIAL_DATA;
-		        } else {
-		            cmdResult->errorCode = techContext->lastError;
-		        }
-		    } else if (techContext->state == BIO_TECH_STATE_COMPLETED) {
-		        if (BIO_GetTechniqueRawData(techContext, &rawData) == SUCCESS) {
-		            cmdResult->errorCode = SUCCESS;
-		        } else {
-		            cmdResult->errorCode = BIO_ERR_FUNCTIONFAILED;
-		        }
-		    }
-		    
-		    // Copy data to combined result
-		    if (rawData) {
-		        combinedResult->rawData = BIO_CopyRawDataBuffer(rawData);
-		        
-		        // Transfer converted data ownership if available
-		        if (techContext->convertedData) {
-		            combinedResult->convertedData = techContext->convertedData;
-		            techContext->convertedData = NULL; // Transfer ownership
-		        }
-		        
-		        cmdResult->data.techniqueResult.techniqueData = combinedResult;
-		        cmdResult->data.techniqueResult.elapsedTime = Timer() - startTime;
-		        cmdResult->data.techniqueResult.finalState = techContext->state;
-		        cmdResult->data.techniqueResult.partialData = partialData;
-		    } else {
-		        free(combinedResult);
-		    }
-		    
-		    // Clean up
-		    BIO_FreeTechniqueContext(techContext);
-		    break;
-		}
-		
-		case BIO_CMD_RUN_GEIS: {
-		    BioGEISCommand *cmd = (BioGEISCommand*)params;
-		    BIO_TechniqueContext *techContext = NULL;
-		    double startTime = Timer();
-		    
-		    // Start GEIS
-		    cmdResult->errorCode = BIO_StartGEIS(
-		        ctx->deviceID,
-		        cmd->base.channel,
-		        cmd->vs_initial,
-		        cmd->initial_current_step,
-		        cmd->duration_step,
-		        cmd->record_every_dT,
-		        cmd->record_every_dE,
-		        cmd->initial_freq,
-		        cmd->final_freq,
-		        cmd->sweep_linear,
-		        cmd->amplitude_current,
-		        cmd->frequency_number,
-		        cmd->average_n_times,
-		        cmd->correction,
-		        cmd->wait_for_steady,
-		        cmd->i_range,
-				cmd->processData,
-		        &techContext
-		    );
-		    
-		    if (cmdResult->errorCode != SUCCESS) break;
-		    
-		    // Set up progress callback if provided
-		    if (cmd->base.progressCallback) {
-		        techContext->progressCallback = cmd->base.progressCallback;
-		        techContext->userData = cmd->base.userData;
-		    }
-		    
-		    // Poll until complete
-		    while (!BIO_IsTechniqueComplete(techContext)) {
-		        BIO_UpdateTechnique(techContext);
-		        Delay(0.1);
-		    }
-		    
-		    // Create combined result
-		    BIO_TechniqueData *combinedResult = calloc(1, sizeof(BIO_TechniqueData));
-		    if (!combinedResult) {
-		        cmdResult->errorCode = BIO_ERR_FUNCTIONFAILED;
-		        BIO_FreeTechniqueContext(techContext);
-		        break;
-		    }
-		    
-		    // Get results
-		    BIO_RawDataBuffer *rawData = NULL;
-		    bool partialData = false;
-		    
-		    if (techContext->state == BIO_TECH_STATE_ERROR) {
-		        if (BIO_GetTechniqueRawData(techContext, &rawData) == SUCCESS && rawData) {
-		            partialData = true;
-		            cmdResult->errorCode = BIO_ERR_PARTIAL_DATA;
-		        } else {
-		            cmdResult->errorCode = techContext->lastError;
-		        }
-		    } else if (techContext->state == BIO_TECH_STATE_COMPLETED) {
-		        if (BIO_GetTechniqueRawData(techContext, &rawData) == SUCCESS) {
-		            cmdResult->errorCode = SUCCESS;
-		        } else {
-		            cmdResult->errorCode = BIO_ERR_FUNCTIONFAILED;
-		        }
-		    }
-		    
-		    // Copy data to combined result
-		    if (rawData) {
-		        combinedResult->rawData = BIO_CopyRawDataBuffer(rawData);
-		        
-		        // Transfer converted data ownership if available
-		        if (techContext->convertedData) {
-		            combinedResult->convertedData = techContext->convertedData;
-		            techContext->convertedData = NULL; // Transfer ownership
-		        }
-		        
-		        cmdResult->data.techniqueResult.techniqueData = combinedResult;
-		        cmdResult->data.techniqueResult.elapsedTime = Timer() - startTime;
-		        cmdResult->data.techniqueResult.finalState = techContext->state;
-		        cmdResult->data.techniqueResult.partialData = partialData;
-		    } else {
-		        free(combinedResult);
-		    }
-		    
-		    // Clean up
-		    BIO_FreeTechniqueContext(techContext);
-		    break;
-		}
+        
+        case BIO_CMD_RUN_SPEIS: {
+            BioSPEISCommand *cmd = (BioSPEISCommand*)params;
+            BIO_TechniqueContext *techContext = NULL;
+            double startTime = Timer();
+            
+            // Start SPEIS
+            cmdResult->errorCode = BIO_StartSPEIS(
+                ctx->deviceID,
+                cmd->base.channel,
+                cmd->vs_initial,
+                cmd->vs_final,
+                cmd->initial_voltage_step,
+                cmd->final_voltage_step,
+                cmd->duration_step,
+                cmd->step_number,
+                cmd->record_every_dT,
+                cmd->record_every_dI,
+                cmd->initial_freq,
+                cmd->final_freq,
+                cmd->sweep_linear,
+                cmd->amplitude_voltage,
+                cmd->frequency_number,
+                cmd->average_n_times,
+                cmd->correction,
+                cmd->wait_for_steady,
+                cmd->processData,
+                &techContext
+            );
+            
+            if (cmdResult->errorCode != SUCCESS) break;
+            
+            // Set up progress callback if provided
+            if (cmd->base.progressCallback) {
+                techContext->progressCallback = cmd->base.progressCallback;
+                techContext->userData = cmd->base.userData;
+            }
+            
+            // Poll until complete
+            while (!BIO_IsTechniqueComplete(techContext)) {
+                BIO_UpdateTechnique(techContext);
+                Delay(0.1);
+            }
+            
+            // Create combined result
+            BIO_TechniqueData *combinedResult = calloc(1, sizeof(BIO_TechniqueData));
+            if (!combinedResult) {
+                cmdResult->errorCode = BIO_ERR_MEMORY_ALLOCATION_FAILED;
+                BIO_FreeTechniqueContext(techContext);
+                break;
+            }
+            
+            // Get results
+            BIO_RawDataBuffer *rawData = NULL;
+            bool partialData = false;
+            
+            if (techContext->state == BIO_TECH_STATE_ERROR) {
+                if (BIO_GetTechniqueRawData(techContext, &rawData) == SUCCESS && rawData) {
+                    partialData = true;
+                    cmdResult->errorCode = BIO_ERR_PARTIAL_DATA;
+                } else {
+                    cmdResult->errorCode = techContext->lastError;
+                }
+            } else if (techContext->state == BIO_TECH_STATE_COMPLETED) {
+                if (BIO_GetTechniqueRawData(techContext, &rawData) == SUCCESS) {
+                    cmdResult->errorCode = SUCCESS;
+                } else {
+                    cmdResult->errorCode = BIO_ERR_NO_DATA_RETRIEVED;
+                }
+            }
+            
+            // Copy data to combined result
+            if (rawData) {
+                combinedResult->rawData = BIO_CopyRawDataBuffer(rawData);
+                if (!combinedResult->rawData) {
+                    cmdResult->errorCode = BIO_ERR_DATA_COPY_FAILED;
+                    free(combinedResult);
+                    BIO_FreeTechniqueContext(techContext);
+                    break;
+                }
+                
+                // Transfer converted data ownership if available
+                if (techContext->convertedData) {
+                    combinedResult->convertedData = techContext->convertedData;
+                    techContext->convertedData = NULL; // Transfer ownership
+                }
+                
+                cmdResult->data.techniqueResult.techniqueData = combinedResult;
+                cmdResult->data.techniqueResult.elapsedTime = Timer() - startTime;
+                cmdResult->data.techniqueResult.finalState = techContext->state;
+                cmdResult->data.techniqueResult.partialData = partialData;
+            } else {
+                if (cmdResult->errorCode == SUCCESS) {
+                    cmdResult->errorCode = BIO_ERR_NO_DATA_RETRIEVED;
+                }
+                free(combinedResult);
+            }
+            
+            // Clean up
+            BIO_FreeTechniqueContext(techContext);
+            break;
+        }
+        
+        case BIO_CMD_RUN_GEIS: {
+            BioGEISCommand *cmd = (BioGEISCommand*)params;
+            BIO_TechniqueContext *techContext = NULL;
+            double startTime = Timer();
+            
+            // Start GEIS
+            cmdResult->errorCode = BIO_StartGEIS(
+                ctx->deviceID,
+                cmd->base.channel,
+                cmd->vs_initial,
+                cmd->initial_current_step,
+                cmd->duration_step,
+                cmd->record_every_dT,
+                cmd->record_every_dE,
+                cmd->initial_freq,
+                cmd->final_freq,
+                cmd->sweep_linear,
+                cmd->amplitude_current,
+                cmd->frequency_number,
+                cmd->average_n_times,
+                cmd->correction,
+                cmd->wait_for_steady,
+                cmd->i_range,
+                cmd->processData,
+                &techContext
+            );
+            
+            if (cmdResult->errorCode != SUCCESS) break;
+            
+            // Set up progress callback if provided
+            if (cmd->base.progressCallback) {
+                techContext->progressCallback = cmd->base.progressCallback;
+                techContext->userData = cmd->base.userData;
+            }
+            
+            // Poll until complete
+            while (!BIO_IsTechniqueComplete(techContext)) {
+                BIO_UpdateTechnique(techContext);
+                Delay(0.1);
+            }
+            
+            // Create combined result
+            BIO_TechniqueData *combinedResult = calloc(1, sizeof(BIO_TechniqueData));
+            if (!combinedResult) {
+                cmdResult->errorCode = BIO_ERR_MEMORY_ALLOCATION_FAILED;
+                BIO_FreeTechniqueContext(techContext);
+                break;
+            }
+            
+            // Get results
+            BIO_RawDataBuffer *rawData = NULL;
+            bool partialData = false;
+            
+            if (techContext->state == BIO_TECH_STATE_ERROR) {
+                if (BIO_GetTechniqueRawData(techContext, &rawData) == SUCCESS && rawData) {
+                    partialData = true;
+                    cmdResult->errorCode = BIO_ERR_PARTIAL_DATA;
+                } else {
+                    cmdResult->errorCode = techContext->lastError;
+                }
+            } else if (techContext->state == BIO_TECH_STATE_COMPLETED) {
+                if (BIO_GetTechniqueRawData(techContext, &rawData) == SUCCESS) {
+                    cmdResult->errorCode = SUCCESS;
+                } else {
+                    cmdResult->errorCode = BIO_ERR_NO_DATA_RETRIEVED;
+                }
+            }
+            
+            // Copy data to combined result
+            if (rawData) {
+                combinedResult->rawData = BIO_CopyRawDataBuffer(rawData);
+                if (!combinedResult->rawData) {
+                    cmdResult->errorCode = BIO_ERR_DATA_COPY_FAILED;
+                    free(combinedResult);
+                    BIO_FreeTechniqueContext(techContext);
+                    break;
+                }
+                
+                // Transfer converted data ownership if available
+                if (techContext->convertedData) {
+                    combinedResult->convertedData = techContext->convertedData;
+                    techContext->convertedData = NULL; // Transfer ownership
+                }
+                
+                cmdResult->data.techniqueResult.techniqueData = combinedResult;
+                cmdResult->data.techniqueResult.elapsedTime = Timer() - startTime;
+                cmdResult->data.techniqueResult.finalState = techContext->state;
+                cmdResult->data.techniqueResult.partialData = partialData;
+            } else {
+                if (cmdResult->errorCode == SUCCESS) {
+                    cmdResult->errorCode = BIO_ERR_NO_DATA_RETRIEVED;
+                }
+                free(combinedResult);
+            }
+            
+            // Clean up
+            BIO_FreeTechniqueContext(techContext);
+            break;
+        }
 
-		case BIO_CMD_RUN_SGEIS: {
-		    BioSGEISCommand *cmd = (BioSGEISCommand*)params;
-		    BIO_TechniqueContext *techContext = NULL;
-		    double startTime = Timer();
-		    
-		    // Start SGEIS
-		    cmdResult->errorCode = BIO_StartSGEIS(
-		        ctx->deviceID,
-		        cmd->base.channel,
-		        cmd->vs_initial,
-		        cmd->vs_final,
-		        cmd->initial_current_step,
-		        cmd->final_current_step,
-		        cmd->duration_step,
-		        cmd->step_number,
-		        cmd->record_every_dT,
-		        cmd->record_every_dE,
-		        cmd->initial_freq,
-		        cmd->final_freq,
-		        cmd->sweep_linear,
-		        cmd->amplitude_current,
-		        cmd->frequency_number,
-		        cmd->average_n_times,
-		        cmd->correction,
-		        cmd->wait_for_steady,
-		        cmd->i_range,
-		        cmd->processData,
-		        &techContext
-		    );
-		    
-		    if (cmdResult->errorCode != SUCCESS) break;
-		    
-		    // Set up progress callback if provided
-		    if (cmd->base.progressCallback) {
-		        techContext->progressCallback = cmd->base.progressCallback;
-		        techContext->userData = cmd->base.userData;
-		    }
-		    
-		    // Poll until complete
-		    while (!BIO_IsTechniqueComplete(techContext)) {
-		        BIO_UpdateTechnique(techContext);
-		        Delay(0.1);
-		    }
-		    
-		    // Create combined result
-		    BIO_TechniqueData *combinedResult = calloc(1, sizeof(BIO_TechniqueData));
-		    if (!combinedResult) {
-		        cmdResult->errorCode = BIO_ERR_FUNCTIONFAILED;
-		        BIO_FreeTechniqueContext(techContext);
-		        break;
-		    }
-		    
-		    // Get results
-		    BIO_RawDataBuffer *rawData = NULL;
-		    bool partialData = false;
-		    
-		    if (techContext->state == BIO_TECH_STATE_ERROR) {
-		        if (BIO_GetTechniqueRawData(techContext, &rawData) == SUCCESS && rawData) {
-		            partialData = true;
-		            cmdResult->errorCode = BIO_ERR_PARTIAL_DATA;
-		        } else {
-		            cmdResult->errorCode = techContext->lastError;
-		        }
-		    } else if (techContext->state == BIO_TECH_STATE_COMPLETED) {
-		        if (BIO_GetTechniqueRawData(techContext, &rawData) == SUCCESS) {
-		            cmdResult->errorCode = SUCCESS;
-		        } else {
-		            cmdResult->errorCode = BIO_ERR_FUNCTIONFAILED;
-		        }
-		    }
-		    
-		    // Copy data to combined result
-		    if (rawData) {
-		        combinedResult->rawData = BIO_CopyRawDataBuffer(rawData);
-		        
-		        // Transfer converted data ownership if available
-		        if (techContext->convertedData) {
-		            combinedResult->convertedData = techContext->convertedData;
-		            techContext->convertedData = NULL; // Transfer ownership
-		        }
-		        
-		        cmdResult->data.techniqueResult.techniqueData = combinedResult;
-		        cmdResult->data.techniqueResult.elapsedTime = Timer() - startTime;
-		        cmdResult->data.techniqueResult.finalState = techContext->state;
-		        cmdResult->data.techniqueResult.partialData = partialData;
-		    } else {
-		        free(combinedResult);
-		    }
-		    
-		    // Clean up
-		    BIO_FreeTechniqueContext(techContext);
-		    break;
-		}
+        case BIO_CMD_RUN_SGEIS: {
+            BioSGEISCommand *cmd = (BioSGEISCommand*)params;
+            BIO_TechniqueContext *techContext = NULL;
+            double startTime = Timer();
+            
+            // Start SGEIS
+            cmdResult->errorCode = BIO_StartSGEIS(
+                ctx->deviceID,
+                cmd->base.channel,
+                cmd->vs_initial,
+                cmd->vs_final,
+                cmd->initial_current_step,
+                cmd->final_current_step,
+                cmd->duration_step,
+                cmd->step_number,
+                cmd->record_every_dT,
+                cmd->record_every_dE,
+                cmd->initial_freq,
+                cmd->final_freq,
+                cmd->sweep_linear,
+                cmd->amplitude_current,
+                cmd->frequency_number,
+                cmd->average_n_times,
+                cmd->correction,
+                cmd->wait_for_steady,
+                cmd->i_range,
+                cmd->processData,
+                &techContext
+            );
+            
+            if (cmdResult->errorCode != SUCCESS) break;
+            
+            // Set up progress callback if provided
+            if (cmd->base.progressCallback) {
+                techContext->progressCallback = cmd->base.progressCallback;
+                techContext->userData = cmd->base.userData;
+            }
+            
+            // Poll until complete
+            while (!BIO_IsTechniqueComplete(techContext)) {
+                BIO_UpdateTechnique(techContext);
+                Delay(0.1);
+            }
+            
+            // Create combined result
+            BIO_TechniqueData *combinedResult = calloc(1, sizeof(BIO_TechniqueData));
+            if (!combinedResult) {
+                cmdResult->errorCode = BIO_ERR_MEMORY_ALLOCATION_FAILED;
+                BIO_FreeTechniqueContext(techContext);
+                break;
+            }
+            
+            // Get results
+            BIO_RawDataBuffer *rawData = NULL;
+            bool partialData = false;
+            
+            if (techContext->state == BIO_TECH_STATE_ERROR) {
+                if (BIO_GetTechniqueRawData(techContext, &rawData) == SUCCESS && rawData) {
+                    partialData = true;
+                    cmdResult->errorCode = BIO_ERR_PARTIAL_DATA;
+                } else {
+                    cmdResult->errorCode = techContext->lastError;
+                }
+            } else if (techContext->state == BIO_TECH_STATE_COMPLETED) {
+                if (BIO_GetTechniqueRawData(techContext, &rawData) == SUCCESS) {
+                    cmdResult->errorCode = SUCCESS;
+                } else {
+                    cmdResult->errorCode = BIO_ERR_NO_DATA_RETRIEVED;
+                }
+            }
+            
+            // Copy data to combined result
+            if (rawData) {
+                combinedResult->rawData = BIO_CopyRawDataBuffer(rawData);
+                if (!combinedResult->rawData) {
+                    cmdResult->errorCode = BIO_ERR_DATA_COPY_FAILED;
+                    free(combinedResult);
+                    BIO_FreeTechniqueContext(techContext);
+                    break;
+                }
+                
+                // Transfer converted data ownership if available
+                if (techContext->convertedData) {
+                    combinedResult->convertedData = techContext->convertedData;
+                    techContext->convertedData = NULL; // Transfer ownership
+                }
+                
+                cmdResult->data.techniqueResult.techniqueData = combinedResult;
+                cmdResult->data.techniqueResult.elapsedTime = Timer() - startTime;
+                cmdResult->data.techniqueResult.finalState = techContext->state;
+                cmdResult->data.techniqueResult.partialData = partialData;
+            } else {
+                if (cmdResult->errorCode == SUCCESS) {
+                    cmdResult->errorCode = BIO_ERR_NO_DATA_RETRIEVED;
+                }
+                free(combinedResult);
+            }
+            
+            // Clean up
+            BIO_FreeTechniqueContext(techContext);
+            break;
+        }
         
         case BIO_CMD_GET_HARDWARE_CONFIG: {
             BioChannelCommand *cmd = (BioChannelCommand*)params;
@@ -736,8 +781,8 @@ static int BIO_AdapterExecuteCommand(void *deviceContext, int commandType, void 
                                                 cmd->config);
             break;
         }
-		
-		case BIO_CMD_STOP_CHANNEL: {
+        
+        case BIO_CMD_STOP_CHANNEL: {
             BioChannelCommand *cmd = (BioChannelCommand*)params;
             cmdResult->errorCode = BIO_StopChannel(ctx->deviceID, cmd->base.channel);
             break;
@@ -803,7 +848,7 @@ static int BIO_AdapterExecuteCommand(void *deviceContext, int commandType, void 
                     memcpy(cmdResult->data.dataResult.rawData, dataBuffer.data,
                            dataSize * sizeof(unsigned int));
                 } else {
-                    cmdResult->errorCode = BIO_ERR_FUNCTIONFAILED;
+                    cmdResult->errorCode = BIO_ERR_MEMORY_ALLOCATION_FAILED;
                 }
             }
             break;
@@ -843,6 +888,7 @@ static int BIO_AdapterExecuteCommand(void *deviceContext, int commandType, void 
             cmdResult->errorCode = BIO_GetLibVersion(version, &size);
             if (cmdResult->errorCode == SUCCESS) {
                 strncpy(cmdResult->data.version, version, sizeof(cmdResult->data.version) - 1);
+                cmdResult->data.version[sizeof(cmdResult->data.version) - 1] = '\0';
             }
             break;
         }
@@ -858,14 +904,14 @@ static int BIO_AdapterExecuteCommand(void *deviceContext, int commandType, void 
                     memcpy(cmdResult->data.message, message, size);
                     cmdResult->data.message[size] = '\0';
                 } else {
-                    cmdResult->errorCode = BIO_ERR_FUNCTIONFAILED;
+                    cmdResult->errorCode = BIO_ERR_MEMORY_ALLOCATION_FAILED;
                 }
             }
             break;
         }
             
         default:
-            cmdResult->errorCode = ERR_INVALID_PARAMETER;
+            cmdResult->errorCode = BIO_DEV_INVALIDPARAMETERS;
             break;
     }
     
