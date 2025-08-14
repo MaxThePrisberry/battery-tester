@@ -235,7 +235,7 @@ void UpdateTestProgress(TestSuiteContext *context, const char *message) {
 // Helper function to ensure remote mode is enabled using queued commands
 static int EnsureRemoteModeQueued() {
     PSB_Status status;
-    int result = PSB_GetStatusQueued(&status);
+    int result = PSB_GetStatusQueued(&status, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         LogErrorEx(LOG_DEVICE_PSB, "Failed to get status for remote mode check: %s", 
                    PSB_GetErrorString(result));
@@ -245,7 +245,7 @@ static int EnsureRemoteModeQueued() {
     // Only set remote mode if it's not already enabled
     if (!status.remoteMode) {
         LogDebugEx(LOG_DEVICE_PSB, "Remote mode is OFF, enabling it...");
-        result = PSB_SetRemoteModeQueued(1);
+        result = PSB_SetRemoteModeQueued(1, DEVICE_PRIORITY_NORMAL);
         if (result != PSB_SUCCESS) {
             LogErrorEx(LOG_DEVICE_PSB, "Failed to enable remote mode: %s", 
                        PSB_GetErrorString(result));
@@ -293,7 +293,7 @@ int PSB_TestSuite_Run(TestSuiteContext *context) {
     
     // Zero out PSB values for safety
     UpdateTestProgress(context, "Zeroing PSB values...");
-    if (PSB_ZeroAllValuesQueued() != PSB_SUCCESS) {
+    if (PSB_ZeroAllValuesQueued(DEVICE_PRIORITY_NORMAL) != PSB_SUCCESS) {
         LogErrorEx(LOG_DEVICE_PSB, "Failed to zero out the PSB before suite execution!");
         UpdateTestProgress(context, "Failed to zero out PSB");
         context->state = TEST_STATE_ERROR;
@@ -371,7 +371,7 @@ void PSB_TestSuite_Cancel(TestSuiteContext *context) {
 
 void PSB_TestSuite_Cleanup(TestSuiteContext *context) {
     if (context) {
-        PSB_ZeroAllValuesQueued();
+        PSB_ZeroAllValuesQueued(DEVICE_PRIORITY_NORMAL);
     }
 }
 
@@ -388,7 +388,7 @@ int Test_RemoteMode(char *errorMsg, int errorMsgSize) {
     
     // Use queued version for status read
     LogDebugEx(LOG_DEVICE_PSB, "Reading initial state...");
-    result = PSB_GetStatusQueued(&status);
+    result = PSB_GetStatusQueued(&status, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to read initial status: %s", 
                 PSB_GetErrorString(result));
@@ -402,7 +402,7 @@ int Test_RemoteMode(char *errorMsg, int errorMsgSize) {
     // Toggle remote mode OFF (if it's ON)
     if (initialRemoteState) {
         LogDebugEx(LOG_DEVICE_PSB, "Turning remote mode OFF...");
-        result = PSB_SetRemoteModeQueued(0);
+        result = PSB_SetRemoteModeQueued(0, DEVICE_PRIORITY_NORMAL);
         if (result != PSB_SUCCESS) {
             snprintf(errorMsg, errorMsgSize, "Failed to turn remote mode OFF: %s", 
                     PSB_GetErrorString(result));
@@ -412,7 +412,7 @@ int Test_RemoteMode(char *errorMsg, int errorMsgSize) {
         Delay(TEST_DELAY_SHORT);
         
         // Verify it turned off
-        result = PSB_GetStatusQueued(&status);
+        result = PSB_GetStatusQueued(&status, DEVICE_PRIORITY_NORMAL);
         if (result != PSB_SUCCESS) {
             snprintf(errorMsg, errorMsgSize, "Failed to read status after turning OFF: %s", 
                     PSB_GetErrorString(result));
@@ -428,7 +428,7 @@ int Test_RemoteMode(char *errorMsg, int errorMsgSize) {
     
     // Turn remote mode ON
     LogDebugEx(LOG_DEVICE_PSB, "Turning remote mode ON...");
-    result = PSB_SetRemoteModeQueued(1);
+    result = PSB_SetRemoteModeQueued(1, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to turn remote mode ON: %s", 
                 PSB_GetErrorString(result));
@@ -438,7 +438,7 @@ int Test_RemoteMode(char *errorMsg, int errorMsgSize) {
     Delay(TEST_DELAY_SHORT);
     
     // Verify it turned on
-    result = PSB_GetStatusQueued(&status);
+    result = PSB_GetStatusQueued(&status, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to read status after turning ON: %s", 
                 PSB_GetErrorString(result));
@@ -472,7 +472,7 @@ int Test_StatusRegisterReading(char *errorMsg, int errorMsgSize) {
     
     // Read status multiple times using queued commands
     for (int i = 0; i < 5; i++) {
-        result = PSB_GetStatusQueued(&status1);
+        result = PSB_GetStatusQueued(&status1, DEVICE_PRIORITY_NORMAL);
         if (result != PSB_SUCCESS) {
             snprintf(errorMsg, errorMsgSize, "Failed to read status on iteration %d: %s", 
                     i + 1, PSB_GetErrorString(result));
@@ -487,7 +487,7 @@ int Test_StatusRegisterReading(char *errorMsg, int errorMsgSize) {
     }
     
     // Compare two consecutive reads
-    result = PSB_GetStatusQueued(&status1);
+    result = PSB_GetStatusQueued(&status1, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to read first comparison status: %s", 
                 PSB_GetErrorString(result));
@@ -496,7 +496,7 @@ int Test_StatusRegisterReading(char *errorMsg, int errorMsgSize) {
     
     Delay(TEST_DELAY_VERY_SHORT);
     
-    result = PSB_GetStatusQueued(&status2);
+    result = PSB_GetStatusQueued(&status2, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to read second comparison status: %s", 
                 PSB_GetErrorString(result));
@@ -517,7 +517,7 @@ int Test_VoltageControl(char *errorMsg, int errorMsgSize) {
     LogDebugEx(LOG_DEVICE_PSB, "Testing voltage control...");
     
     // Ensure remote mode using queued command
-    int result = PSB_SetRemoteModeQueued(1);
+    int result = PSB_SetRemoteModeQueued(1, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to ensure remote mode: %s", 
                 PSB_GetErrorString(result));
@@ -532,7 +532,7 @@ int Test_VoltageControl(char *errorMsg, int errorMsgSize) {
     for (int i = 0; i < 3; i++) {
         LogDebugEx(LOG_DEVICE_PSB, "Setting voltage to %.2fV...", testVoltages[i]);
         
-        result = PSB_SetVoltageQueued(testVoltages[i]);
+        result = PSB_SetVoltageQueued(testVoltages[i], DEVICE_PRIORITY_NORMAL);
         if (result != PSB_SUCCESS) {
             snprintf(errorMsg, errorMsgSize, "Failed to set voltage to %.2fV: %s", 
                     testVoltages[i], PSB_GetErrorString(result));
@@ -543,7 +543,7 @@ int Test_VoltageControl(char *errorMsg, int errorMsgSize) {
         
         // Read back the status using queued command
         PSB_Status status;
-        result = PSB_GetStatusQueued(&status);
+        result = PSB_GetStatusQueued(&status, DEVICE_PRIORITY_NORMAL);
         if (result != PSB_SUCCESS) {
             snprintf(errorMsg, errorMsgSize, "Failed to read status after setting voltage: %s", 
                     PSB_GetErrorString(result));
@@ -575,7 +575,7 @@ int Test_VoltageLimits(char *errorMsg, int errorMsgSize) {
     
     LogDebugEx(LOG_DEVICE_PSB, "Setting voltage limits: min=%.2fV, max=%.2fV", minVoltage, maxVoltage);
     
-    result = PSB_SetVoltageLimitsQueued(minVoltage, maxVoltage);
+    result = PSB_SetVoltageLimitsQueued(minVoltage, maxVoltage, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to set voltage limits: %s", 
                 PSB_GetErrorString(result));
@@ -587,7 +587,7 @@ int Test_VoltageLimits(char *errorMsg, int errorMsgSize) {
     
     // Test voltage within limits
     LogDebugEx(LOG_DEVICE_PSB, "Setting voltage within limits (30V)...");
-    result = PSB_SetVoltageQueued(30.0);
+    result = PSB_SetVoltageQueued(30.0, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to set voltage within limits: %s", 
                 PSB_GetErrorString(result));
@@ -596,15 +596,15 @@ int Test_VoltageLimits(char *errorMsg, int errorMsgSize) {
     
     // Test voltage outside limits (should be clamped)
     LogDebugEx(LOG_DEVICE_PSB, "Testing voltage outside limits...");
-    result = PSB_SetVoltageQueued(50.0);  // Above max
+    result = PSB_SetVoltageQueued(50.0, DEVICE_PRIORITY_NORMAL);  // Above max
     // This might succeed but be clamped to max
     
-    result = PSB_SetVoltageQueued(10.0);  // Below min
+    result = PSB_SetVoltageQueued(10.0, DEVICE_PRIORITY_NORMAL);  // Below min
     // This might succeed but be clamped to min
     
     // Restore safe limits
     LogDebugEx(LOG_DEVICE_PSB, "Restoring safe voltage limits...");
-    result = PSB_SetVoltageLimitsQueued(PSB_SAFE_VOLTAGE_MIN, PSB_SAFE_VOLTAGE_MAX);
+    result = PSB_SetVoltageLimitsQueued(PSB_SAFE_VOLTAGE_MIN, PSB_SAFE_VOLTAGE_MAX, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         LogWarningEx(LOG_DEVICE_PSB, "Failed to restore safe voltage limits");
     }
@@ -631,7 +631,7 @@ int Test_CurrentControl(char *errorMsg, int errorMsgSize) {
     for (int i = 0; i < 3; i++) {
         LogDebugEx(LOG_DEVICE_PSB, "Setting current to %.2fA...", testCurrents[i]);
         
-        result = PSB_SetCurrentQueued(testCurrents[i]);
+        result = PSB_SetCurrentQueued(testCurrents[i], DEVICE_PRIORITY_NORMAL);
         if (result != PSB_SUCCESS) {
             snprintf(errorMsg, errorMsgSize, "Failed to set current to %.2fA: %s", 
                     testCurrents[i], PSB_GetErrorString(result));
@@ -642,7 +642,7 @@ int Test_CurrentControl(char *errorMsg, int errorMsgSize) {
         
         // Read back status to verify command was accepted
         PSB_Status status;
-        result = PSB_GetStatusQueued(&status);
+        result = PSB_GetStatusQueued(&status, DEVICE_PRIORITY_NORMAL);
         if (result != PSB_SUCCESS) {
             snprintf(errorMsg, errorMsgSize, "Failed to read status after setting current: %s", 
                     PSB_GetErrorString(result));
@@ -669,7 +669,7 @@ int Test_CurrentLimits(char *errorMsg, int errorMsgSize) {
     }
     
     // First zero all values to ensure clean state
-    result = PSB_ZeroAllValuesQueued();
+    result = PSB_ZeroAllValuesQueued(DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to zero values: %s", 
                 PSB_GetErrorString(result));
@@ -683,7 +683,7 @@ int Test_CurrentLimits(char *errorMsg, int errorMsgSize) {
     double testMaxCurrent = TEST_CURRENT_HIGH;  // 50.0A
 	
 	LogDebugEx(LOG_DEVICE_PSB, "Setting current to %.2fA (within new limits)...", TEST_CURRENT_MID);
-    result = PSB_SetCurrentQueued(TEST_CURRENT_MID);  // 30.0A - within 6-50A range
+    result = PSB_SetCurrentQueued(TEST_CURRENT_MID, DEVICE_PRIORITY_NORMAL);  // 30.0A - within 6-50A range
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to set current before limits: %s", 
                 PSB_GetErrorString(result));
@@ -695,7 +695,7 @@ int Test_CurrentLimits(char *errorMsg, int errorMsgSize) {
     LogDebugEx(LOG_DEVICE_PSB, "Setting current limits: %.2fA - %.2fA...", 
                testMinCurrent, testMaxCurrent);
     
-    result = PSB_SetCurrentLimitsQueued(testMinCurrent, testMaxCurrent);
+    result = PSB_SetCurrentLimitsQueued(testMinCurrent, testMaxCurrent, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to set current limits (%.1fA-%.1fA): %s", 
                 testMinCurrent, testMaxCurrent, PSB_GetErrorString(result));
@@ -706,14 +706,14 @@ int Test_CurrentLimits(char *errorMsg, int errorMsgSize) {
     
     // Test that current is constrained by limits
     LogDebugEx(LOG_DEVICE_PSB, "Testing current above max limit...");
-    result = PSB_SetCurrentQueued(TEST_CURRENT_MAX);  // 60.0A - should be clamped to 50A
+    result = PSB_SetCurrentQueued(TEST_CURRENT_MAX, DEVICE_PRIORITY_NORMAL);  // 60.0A - should be clamped to 50A
     if (result != PSB_SUCCESS && result != PSB_ERROR_INVALID_PARAM) {
         LogWarningEx(LOG_DEVICE_PSB, "Unexpected error setting current above limit: %s", 
                     PSB_GetErrorString(result));
     }
     
     LogDebugEx(LOG_DEVICE_PSB, "Testing current below min limit...");
-    result = PSB_SetCurrentQueued(PSB_SAFE_CURRENT_MIN);  // 0A - should be clamped to 6A
+    result = PSB_SetCurrentQueued(PSB_SAFE_CURRENT_MIN, DEVICE_PRIORITY_NORMAL);  // 0A - should be clamped to 6A
     if (result != PSB_SUCCESS && result != PSB_ERROR_INVALID_PARAM) {
         LogWarningEx(LOG_DEVICE_PSB, "Unexpected error setting current below limit: %s", 
                     PSB_GetErrorString(result));
@@ -721,7 +721,7 @@ int Test_CurrentLimits(char *errorMsg, int errorMsgSize) {
     
     // Restore safe limits
     LogDebugEx(LOG_DEVICE_PSB, "Restoring safe current limits...");
-    result = PSB_SetCurrentLimitsQueued(PSB_SAFE_CURRENT_MIN, PSB_SAFE_CURRENT_MAX);
+    result = PSB_SetCurrentLimitsQueued(PSB_SAFE_CURRENT_MIN, PSB_SAFE_CURRENT_MAX, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         LogWarningEx(LOG_DEVICE_PSB, "Failed to restore safe current limits: %s", 
                     PSB_GetErrorString(result));
@@ -749,7 +749,7 @@ int Test_PowerControl(char *errorMsg, int errorMsgSize) {
     
     for (int i = 0; i < ARRAY_SIZE(testPowers); i++) {
         LogDebugEx(LOG_DEVICE_PSB, "Setting power to %.2fW...", testPowers[i]);
-        result = PSB_SetPowerQueued(testPowers[i]);
+        result = PSB_SetPowerQueued(testPowers[i], DEVICE_PRIORITY_NORMAL);
         if (result != PSB_SUCCESS) {
             snprintf(errorMsg, errorMsgSize, "Failed to set power to %.1fW: %s", 
                     testPowers[i], PSB_GetErrorString(result));
@@ -759,7 +759,7 @@ int Test_PowerControl(char *errorMsg, int errorMsgSize) {
         
         // Get actual values to verify
         double actualVoltage, actualCurrent, actualPower;
-        result = PSB_GetActualValuesQueued(&actualVoltage, &actualCurrent, &actualPower);
+        result = PSB_GetActualValuesQueued(&actualVoltage, &actualCurrent, &actualPower, DEVICE_PRIORITY_NORMAL);
         if (result != PSB_SUCCESS) {
             LogWarningEx(LOG_DEVICE_PSB, "Failed to read actual values: %s", 
                         PSB_GetErrorString(result));
@@ -771,7 +771,7 @@ int Test_PowerControl(char *errorMsg, int errorMsgSize) {
     
     // Test invalid power value (should fail)
     LogDebugEx(LOG_DEVICE_PSB, "Testing invalid power (%.1fW)...", TEST_POWER_INVALID);
-    result = PSB_SetPowerQueued(TEST_POWER_INVALID);  // 1400W - beyond device limit
+    result = PSB_SetPowerQueued(TEST_POWER_INVALID, DEVICE_PRIORITY_NORMAL);  // 1400W - beyond device limit
     if (result == PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Should have rejected power %.1fW (max is %.1fW)", 
                 TEST_POWER_INVALID, PSB_SAFE_POWER_MAX);
@@ -798,7 +798,7 @@ int Test_PowerLimit(char *errorMsg, int errorMsgSize) {
     
     // First, ensure power is set to a low value to avoid conflicts
     LogDebugEx(LOG_DEVICE_PSB, "Setting initial power to %.1fW...", TEST_POWER_LOW);
-    result = PSB_SetPowerQueued(TEST_POWER_LOW);
+    result = PSB_SetPowerQueued(TEST_POWER_LOW, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         LogWarningEx(LOG_DEVICE_PSB, "Failed to set initial power: %s", 
                    PSB_GetErrorString(result));
@@ -810,7 +810,7 @@ int Test_PowerLimit(char *errorMsg, int errorMsgSize) {
     double testPowerLimit = TEST_POWER_MAX;  // 1200W - just below device max
     
     LogDebugEx(LOG_DEVICE_PSB, "Setting power limit to %.2fW...", testPowerLimit);
-    result = PSB_SetPowerLimitQueued(testPowerLimit);
+    result = PSB_SetPowerLimitQueued(testPowerLimit, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to set power limit to %.1fW: %s", 
                 testPowerLimit, PSB_GetErrorString(result));
@@ -821,7 +821,7 @@ int Test_PowerLimit(char *errorMsg, int errorMsgSize) {
     
     // Verify we can set power below the limit
     LogDebugEx(LOG_DEVICE_PSB, "Testing power below limit (%.1fW)...", TEST_POWER_HIGH);
-    result = PSB_SetPowerQueued(TEST_POWER_HIGH);  // 1000W - should work
+    result = PSB_SetPowerQueued(TEST_POWER_HIGH, DEVICE_PRIORITY_NORMAL);  // 1000W - should work
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to set power below limit: %s", 
                 PSB_GetErrorString(result));
@@ -830,7 +830,7 @@ int Test_PowerLimit(char *errorMsg, int errorMsgSize) {
     
     // Test that power above limit is rejected or clamped
     LogDebugEx(LOG_DEVICE_PSB, "Testing power above limit...");
-    result = PSB_SetPowerQueued(testPowerLimit + TEST_SINK_POWER_ABOVE_LIMIT);
+    result = PSB_SetPowerQueued(testPowerLimit + TEST_SINK_POWER_ABOVE_LIMIT, DEVICE_PRIORITY_NORMAL);
     if (result == PSB_SUCCESS) {
         LogWarningEx(LOG_DEVICE_PSB, "Power above limit was accepted (may be clamped by device)");
     } else {
@@ -840,7 +840,7 @@ int Test_PowerLimit(char *errorMsg, int errorMsgSize) {
     
     // Restore safe power limit
     LogDebugEx(LOG_DEVICE_PSB, "Restoring safe power limit (%.1fW)...", PSB_SAFE_POWER_MAX);
-    result = PSB_SetPowerLimitQueued(PSB_SAFE_POWER_MAX);
+    result = PSB_SetPowerLimitQueued(PSB_SAFE_POWER_MAX, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         LogWarningEx(LOG_DEVICE_PSB, "Failed to restore safe power limit: %s", 
                     PSB_GetErrorString(result));
@@ -848,7 +848,7 @@ int Test_PowerLimit(char *errorMsg, int errorMsgSize) {
     
     // Test invalid power limit (beyond device capability)
     LogDebugEx(LOG_DEVICE_PSB, "Testing invalid power limit (%.1fW)...", TEST_POWER_INVALID);
-    result = PSB_SetPowerLimitQueued(TEST_POWER_INVALID);  // 1400W - beyond max
+    result = PSB_SetPowerLimitQueued(TEST_POWER_INVALID, DEVICE_PRIORITY_NORMAL);  // 1400W - beyond max
     if (result == PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Should have rejected power limit %.1fW (max is %.1fW)", 
                 TEST_POWER_INVALID, PSB_SAFE_POWER_MAX);
@@ -881,7 +881,7 @@ int Test_SinkCurrentControl(char *errorMsg, int errorMsgSize) {
     
     // First, set output voltage low to allow sink mode activation
     LogDebugEx(LOG_DEVICE_PSB, "Setting output voltage to 0V to prepare for sink mode...");
-    result = PSB_SetVoltageQueued(PSB_SAFE_VOLTAGE_MIN);
+    result = PSB_SetVoltageQueued(PSB_SAFE_VOLTAGE_MIN, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to set voltage to 0V: %s", 
                 PSB_GetErrorString(result));
@@ -890,7 +890,7 @@ int Test_SinkCurrentControl(char *errorMsg, int errorMsgSize) {
     
     // Ensure output is disabled for safety
     LogDebugEx(LOG_DEVICE_PSB, "Ensuring output is disabled...");
-    result = PSB_SetOutputEnableQueued(0);
+    result = PSB_SetOutputEnableQueued(0, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         LogWarningEx(LOG_DEVICE_PSB, "Failed to disable output: %s", 
                    PSB_GetErrorString(result));
@@ -908,7 +908,7 @@ int Test_SinkCurrentControl(char *errorMsg, int errorMsgSize) {
     for (int i = 0; i < 3; i++) {
         LogDebugEx(LOG_DEVICE_PSB, "Setting sink current to %.2fA...", testSinkCurrents[i]);
         
-        result = PSB_SetSinkCurrentQueued(testSinkCurrents[i]);
+        result = PSB_SetSinkCurrentQueued(testSinkCurrents[i], DEVICE_PRIORITY_NORMAL);
         if (result != PSB_SUCCESS) {
             snprintf(errorMsg, errorMsgSize, "Failed to set sink current to %.2fA: %s", 
                     testSinkCurrents[i], PSB_GetErrorString(result));
@@ -918,7 +918,7 @@ int Test_SinkCurrentControl(char *errorMsg, int errorMsgSize) {
         Delay(TEST_DELAY_SHORT);
         
         // Read status to check if device is in sink mode
-        result = PSB_GetStatusQueued(&status);
+        result = PSB_GetStatusQueued(&status, DEVICE_PRIORITY_NORMAL);
         if (result != PSB_SUCCESS) {
             snprintf(errorMsg, errorMsgSize, "Failed to read status after setting sink current: %s", 
                     PSB_GetErrorString(result));
@@ -931,7 +931,7 @@ int Test_SinkCurrentControl(char *errorMsg, int errorMsgSize) {
     
     // Test invalid sink current (negative)
     LogDebugEx(LOG_DEVICE_PSB, "Testing negative sink current (%.1fA)...", TEST_SINK_CURRENT_NEGATIVE);
-    result = PSB_SetSinkCurrentQueued(TEST_SINK_CURRENT_NEGATIVE);
+    result = PSB_SetSinkCurrentQueued(TEST_SINK_CURRENT_NEGATIVE, DEVICE_PRIORITY_NORMAL);
     if (result == PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Should have rejected negative sink current");
         return -1;
@@ -941,7 +941,7 @@ int Test_SinkCurrentControl(char *errorMsg, int errorMsgSize) {
     
     // Test sink current beyond limit
     LogDebugEx(LOG_DEVICE_PSB, "Testing sink current beyond limit (%.1fA)...", TEST_CURRENT_INVALID);
-    result = PSB_SetSinkCurrentQueued(TEST_CURRENT_INVALID);
+    result = PSB_SetSinkCurrentQueued(TEST_CURRENT_INVALID, DEVICE_PRIORITY_NORMAL);
     if (result == PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Should have rejected sink current %.1fA (max is %.1fA)", 
                 TEST_CURRENT_INVALID, PSB_SAFE_SINK_CURRENT_MAX);
@@ -970,13 +970,13 @@ int Test_SinkPowerControl(char *errorMsg, int errorMsgSize) {
     
     // Prepare for sink mode
     LogDebugEx(LOG_DEVICE_PSB, "Preparing for sink mode operation...");
-    result = PSB_SetVoltageQueued(PSB_SAFE_VOLTAGE_MIN);
+    result = PSB_SetVoltageQueued(PSB_SAFE_VOLTAGE_MIN, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         LogWarningEx(LOG_DEVICE_PSB, "Failed to set voltage to 0V: %s", 
                    PSB_GetErrorString(result));
     }
     
-    result = PSB_SetOutputEnableQueued(0);
+    result = PSB_SetOutputEnableQueued(0, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         LogWarningEx(LOG_DEVICE_PSB, "Failed to disable output: %s", 
                    PSB_GetErrorString(result));
@@ -994,7 +994,7 @@ int Test_SinkPowerControl(char *errorMsg, int errorMsgSize) {
     for (int i = 0; i < 3; i++) {
         LogDebugEx(LOG_DEVICE_PSB, "Setting sink power to %.2fW...", testSinkPowers[i]);
         
-        result = PSB_SetSinkPowerQueued(testSinkPowers[i]);
+        result = PSB_SetSinkPowerQueued(testSinkPowers[i], DEVICE_PRIORITY_NORMAL);
         if (result != PSB_SUCCESS) {
             snprintf(errorMsg, errorMsgSize, "Failed to set sink power to %.2fW: %s", 
                     testSinkPowers[i], PSB_GetErrorString(result));
@@ -1004,7 +1004,7 @@ int Test_SinkPowerControl(char *errorMsg, int errorMsgSize) {
         Delay(TEST_DELAY_SHORT);
         
         // Read status
-        result = PSB_GetStatusQueued(&status);
+        result = PSB_GetStatusQueued(&status, DEVICE_PRIORITY_NORMAL);
         if (result != PSB_SUCCESS) {
             snprintf(errorMsg, errorMsgSize, "Failed to read status after setting sink power: %s", 
                     PSB_GetErrorString(result));
@@ -1017,7 +1017,7 @@ int Test_SinkPowerControl(char *errorMsg, int errorMsgSize) {
     
     // Test invalid sink power (negative)
     LogDebugEx(LOG_DEVICE_PSB, "Testing negative sink power (%.1fW)...", TEST_SINK_POWER_NEGATIVE);
-    result = PSB_SetSinkPowerQueued(TEST_SINK_POWER_NEGATIVE);
+    result = PSB_SetSinkPowerQueued(TEST_SINK_POWER_NEGATIVE, DEVICE_PRIORITY_NORMAL);
     if (result == PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Should have rejected negative sink power");
         return -1;
@@ -1027,7 +1027,7 @@ int Test_SinkPowerControl(char *errorMsg, int errorMsgSize) {
     
     // Test sink power beyond limit
     LogDebugEx(LOG_DEVICE_PSB, "Testing sink power beyond limit (%.1fW)...", TEST_POWER_INVALID);
-    result = PSB_SetSinkPowerQueued(TEST_POWER_INVALID);
+    result = PSB_SetSinkPowerQueued(TEST_POWER_INVALID, DEVICE_PRIORITY_NORMAL);
     if (result == PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Should have rejected sink power %.1fW (max is %.1fW)", 
                 TEST_POWER_INVALID, PSB_SAFE_SINK_POWER_MAX);
@@ -1055,7 +1055,7 @@ int Test_SinkCurrentLimits(char *errorMsg, int errorMsgSize) {
     
     // First zero all values to ensure clean state
     LogDebugEx(LOG_DEVICE_PSB, "Zeroing values for baseline...");
-    result = PSB_ZeroAllValuesQueued();
+    result = PSB_ZeroAllValuesQueued(DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to zero values: %s", 
                 PSB_GetErrorString(result));
@@ -1067,7 +1067,7 @@ int Test_SinkCurrentLimits(char *errorMsg, int errorMsgSize) {
     // CRITICAL: Set sink current to a value within the new limits BEFORE setting limits
     LogDebugEx(LOG_DEVICE_PSB, "Setting sink current to %.2fA (within new limits)...", 
                TEST_SINK_CURRENT_LIMIT_TEST);
-    result = PSB_SetSinkCurrentQueued(TEST_SINK_CURRENT_LIMIT_TEST); // 20A
+    result = PSB_SetSinkCurrentQueued(TEST_SINK_CURRENT_LIMIT_TEST, DEVICE_PRIORITY_NORMAL); // 20A
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to set sink current before limits: %s", 
                 PSB_GetErrorString(result));
@@ -1080,7 +1080,7 @@ int Test_SinkCurrentLimits(char *errorMsg, int errorMsgSize) {
     LogDebugEx(LOG_DEVICE_PSB, "Setting sink current limits: %.2fA - %.2fA...", 
                TEST_SINK_CURRENT_LIMIT_MIN, TEST_SINK_CURRENT_LIMIT_MAX);
     
-    result = PSB_SetSinkCurrentLimitsQueued(TEST_SINK_CURRENT_LIMIT_MIN, TEST_SINK_CURRENT_LIMIT_MAX);
+    result = PSB_SetSinkCurrentLimitsQueued(TEST_SINK_CURRENT_LIMIT_MIN, TEST_SINK_CURRENT_LIMIT_MAX, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to set sink current limits (%.1fA-%.1fA): %s", 
                 TEST_SINK_CURRENT_LIMIT_MIN, TEST_SINK_CURRENT_LIMIT_MAX, PSB_GetErrorString(result));
@@ -1091,7 +1091,7 @@ int Test_SinkCurrentLimits(char *errorMsg, int errorMsgSize) {
     
     // Test that sink current can be set within limits
     LogDebugEx(LOG_DEVICE_PSB, "Testing sink current within limits (%.1fA)...", TEST_SINK_CURRENT_LIMIT_TEST);
-    result = PSB_SetSinkCurrentQueued(TEST_SINK_CURRENT_LIMIT_TEST);
+    result = PSB_SetSinkCurrentQueued(TEST_SINK_CURRENT_LIMIT_TEST, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to set sink current within limits: %s", 
                 PSB_GetErrorString(result));
@@ -1100,7 +1100,7 @@ int Test_SinkCurrentLimits(char *errorMsg, int errorMsgSize) {
     
     // Test sink current at max limit
     LogDebugEx(LOG_DEVICE_PSB, "Testing sink current at max limit (%.1fA)...", TEST_SINK_CURRENT_LIMIT_MAX);
-    result = PSB_SetSinkCurrentQueued(TEST_SINK_CURRENT_LIMIT_MAX);
+    result = PSB_SetSinkCurrentQueued(TEST_SINK_CURRENT_LIMIT_MAX, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to set sink current at max limit: %s", 
                 PSB_GetErrorString(result));
@@ -1109,7 +1109,7 @@ int Test_SinkCurrentLimits(char *errorMsg, int errorMsgSize) {
     
     // Test sink current at min limit
     LogDebugEx(LOG_DEVICE_PSB, "Testing sink current at min limit (%.1fA)...", TEST_SINK_CURRENT_LIMIT_MIN);
-    result = PSB_SetSinkCurrentQueued(TEST_SINK_CURRENT_LIMIT_MIN);
+    result = PSB_SetSinkCurrentQueued(TEST_SINK_CURRENT_LIMIT_MIN, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to set sink current at min limit: %s", 
                 PSB_GetErrorString(result));
@@ -1118,7 +1118,7 @@ int Test_SinkCurrentLimits(char *errorMsg, int errorMsgSize) {
     
     // Test invalid limits (min > max)
     LogDebugEx(LOG_DEVICE_PSB, "Testing invalid sink current limits (min > max)...");
-    result = PSB_SetSinkCurrentLimitsQueued(TEST_SINK_CURRENT_LIMIT_MIN_INV, TEST_SINK_CURRENT_LIMIT_MAX_INV);
+    result = PSB_SetSinkCurrentLimitsQueued(TEST_SINK_CURRENT_LIMIT_MIN_INV, TEST_SINK_CURRENT_LIMIT_MAX_INV, DEVICE_PRIORITY_NORMAL);
     if (result == PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Should have rejected inverted sink current limits");
         return -1;
@@ -1128,7 +1128,7 @@ int Test_SinkCurrentLimits(char *errorMsg, int errorMsgSize) {
     
     // Test negative minimum limit
     LogDebugEx(LOG_DEVICE_PSB, "Testing negative minimum sink current limit (%.1fA)...", TEST_SINK_CURRENT_MIN_NEG);
-    result = PSB_SetSinkCurrentLimitsQueued(TEST_SINK_CURRENT_MIN_NEG, TEST_SINK_CURRENT_LIMIT_MAX);
+    result = PSB_SetSinkCurrentLimitsQueued(TEST_SINK_CURRENT_MIN_NEG, TEST_SINK_CURRENT_LIMIT_MAX, DEVICE_PRIORITY_NORMAL);
     if (result == PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Should have rejected negative minimum sink current limit");
         return -1;
@@ -1138,7 +1138,7 @@ int Test_SinkCurrentLimits(char *errorMsg, int errorMsgSize) {
     
     // Test excessive maximum limit
     LogDebugEx(LOG_DEVICE_PSB, "Testing excessive maximum sink current limit (%.1fA)...", TEST_CURRENT_INVALID);
-    result = PSB_SetSinkCurrentLimitsQueued(PSB_SAFE_SINK_CURRENT_MIN, TEST_CURRENT_INVALID);
+    result = PSB_SetSinkCurrentLimitsQueued(PSB_SAFE_SINK_CURRENT_MIN, TEST_CURRENT_INVALID, DEVICE_PRIORITY_NORMAL);
     if (result == PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Should have rejected excessive maximum sink current limit");
         return -1;
@@ -1148,7 +1148,7 @@ int Test_SinkCurrentLimits(char *errorMsg, int errorMsgSize) {
     
     // Restore safe limits
     LogDebugEx(LOG_DEVICE_PSB, "Restoring safe sink current limits...");
-    result = PSB_SetSinkCurrentLimitsQueued(PSB_SAFE_SINK_CURRENT_MIN, PSB_SAFE_SINK_CURRENT_MAX);
+    result = PSB_SetSinkCurrentLimitsQueued(PSB_SAFE_SINK_CURRENT_MIN, PSB_SAFE_SINK_CURRENT_MAX, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         LogWarningEx(LOG_DEVICE_PSB, "Failed to restore safe sink current limits: %s", 
                     PSB_GetErrorString(result));
@@ -1173,7 +1173,7 @@ int Test_SinkPowerLimit(char *errorMsg, int errorMsgSize) {
     
     // First, ensure sink power is set to a low value to avoid conflicts
     LogDebugEx(LOG_DEVICE_PSB, "Setting initial sink power to %.1fW...", TEST_SINK_POWER_LOW);
-    result = PSB_SetSinkPowerQueued(TEST_SINK_POWER_LOW);
+    result = PSB_SetSinkPowerQueued(TEST_SINK_POWER_LOW, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         LogWarningEx(LOG_DEVICE_PSB, "Failed to set initial sink power: %s", 
                    PSB_GetErrorString(result));
@@ -1183,7 +1183,7 @@ int Test_SinkPowerLimit(char *errorMsg, int errorMsgSize) {
     
     // Test setting valid sink power limit
     LogDebugEx(LOG_DEVICE_PSB, "Setting sink power limit to %.2fW...", TEST_SINK_POWER_LIMIT_1);
-    result = PSB_SetSinkPowerLimitQueued(TEST_SINK_POWER_LIMIT_1);
+    result = PSB_SetSinkPowerLimitQueued(TEST_SINK_POWER_LIMIT_1, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to set sink power limit to %.1fW: %s", 
                 TEST_SINK_POWER_LIMIT_1, PSB_GetErrorString(result));
@@ -1194,7 +1194,7 @@ int Test_SinkPowerLimit(char *errorMsg, int errorMsgSize) {
     
     // Verify we can set sink power below the limit
     LogDebugEx(LOG_DEVICE_PSB, "Testing sink power below limit (%.1fW)...", TEST_SINK_POWER_LIMIT_TEST);
-    result = PSB_SetSinkPowerQueued(TEST_SINK_POWER_LIMIT_TEST);
+    result = PSB_SetSinkPowerQueued(TEST_SINK_POWER_LIMIT_TEST, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to set sink power below limit: %s", 
                 PSB_GetErrorString(result));
@@ -1203,7 +1203,7 @@ int Test_SinkPowerLimit(char *errorMsg, int errorMsgSize) {
     
     // Test sink power at the limit
     LogDebugEx(LOG_DEVICE_PSB, "Testing sink power at limit (%.1fW)...", TEST_SINK_POWER_LIMIT_1);
-    result = PSB_SetSinkPowerQueued(TEST_SINK_POWER_LIMIT_1);
+    result = PSB_SetSinkPowerQueued(TEST_SINK_POWER_LIMIT_1, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to set sink power at limit: %s", 
                 PSB_GetErrorString(result));
@@ -1212,7 +1212,7 @@ int Test_SinkPowerLimit(char *errorMsg, int errorMsgSize) {
     
     // IMPORTANT: Before changing to a lower limit, first reduce the sink power
     LogDebugEx(LOG_DEVICE_PSB, "Reducing sink power to %.1fW before lowering limit...", TEST_SINK_POWER_LOW);
-    result = PSB_SetSinkPowerQueued(TEST_SINK_POWER_LOW);
+    result = PSB_SetSinkPowerQueued(TEST_SINK_POWER_LOW, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to reduce sink power before changing limit: %s", 
                 PSB_GetErrorString(result));
@@ -1223,7 +1223,7 @@ int Test_SinkPowerLimit(char *errorMsg, int errorMsgSize) {
     
     // Now test different (lower) power limit
     LogDebugEx(LOG_DEVICE_PSB, "Changing sink power limit to %.2fW...", TEST_SINK_POWER_LIMIT_2);
-    result = PSB_SetSinkPowerLimitQueued(TEST_SINK_POWER_LIMIT_2);
+    result = PSB_SetSinkPowerLimitQueued(TEST_SINK_POWER_LIMIT_2, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to change sink power limit to %.1fW: %s", 
                 TEST_SINK_POWER_LIMIT_2, PSB_GetErrorString(result));
@@ -1232,7 +1232,7 @@ int Test_SinkPowerLimit(char *errorMsg, int errorMsgSize) {
     
     // Test negative power limit (should fail)
     LogDebugEx(LOG_DEVICE_PSB, "Testing negative sink power limit (%.1fW)...", TEST_SINK_POWER_NEGATIVE);
-    result = PSB_SetSinkPowerLimitQueued(TEST_SINK_POWER_NEGATIVE);
+    result = PSB_SetSinkPowerLimitQueued(TEST_SINK_POWER_NEGATIVE, DEVICE_PRIORITY_NORMAL);
     if (result == PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Should have rejected negative sink power limit");
         return -1;
@@ -1242,7 +1242,7 @@ int Test_SinkPowerLimit(char *errorMsg, int errorMsgSize) {
     
     // Test excessive power limit
     LogDebugEx(LOG_DEVICE_PSB, "Testing excessive sink power limit (%.1fW)...", TEST_POWER_INVALID);
-    result = PSB_SetSinkPowerLimitQueued(TEST_POWER_INVALID);
+    result = PSB_SetSinkPowerLimitQueued(TEST_POWER_INVALID, DEVICE_PRIORITY_NORMAL);
     if (result == PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Should have rejected sink power limit %.1fW (max is %.1fW)", 
                 TEST_POWER_INVALID, PSB_SAFE_SINK_POWER_MAX);
@@ -1253,7 +1253,7 @@ int Test_SinkPowerLimit(char *errorMsg, int errorMsgSize) {
     
     // Restore safe power limit
     LogDebugEx(LOG_DEVICE_PSB, "Restoring safe sink power limit (%.1fW)...", PSB_SAFE_SINK_POWER_MAX);
-    result = PSB_SetSinkPowerLimitQueued(PSB_SAFE_SINK_POWER_MAX);
+    result = PSB_SetSinkPowerLimitQueued(PSB_SAFE_SINK_POWER_MAX, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         LogWarningEx(LOG_DEVICE_PSB, "Failed to restore safe sink power limit: %s", 
                     PSB_GetErrorString(result));
@@ -1280,7 +1280,7 @@ int Test_OutputControl(char *errorMsg, int errorMsgSize) {
     Delay(TEST_DELAY_SHORT);
     
     // Read initial output state using queued command
-    result = PSB_GetStatusQueued(&status);
+    result = PSB_GetStatusQueued(&status, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to read initial output state: %s", 
                 PSB_GetErrorString(result));
@@ -1294,7 +1294,7 @@ int Test_OutputControl(char *errorMsg, int errorMsgSize) {
     // If output is on, turn it off first
     if (initialOutputState) {
         LogDebugEx(LOG_DEVICE_PSB, "Turning output OFF...");
-        result = PSB_SetOutputEnableQueued(0);
+        result = PSB_SetOutputEnableQueued(0, DEVICE_PRIORITY_NORMAL);
         if (result != PSB_SUCCESS) {
             snprintf(errorMsg, errorMsgSize, "Failed to turn output OFF: %s", 
                     PSB_GetErrorString(result));
@@ -1304,7 +1304,7 @@ int Test_OutputControl(char *errorMsg, int errorMsgSize) {
         Delay(TEST_DELAY_SHORT);
         
         // Verify it turned off
-        result = PSB_GetStatusQueued(&status);
+        result = PSB_GetStatusQueued(&status, DEVICE_PRIORITY_NORMAL);
         if (result != PSB_SUCCESS) {
             snprintf(errorMsg, errorMsgSize, "Failed to read status after turning output OFF: %s", 
                     PSB_GetErrorString(result));
@@ -1319,7 +1319,7 @@ int Test_OutputControl(char *errorMsg, int errorMsgSize) {
     
     // Turn output ON using queued command
     LogDebugEx(LOG_DEVICE_PSB, "Turning output ON...");
-    result = PSB_SetOutputEnableQueued(1);
+    result = PSB_SetOutputEnableQueued(1, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to turn output ON: %s", 
                 PSB_GetErrorString(result));
@@ -1329,7 +1329,7 @@ int Test_OutputControl(char *errorMsg, int errorMsgSize) {
     Delay(TEST_DELAY_SHORT);
     
     // Verify it turned on
-    result = PSB_GetStatusQueued(&status);
+    result = PSB_GetStatusQueued(&status, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to read status after turning output ON: %s", 
                 PSB_GetErrorString(result));
@@ -1343,7 +1343,7 @@ int Test_OutputControl(char *errorMsg, int errorMsgSize) {
     
     // Turn output OFF again for safety
     LogDebugEx(LOG_DEVICE_PSB, "Turning output OFF for safety...");
-    result = PSB_SetOutputEnableQueued(0);
+    result = PSB_SetOutputEnableQueued(0, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         LogWarningEx(LOG_DEVICE_PSB, "Failed to turn output OFF for safety: %s", 
                    PSB_GetErrorString(result));
@@ -1368,7 +1368,7 @@ int Test_InvalidParameters(char *errorMsg, int errorMsgSize) {
     
     // Test invalid voltage (negative) using queued command
     LogDebugEx(LOG_DEVICE_PSB, "Testing negative voltage...");
-    result = PSB_SetVoltageQueued(-10.0);
+    result = PSB_SetVoltageQueued(-10.0, DEVICE_PRIORITY_NORMAL);
     if (result == PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Should have rejected negative voltage");
         return -1;
@@ -1377,7 +1377,7 @@ int Test_InvalidParameters(char *errorMsg, int errorMsgSize) {
     
     // Test invalid current (negative) using queued command
     LogDebugEx(LOG_DEVICE_PSB, "Testing negative current...");
-    result = PSB_SetCurrentQueued(-5.0);
+    result = PSB_SetCurrentQueued(-5.0, DEVICE_PRIORITY_NORMAL);
     if (result == PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Should have rejected negative current");
         return -1;
@@ -1386,7 +1386,7 @@ int Test_InvalidParameters(char *errorMsg, int errorMsgSize) {
     
     // Test invalid power (negative) using queued command
     LogDebugEx(LOG_DEVICE_PSB, "Testing negative power...");
-    result = PSB_SetPowerQueued(-100.0);
+    result = PSB_SetPowerQueued(-100.0, DEVICE_PRIORITY_NORMAL);
     if (result == PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Should have rejected negative power");
         return -1;
@@ -1395,7 +1395,7 @@ int Test_InvalidParameters(char *errorMsg, int errorMsgSize) {
     
     // Test invalid limits (min > max) using queued command
     LogDebugEx(LOG_DEVICE_PSB, "Testing invalid voltage limits (min > max)...");
-    result = PSB_SetVoltageLimitsQueued(50.0, 20.0);
+    result = PSB_SetVoltageLimitsQueued(50.0, 20.0, DEVICE_PRIORITY_NORMAL);
     if (result == PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Should have rejected inverted voltage limits");
         return -1;
@@ -1403,7 +1403,7 @@ int Test_InvalidParameters(char *errorMsg, int errorMsgSize) {
     LogDebugEx(LOG_DEVICE_PSB, "Correctly rejected inverted voltage limits");
     
     LogDebugEx(LOG_DEVICE_PSB, "Testing invalid current limits (min > max)...");
-    result = PSB_SetCurrentLimitsQueued(40.0, 10.0);
+    result = PSB_SetCurrentLimitsQueued(40.0, 10.0, DEVICE_PRIORITY_NORMAL);
     if (result == PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Should have rejected inverted current limits");
         return -1;
@@ -1427,7 +1427,7 @@ int Test_BoundaryConditions(char *errorMsg, int errorMsgSize) {
         return -1;
     }
     
-    result = PSB_ZeroAllValuesQueued();
+    result = PSB_ZeroAllValuesQueued(DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to zero values: %s", 
                 PSB_GetErrorString(result));
@@ -1436,7 +1436,7 @@ int Test_BoundaryConditions(char *errorMsg, int errorMsgSize) {
     
     // Test minimum voltage using queued command
     LogDebugEx(LOG_DEVICE_PSB, "Testing minimum voltage (%.2fV)...", PSB_SAFE_VOLTAGE_MIN);
-    result = PSB_SetVoltageQueued(PSB_SAFE_VOLTAGE_MIN);
+    result = PSB_SetVoltageQueued(PSB_SAFE_VOLTAGE_MIN, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to set minimum voltage: %s", 
                 PSB_GetErrorString(result));
@@ -1446,7 +1446,7 @@ int Test_BoundaryConditions(char *errorMsg, int errorMsgSize) {
     
     // Test minimum current using queued command
     LogDebugEx(LOG_DEVICE_PSB, "Testing minimum current (%.2fA)...", PSB_SAFE_CURRENT_MIN);
-    result = PSB_SetCurrentQueued(PSB_SAFE_CURRENT_MIN);
+    result = PSB_SetCurrentQueued(PSB_SAFE_CURRENT_MIN, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to set minimum current: %s", 
                 PSB_GetErrorString(result));
@@ -1456,7 +1456,7 @@ int Test_BoundaryConditions(char *errorMsg, int errorMsgSize) {
     
     // Test values below minimum (should fail) using queued commands
     LogDebugEx(LOG_DEVICE_PSB, "Testing below minimum voltage...");
-    result = PSB_SetVoltageQueued(-2.0);
+    result = PSB_SetVoltageQueued(-2.0, DEVICE_PRIORITY_NORMAL);
     if (result == PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Should have rejected voltage below minimum");
         return -1;
@@ -1464,7 +1464,7 @@ int Test_BoundaryConditions(char *errorMsg, int errorMsgSize) {
     LogDebugEx(LOG_DEVICE_PSB, "Correctly rejected voltage below minimum");
     
     LogDebugEx(LOG_DEVICE_PSB, "Testing below minimum current...");
-    result = PSB_SetCurrentQueued(-2.0);
+    result = PSB_SetCurrentQueued(-2.0, DEVICE_PRIORITY_NORMAL);
     if (result == PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Should have rejected current below minimum");
         return -1;
@@ -1473,7 +1473,7 @@ int Test_BoundaryConditions(char *errorMsg, int errorMsgSize) {
     
     // Test maximum values using queued commands
     LogDebugEx(LOG_DEVICE_PSB, "Testing maximum voltage (%.2fV)...", PSB_NOMINAL_VOLTAGE);  // 60V
-    result = PSB_SetVoltageQueued(PSB_NOMINAL_VOLTAGE);
+    result = PSB_SetVoltageQueued(PSB_NOMINAL_VOLTAGE, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to set max voltage: %s", 
                 PSB_GetErrorString(result));
@@ -1482,7 +1482,7 @@ int Test_BoundaryConditions(char *errorMsg, int errorMsgSize) {
     LogDebugEx(LOG_DEVICE_PSB, "Maximum voltage accepted");
     
     LogDebugEx(LOG_DEVICE_PSB, "Testing maximum current (%.2fA)...", PSB_NOMINAL_CURRENT);  // 60A
-    result = PSB_SetCurrentQueued(PSB_NOMINAL_CURRENT);
+    result = PSB_SetCurrentQueued(PSB_NOMINAL_CURRENT, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to set max current: %s", 
                 PSB_GetErrorString(result));
@@ -1504,7 +1504,7 @@ int Test_SequenceOperations(char *errorMsg, int errorMsgSize) {
     
     // Step 1: Turn remote mode OFF to test the sequence
     LogDebugEx(LOG_DEVICE_PSB, "Step 1: Setting remote mode OFF for sequence test...");
-    result = PSB_SetRemoteModeQueued(0);
+    result = PSB_SetRemoteModeQueued(0, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         LogWarningEx(LOG_DEVICE_PSB, "Failed to turn off remote mode, continuing anyway: %s", 
                 PSB_GetErrorString(result));
@@ -1514,7 +1514,7 @@ int Test_SequenceOperations(char *errorMsg, int errorMsgSize) {
     
     // Step 2: Turn remote mode ON using queued command
     LogDebugEx(LOG_DEVICE_PSB, "Step 2: Setting remote mode ON...");
-    result = PSB_SetRemoteModeQueued(1);
+    result = PSB_SetRemoteModeQueued(1, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to enable remote mode: %s", 
                 PSB_GetErrorString(result));
@@ -1525,7 +1525,7 @@ int Test_SequenceOperations(char *errorMsg, int errorMsgSize) {
     
     // Step 3: Set voltage using queued command
     LogDebugEx(LOG_DEVICE_PSB, "Step 3: Setting voltage to 24V...");
-    result = PSB_SetVoltageQueued(24.0);
+    result = PSB_SetVoltageQueued(24.0, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to set voltage: %s", 
                 PSB_GetErrorString(result));
@@ -1534,7 +1534,7 @@ int Test_SequenceOperations(char *errorMsg, int errorMsgSize) {
     
     // Step 4: Set current using queued command
     LogDebugEx(LOG_DEVICE_PSB, "Step 4: Setting current to 10A...");
-    result = PSB_SetCurrentQueued(10.0);
+    result = PSB_SetCurrentQueued(10.0, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to set current: %s", 
                 PSB_GetErrorString(result));
@@ -1543,7 +1543,7 @@ int Test_SequenceOperations(char *errorMsg, int errorMsgSize) {
     
     // Step 5: Enable output using queued command
     LogDebugEx(LOG_DEVICE_PSB, "Step 5: Enabling output...");
-    result = PSB_SetOutputEnableQueued(1);
+    result = PSB_SetOutputEnableQueued(1, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to enable output: %s", 
                 PSB_GetErrorString(result));
@@ -1554,7 +1554,7 @@ int Test_SequenceOperations(char *errorMsg, int errorMsgSize) {
     
     // Step 6: Read status using queued command
     LogDebugEx(LOG_DEVICE_PSB, "Step 6: Reading status...");
-    result = PSB_GetStatusQueued(&status);
+    result = PSB_GetStatusQueued(&status, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to read status: %s", 
                 PSB_GetErrorString(result));
@@ -1574,7 +1574,7 @@ int Test_SequenceOperations(char *errorMsg, int errorMsgSize) {
     
     // Step 7: Disable output for safety using queued command
     LogDebugEx(LOG_DEVICE_PSB, "Step 7: Disabling output...");
-    result = PSB_SetOutputEnableQueued(0);
+    result = PSB_SetOutputEnableQueued(0, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         LogWarningEx(LOG_DEVICE_PSB, "Failed to disable output: %s", 
                    PSB_GetErrorString(result));
@@ -1602,7 +1602,7 @@ int Test_OutputVoltageVerification(char *errorMsg, int errorMsgSize) {
     
     // Ensure output is initially disabled
     LogDebugEx(LOG_DEVICE_PSB, "Ensuring output is disabled...");
-    result = PSB_SetOutputEnableQueued(0);
+    result = PSB_SetOutputEnableQueued(0, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         LogWarningEx(LOG_DEVICE_PSB, "Failed to disable output: %s", 
                    PSB_GetErrorString(result));
@@ -1612,7 +1612,7 @@ int Test_OutputVoltageVerification(char *errorMsg, int errorMsgSize) {
     LogDebugEx(LOG_DEVICE_PSB, "Setting safe operating parameters...");
     
     LogDebugEx(LOG_DEVICE_PSB, "Setting current limit to 1.0A...");
-    result = PSB_SetCurrentQueued(1.0);
+    result = PSB_SetCurrentQueued(1.0, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to set current limit: %s", 
                 PSB_GetErrorString(result));
@@ -1620,7 +1620,7 @@ int Test_OutputVoltageVerification(char *errorMsg, int errorMsgSize) {
     }
     
     LogDebugEx(LOG_DEVICE_PSB, "Setting voltage to 0V...");
-    result = PSB_SetVoltageQueued(0.0);
+    result = PSB_SetVoltageQueued(0.0, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to set initial voltage: %s", 
                 PSB_GetErrorString(result));
@@ -1629,7 +1629,7 @@ int Test_OutputVoltageVerification(char *errorMsg, int errorMsgSize) {
 	
 	// Set power limit and value high to avoid hitting CP mode during the test
 	LogWarningEx(LOG_DEVICE_PSB, "Setting power limit to 600W...");
-    result = PSB_SetPowerLimitQueued(600.0);
+    result = PSB_SetPowerLimitQueued(600.0, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to set initial power limit: %s", 
                 PSB_GetErrorString(result));
@@ -1637,7 +1637,7 @@ int Test_OutputVoltageVerification(char *errorMsg, int errorMsgSize) {
     }
 	
 	LogWarningEx(LOG_DEVICE_PSB, "Setting power to 600W...");
-    result = PSB_SetPowerQueued(600.0);
+    result = PSB_SetPowerQueued(600.0, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to set initial power: %s", 
                 PSB_GetErrorString(result));
@@ -1669,12 +1669,12 @@ int Test_OutputVoltageVerification(char *errorMsg, int errorMsgSize) {
         LogDebugEx(LOG_DEVICE_PSB, "Setting voltage to %.1fV...", testVoltages[i]);
         
         // Set voltage using queued command
-        result = PSB_SetVoltageQueued(testVoltages[i]);
+        result = PSB_SetVoltageQueued(testVoltages[i], DEVICE_PRIORITY_NORMAL);
         if (result != PSB_SUCCESS) {
             snprintf(errorMsg, errorMsgSize, "Failed to set voltage to %.1fV: %s", 
                     testVoltages[i], PSB_GetErrorString(result));
             // Ensure output is off before returning
-            PSB_SetOutputEnableQueued(0);
+            PSB_SetOutputEnableQueued(0, DEVICE_PRIORITY_NORMAL);
             return -1;
         }
         
@@ -1682,7 +1682,7 @@ int Test_OutputVoltageVerification(char *errorMsg, int errorMsgSize) {
         
         // Enable output using queued command
         LogDebugEx(LOG_DEVICE_PSB, "Enabling output...");
-        result = PSB_SetOutputEnableQueued(1);
+        result = PSB_SetOutputEnableQueued(1, DEVICE_PRIORITY_NORMAL);
         if (result != PSB_SUCCESS) {
             snprintf(errorMsg, errorMsgSize, "Failed to enable output: %s", 
                     PSB_GetErrorString(result));
@@ -1693,11 +1693,11 @@ int Test_OutputVoltageVerification(char *errorMsg, int errorMsgSize) {
         
         // Read actual values using queued command
         double actualVoltage, actualCurrent, actualPower;
-        result = PSB_GetActualValuesQueued(&actualVoltage, &actualCurrent, &actualPower);
+        result = PSB_GetActualValuesQueued(&actualVoltage, &actualCurrent, &actualPower, DEVICE_PRIORITY_NORMAL);
         if (result != PSB_SUCCESS) {
             snprintf(errorMsg, errorMsgSize, "Failed to read actual values: %s", 
                     PSB_GetErrorString(result));
-            PSB_SetOutputEnableQueued(0);
+            PSB_SetOutputEnableQueued(0, DEVICE_PRIORITY_NORMAL);
             return -1;
         }
         
@@ -1713,7 +1713,7 @@ int Test_OutputVoltageVerification(char *errorMsg, int errorMsgSize) {
         
         // Disable output before next iteration
         LogDebugEx(LOG_DEVICE_PSB, "Disabling output...");
-        result = PSB_SetOutputEnableQueued(0);
+        result = PSB_SetOutputEnableQueued(0, DEVICE_PRIORITY_NORMAL);
         if (result != PSB_SUCCESS) {
             LogWarningEx(LOG_DEVICE_PSB, "Failed to disable output: %s", 
                        PSB_GetErrorString(result));

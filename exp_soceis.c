@@ -513,7 +513,7 @@ cleanup:
     SetRelayState(SOCEIS_RELAY_PSB_PIN, SOCEIS_RELAY_STATE_DISCONNECTED);
     SetRelayState(SOCEIS_RELAY_BIOLOGIC_PIN, SOCEIS_RELAY_STATE_DISCONNECTED);
     
-    PSB_SetOutputEnableQueued(0);
+    PSB_SetOutputEnableQueued(0, DEVICE_PRIORITY_NORMAL);
     
     // Update status based on final state
     if (ctx->state == SOCEIS_STATE_COMPLETED) {
@@ -628,7 +628,7 @@ static int VerifyBatteryDischarged(SOCEISTestContext *ctx) {
     
     // Get current battery voltage
 	PSB_Status status;
-    error = PSB_GetStatusQueued(&status);
+    error = PSB_GetStatusQueued(&status, DEVICE_PRIORITY_NORMAL);
 	
     if (error != PSB_SUCCESS) {
         LogError("Failed to read PSB status: %s", PSB_GetErrorString(error));
@@ -666,7 +666,7 @@ static int VerifyBatteryDischarged(SOCEISTestContext *ctx) {
     }
     
     // Disconnect PSB for safety
-    PSB_SetOutputEnableQueued(0);    
+    PSB_SetOutputEnableQueued(0, DEVICE_PRIORITY_NORMAL);    
     SetRelayState(SOCEIS_RELAY_PSB_PIN, SOCEIS_RELAY_STATE_DISCONNECTED);
     
     LogMessage("Battery discharge state verified");
@@ -811,7 +811,7 @@ static int SetRelayState(int pin, int state) {
         return ERR_NOT_CONNECTED;
     }
     
-    return TNY_SetPinQueued(pin, state);
+    return TNY_SetPinQueued(pin, state, DEVICE_PRIORITY_NORMAL);
 }
 
 static int SwitchToBioLogic(SOCEISTestContext *ctx) {
@@ -821,7 +821,7 @@ static int SwitchToBioLogic(SOCEISTestContext *ctx) {
     
     // Disable PSB output first for safety
     LogMessage("Disabling PSB output...");
-    PSB_SetOutputEnableQueued(0);
+    PSB_SetOutputEnableQueued(0, DEVICE_PRIORITY_NORMAL);
     
     // Wait briefly for PSB to disable output
     Delay(0.5);
@@ -850,7 +850,7 @@ static int SwitchToBioLogic(SOCEISTestContext *ctx) {
     
     // Verify BioLogic connection
     LogMessage("Verifying BioLogic connection...");
-    result = BIO_TestConnectionQueued(ctx->biologicID);
+    result = BIO_TestConnectionQueued(ctx->biologicID, DEVICE_PRIORITY_NORMAL);
     if (result != SUCCESS) {
         LogError("BioLogic connection test failed after relay switch: %s", BIO_GetErrorString(result));
         LogError("This suggests the relay may not have switched properly or BioLogic communication failed");
@@ -999,7 +999,7 @@ static int RunOCVMeasurement(SOCEISTestContext *ctx, EISMeasurement *measurement
     measurement->ocvVoltage = 0.0;
     
     // Test connection first
-    result = BIO_TestConnectionQueued(ctx->biologicID);
+    result = BIO_TestConnectionQueued(ctx->biologicID, DEVICE_PRIORITY_NORMAL);
     if (result != SUCCESS) {
         LogError("BioLogic connection test failed before OCV: %s", BIO_GetErrorString(result));
         return result;
@@ -1015,13 +1015,14 @@ static int RunOCVMeasurement(SOCEISTestContext *ctx, EISMeasurement *measurement
                             true,  // process data
                             &measurement->ocvData,
                             SOCEIS_OCV_TIMEOUT_MS,
+							DEVICE_PRIORITY_NORMAL,
                             NULL, NULL);
     
     if (result != SUCCESS) {
         LogError("OCV measurement failed: %s (error code: %d)", BIO_GetErrorString(result), result);
         
         // Try to stop the channel if it's stuck
-        BIO_StopChannelQueued(ctx->biologicID, 0);
+        BIO_StopChannelQueued(ctx->biologicID, 0, DEVICE_PRIORITY_NORMAL);
         Delay(0.5);
         
         return result;
@@ -1074,6 +1075,7 @@ static int RunGEISMeasurement(SOCEISTestContext *ctx, EISMeasurement *measuremen
                              true,  // process data
                              &measurement->geisData,
                              SOCEIS_GEIS_TIMEOUT_MS,
+							 DEVICE_PRIORITY_NORMAL,
                              NULL, NULL);
     
     if (result != SUCCESS) {
@@ -1294,7 +1296,7 @@ static int RunChargingPhase(SOCEISTestContext *ctx) {
     
     // Verify PSB connection with a status read
     PSB_Status preChargeStatus;
-    result = PSB_GetStatusQueued(&preChargeStatus);
+    result = PSB_GetStatusQueued(&preChargeStatus, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         LogError("Failed to read PSB status before charging: %s", PSB_GetErrorString(result));
         fclose(ctx->currentLogFile);
@@ -1307,21 +1309,21 @@ static int RunChargingPhase(SOCEISTestContext *ctx) {
     LogMessage("Setting charge parameters: %.2f V, %.2f A", 
                ctx->params.chargeVoltage, ctx->params.chargeCurrent);
     
-    result = PSB_SetVoltageQueued(ctx->params.chargeVoltage);
+    result = PSB_SetVoltageQueued(ctx->params.chargeVoltage, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         LogError("Failed to set charge voltage: %s", PSB_GetErrorString(result));
         fclose(ctx->currentLogFile);
         return result;
     }
     
-    result = PSB_SetCurrentQueued(ctx->params.chargeCurrent);
+    result = PSB_SetCurrentQueued(ctx->params.chargeCurrent, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         LogError("Failed to set charge current: %s", PSB_GetErrorString(result));
         fclose(ctx->currentLogFile);
         return result;
     }
 	
-	result = PSB_SetPowerQueued(SOCEIS_MAX_POWER);
+	result = PSB_SetPowerQueued(SOCEIS_MAX_POWER, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         LogError("Failed to set power value: %s", PSB_GetErrorString(result));
         fclose(ctx->currentLogFile);
@@ -1330,7 +1332,7 @@ static int RunChargingPhase(SOCEISTestContext *ctx) {
     
     // Enable PSB output
     LogMessage("Enabling PSB output...");
-    result = PSB_SetOutputEnableQueued(1);
+    result = PSB_SetOutputEnableQueued(1, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         LogError("Failed to enable output: %s", PSB_GetErrorString(result));
         fclose(ctx->currentLogFile);
@@ -1343,7 +1345,7 @@ static int RunChargingPhase(SOCEISTestContext *ctx) {
     
     // Verify PSB is actually outputting
     PSB_Status initialStatus;
-    result = PSB_GetStatusQueued(&initialStatus);
+    result = PSB_GetStatusQueued(&initialStatus, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         LogError("Failed to read initial PSB status: %s", PSB_GetErrorString(result));
         fclose(ctx->currentLogFile);
@@ -1392,7 +1394,7 @@ static int RunChargingPhase(SOCEISTestContext *ctx) {
         
         // Get current status
         PSB_Status status;
-        result = PSB_GetStatusQueued(&status);
+        result = PSB_GetStatusQueued(&status, DEVICE_PRIORITY_NORMAL);
         
         if (result != PSB_SUCCESS) {
             LogError("Failed to read status: %s", PSB_GetErrorString(result));
@@ -1433,7 +1435,7 @@ static int RunChargingPhase(SOCEISTestContext *ctx) {
                       ctx->targetSOCs[nextTargetIndex], ctx->currentSOC);
             
             // Disable PSB output
-            PSB_SetOutputEnableQueued(0);
+            PSB_SetOutputEnableQueued(0, DEVICE_PRIORITY_NORMAL);
             
             // Perform EIS measurement
             ctx->state = SOCEIS_STATE_MEASURING_EIS;
@@ -1473,7 +1475,7 @@ static int RunChargingPhase(SOCEISTestContext *ctx) {
             if (result != SUCCESS) break;
             
             // Re-enable PSB output and wait for stabilization
-            PSB_SetOutputEnableQueued(1);
+            PSB_SetOutputEnableQueued(1, DEVICE_PRIORITY_NORMAL);
             Delay(1.0);  // Give PSB time to re-establish output
             
             // Reset low current counter after resuming
@@ -1494,7 +1496,7 @@ static int RunChargingPhase(SOCEISTestContext *ctx) {
                 LogMessage("Final SOC: %.1f%%", ctx->currentSOC);
                 
                 // Perform final measurement at actual final SOC
-                PSB_SetOutputEnableQueued(0);
+                PSB_SetOutputEnableQueued(0, DEVICE_PRIORITY_NORMAL);
                 
                 // Add final measurement if not already at a target
                 int needFinalMeasurement = 1;
@@ -1539,7 +1541,7 @@ static int RunChargingPhase(SOCEISTestContext *ctx) {
     }
     
     // Disable output
-    PSB_SetOutputEnableQueued(0);
+    PSB_SetOutputEnableQueued(0, DEVICE_PRIORITY_NORMAL);
     
     // Close log file
     fclose(ctx->currentLogFile);

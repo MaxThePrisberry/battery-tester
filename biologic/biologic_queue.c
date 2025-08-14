@@ -20,9 +20,7 @@ static const char* g_commandTypeNames[] = {
     "TEST_CONNECTION",
     "RUN_OCV",
     "RUN_PEIS",
-    "RUN_SPEIS",
     "RUN_GEIS",
-    "RUN_SGEIS",
     "SET_HARDWARE_CONFIG",
     "GET_HARDWARE_CONFIG",
     "STOP_CHANNEL",
@@ -44,12 +42,12 @@ static BioQueueManager *g_bioQueueManager = NULL;
 
 // Queue a command (blocking)
 static int BIO_QueueCommandBlocking(BioQueueManager *mgr, BioCommandType type,
-                           BioCommandParams *params, BioPriority priority,
+                           BioCommandParams *params, DevicePriority priority,
                            BioCommandResult *result, int timeoutMs);
 
 // Queue a command (async with callback)
 static BioCommandID BIO_QueueCommandAsync(BioQueueManager *mgr, BioCommandType type,
-                                 BioCommandParams *params, BioPriority priority,
+                                 BioCommandParams *params, DevicePriority priority,
                                  BioCommandCallback callback, void *userData);
 
 /******************************************************************************
@@ -461,108 +459,6 @@ static int BIO_AdapterExecuteCommand(void *deviceContext, int commandType, void 
             break;
         }
         
-        case BIO_CMD_RUN_SPEIS: {
-            BioSPEISCommand *cmd = (BioSPEISCommand*)params;
-            BIO_TechniqueContext *techContext = NULL;
-            double startTime = Timer();
-            
-            // Start SPEIS
-            cmdResult->errorCode = BIO_StartSPEIS(
-                ctx->deviceID,
-                cmd->base.channel,
-                cmd->vs_initial,
-                cmd->vs_final,
-                cmd->initial_voltage_step,
-                cmd->final_voltage_step,
-                cmd->duration_step,
-                cmd->step_number,
-                cmd->record_every_dT,
-                cmd->record_every_dI,
-                cmd->initial_freq,
-                cmd->final_freq,
-                cmd->sweep_linear,
-                cmd->amplitude_voltage,
-                cmd->frequency_number,
-                cmd->average_n_times,
-                cmd->correction,
-                cmd->wait_for_steady,
-                cmd->processData,
-                &techContext
-            );
-            
-            if (cmdResult->errorCode != SUCCESS) break;
-            
-            // Set up progress callback if provided
-            if (cmd->base.progressCallback) {
-                techContext->progressCallback = cmd->base.progressCallback;
-                techContext->userData = cmd->base.userData;
-            }
-            
-            // Poll until complete
-            while (!BIO_IsTechniqueComplete(techContext)) {
-                BIO_UpdateTechnique(techContext);
-                Delay(0.1);
-            }
-            
-            // Create combined result
-            BIO_TechniqueData *combinedResult = calloc(1, sizeof(BIO_TechniqueData));
-            if (!combinedResult) {
-                cmdResult->errorCode = BIO_ERR_MEMORY_ALLOCATION_FAILED;
-                BIO_FreeTechniqueContext(techContext);
-                break;
-            }
-            
-            // Get results
-            BIO_RawDataBuffer *rawData = NULL;
-            bool partialData = false;
-            
-            if (techContext->state == BIO_TECH_STATE_ERROR) {
-                if (BIO_GetTechniqueRawData(techContext, &rawData) == SUCCESS && rawData) {
-                    partialData = true;
-                    cmdResult->errorCode = BIO_ERR_PARTIAL_DATA;
-                } else {
-                    cmdResult->errorCode = techContext->lastError;
-                }
-            } else if (techContext->state == BIO_TECH_STATE_COMPLETED) {
-                if (BIO_GetTechniqueRawData(techContext, &rawData) == SUCCESS) {
-                    cmdResult->errorCode = SUCCESS;
-                } else {
-                    cmdResult->errorCode = BIO_ERR_NO_DATA_RETRIEVED;
-                }
-            }
-            
-            // Copy data to combined result
-            if (rawData) {
-                combinedResult->rawData = BIO_CopyRawDataBuffer(rawData);
-                if (!combinedResult->rawData) {
-                    cmdResult->errorCode = BIO_ERR_DATA_COPY_FAILED;
-                    free(combinedResult);
-                    BIO_FreeTechniqueContext(techContext);
-                    break;
-                }
-                
-                // Transfer converted data ownership if available
-                if (techContext->convertedData) {
-                    combinedResult->convertedData = techContext->convertedData;
-                    techContext->convertedData = NULL; // Transfer ownership
-                }
-                
-                cmdResult->data.techniqueResult.techniqueData = combinedResult;
-                cmdResult->data.techniqueResult.elapsedTime = Timer() - startTime;
-                cmdResult->data.techniqueResult.finalState = techContext->state;
-                cmdResult->data.techniqueResult.partialData = partialData;
-            } else {
-                if (cmdResult->errorCode == SUCCESS) {
-                    cmdResult->errorCode = BIO_ERR_NO_DATA_RETRIEVED;
-                }
-                free(combinedResult);
-            }
-            
-            // Clean up
-            BIO_FreeTechniqueContext(techContext);
-            break;
-        }
-        
         case BIO_CMD_RUN_GEIS: {
             BioGEISCommand *cmd = (BioGEISCommand*)params;
             BIO_TechniqueContext *techContext = NULL;
@@ -661,110 +557,7 @@ static int BIO_AdapterExecuteCommand(void *deviceContext, int commandType, void 
             // Clean up
             BIO_FreeTechniqueContext(techContext);
             break;
-        }
-
-        case BIO_CMD_RUN_SGEIS: {
-            BioSGEISCommand *cmd = (BioSGEISCommand*)params;
-            BIO_TechniqueContext *techContext = NULL;
-            double startTime = Timer();
-            
-            // Start SGEIS
-            cmdResult->errorCode = BIO_StartSGEIS(
-                ctx->deviceID,
-                cmd->base.channel,
-                cmd->vs_initial,
-                cmd->vs_final,
-                cmd->initial_current_step,
-                cmd->final_current_step,
-                cmd->duration_step,
-                cmd->step_number,
-                cmd->record_every_dT,
-                cmd->record_every_dE,
-                cmd->initial_freq,
-                cmd->final_freq,
-                cmd->sweep_linear,
-                cmd->amplitude_current,
-                cmd->frequency_number,
-                cmd->average_n_times,
-                cmd->correction,
-                cmd->wait_for_steady,
-                cmd->i_range,
-                cmd->processData,
-                &techContext
-            );
-            
-            if (cmdResult->errorCode != SUCCESS) break;
-            
-            // Set up progress callback if provided
-            if (cmd->base.progressCallback) {
-                techContext->progressCallback = cmd->base.progressCallback;
-                techContext->userData = cmd->base.userData;
-            }
-            
-            // Poll until complete
-            while (!BIO_IsTechniqueComplete(techContext)) {
-                BIO_UpdateTechnique(techContext);
-                Delay(0.1);
-            }
-            
-            // Create combined result
-            BIO_TechniqueData *combinedResult = calloc(1, sizeof(BIO_TechniqueData));
-            if (!combinedResult) {
-                cmdResult->errorCode = BIO_ERR_MEMORY_ALLOCATION_FAILED;
-                BIO_FreeTechniqueContext(techContext);
-                break;
-            }
-            
-            // Get results
-            BIO_RawDataBuffer *rawData = NULL;
-            bool partialData = false;
-            
-            if (techContext->state == BIO_TECH_STATE_ERROR) {
-                if (BIO_GetTechniqueRawData(techContext, &rawData) == SUCCESS && rawData) {
-                    partialData = true;
-                    cmdResult->errorCode = BIO_ERR_PARTIAL_DATA;
-                } else {
-                    cmdResult->errorCode = techContext->lastError;
-                }
-            } else if (techContext->state == BIO_TECH_STATE_COMPLETED) {
-                if (BIO_GetTechniqueRawData(techContext, &rawData) == SUCCESS) {
-                    cmdResult->errorCode = SUCCESS;
-                } else {
-                    cmdResult->errorCode = BIO_ERR_NO_DATA_RETRIEVED;
-                }
-            }
-            
-            // Copy data to combined result
-            if (rawData) {
-                combinedResult->rawData = BIO_CopyRawDataBuffer(rawData);
-                if (!combinedResult->rawData) {
-                    cmdResult->errorCode = BIO_ERR_DATA_COPY_FAILED;
-                    free(combinedResult);
-                    BIO_FreeTechniqueContext(techContext);
-                    break;
-                }
-                
-                // Transfer converted data ownership if available
-                if (techContext->convertedData) {
-                    combinedResult->convertedData = techContext->convertedData;
-                    techContext->convertedData = NULL; // Transfer ownership
-                }
-                
-                cmdResult->data.techniqueResult.techniqueData = combinedResult;
-                cmdResult->data.techniqueResult.elapsedTime = Timer() - startTime;
-                cmdResult->data.techniqueResult.finalState = techContext->state;
-                cmdResult->data.techniqueResult.partialData = partialData;
-            } else {
-                if (cmdResult->errorCode == SUCCESS) {
-                    cmdResult->errorCode = BIO_ERR_NO_DATA_RETRIEVED;
-                }
-                free(combinedResult);
-            }
-            
-            // Clean up
-            BIO_FreeTechniqueContext(techContext);
-            break;
-        }
+		}
         
         case BIO_CMD_GET_HARDWARE_CONFIG: {
             BioChannelCommand *cmd = (BioChannelCommand*)params;
@@ -947,21 +740,9 @@ static void* BIO_AdapterCreateCommandParams(int commandType, void *sourceParams)
             return cmd;
         }
 		
-		case BIO_CMD_RUN_SPEIS: {
-		    BioSPEISCommand *cmd = malloc(sizeof(BioSPEISCommand));
-		    if (cmd) *cmd = *(BioSPEISCommand*)sourceParams;
-		    return cmd;
-		}
-		
 		case BIO_CMD_RUN_GEIS: {
 		    BioGEISCommand *cmd = malloc(sizeof(BioGEISCommand));
 		    if (cmd) *cmd = *(BioGEISCommand*)sourceParams;
-		    return cmd;
-		}
-
-		case BIO_CMD_RUN_SGEIS: {
-		    BioSGEISCommand *cmd = malloc(sizeof(BioSGEISCommand));
-		    if (cmd) *cmd = *(BioSGEISCommand*)sourceParams;
 		    return cmd;
 		}
         
@@ -1039,9 +820,8 @@ static void BIO_AdapterFreeCommandResult(int commandType, void *result) {
     BioCommandResult *cmdResult = (BioCommandResult*)result;
     
     // Free technique result data
-	if ((commandType == BIO_CMD_RUN_OCV || commandType == BIO_CMD_RUN_PEIS || 
-	     commandType == BIO_CMD_RUN_SPEIS || commandType == BIO_CMD_RUN_GEIS || 
-	     commandType == BIO_CMD_RUN_SGEIS) &&
+	if ((commandType == BIO_CMD_RUN_OCV || commandType == BIO_CMD_RUN_PEIS ||
+			commandType == BIO_CMD_RUN_GEIS) &&
 	    cmdResult->data.techniqueResult.techniqueData) {
 	    BIO_FreeTechniqueData(cmdResult->data.techniqueResult.techniqueData);
 	}
@@ -1066,9 +846,7 @@ static void BIO_AdapterCopyCommandResult(int commandType, void *dest, void *src)
     *destResult = *srcResult;
     
     // For technique results, transfer ownership
-	if ((commandType == BIO_CMD_RUN_OCV || commandType == BIO_CMD_RUN_PEIS || 
-	     commandType == BIO_CMD_RUN_SPEIS || commandType == BIO_CMD_RUN_GEIS || 
-	     commandType == BIO_CMD_RUN_SGEIS) &&
+	if ((commandType == BIO_CMD_RUN_OCV || commandType == BIO_CMD_RUN_PEIS || commandType == BIO_CMD_RUN_GEIS) &&
 	    srcResult->data.techniqueResult.techniqueData) {
 	    destResult->data.techniqueResult.techniqueData = 
 	        srcResult->data.techniqueResult.techniqueData;
@@ -1173,13 +951,13 @@ void BIO_QueueGetStats(BioQueueManager *mgr, BioQueueStats *stats) {
  ******************************************************************************/
 
 static int BIO_QueueCommandBlocking(BioQueueManager *mgr, BioCommandType type,
-                           BioCommandParams *params, BioPriority priority,
+                           BioCommandParams *params, DevicePriority priority,
                            BioCommandResult *result, int timeoutMs) {
     return DeviceQueue_CommandBlocking(mgr, type, params, priority, result, timeoutMs);
 }
 
 static BioCommandID BIO_QueueCommandAsync(BioQueueManager *mgr, BioCommandType type,
-                                 BioCommandParams *params, BioPriority priority,
+                                 BioCommandParams *params, DevicePriority priority,
                                  BioCommandCallback callback, void *userData) {
     return DeviceQueue_CommandAsync(mgr, type, params, priority, callback, userData);
 }
@@ -1223,9 +1001,10 @@ int BIO_RunOCVQueued(int ID, uint8_t channel,
 					bool processData,
                     BIO_TechniqueData **result,
                     int timeout_ms,
+                    DevicePriority priority,
                     BioTechniqueProgressCallback progressCallback,
                     void *userData) {
-    
+
     BioQueueManager *mgr = BIO_GetGlobalQueueManager();
     if (!mgr) {
         return ERR_QUEUE_NOT_INIT;
@@ -1249,7 +1028,7 @@ int BIO_RunOCVQueued(int ID, uint8_t channel,
     
     BioCommandResult cmdResult;
     int error = BIO_QueueCommandBlocking(mgr, BIO_CMD_RUN_OCV,
-                                       (BioCommandParams*)&cmd, BIO_PRIORITY_HIGH, &cmdResult,
+                                       (BioCommandParams*)&cmd, priority, &cmdResult,
                                        cmd.base.timeout_ms);
     
     if ((error == SUCCESS || error == BIO_ERR_PARTIAL_DATA) && result) {
@@ -1278,6 +1057,7 @@ int BIO_RunPEISQueued(int ID, uint8_t channel,
 					 bool processData,
                      BIO_TechniqueData **result,
                      int timeout_ms,
+                     DevicePriority priority,
                      BioTechniqueProgressCallback progressCallback,
                      void *userData) {
     
@@ -1312,77 +1092,7 @@ int BIO_RunPEISQueued(int ID, uint8_t channel,
     
     BioCommandResult cmdResult;
     int error = BIO_QueueCommandBlocking(mgr, BIO_CMD_RUN_PEIS,
-                                       (BioCommandParams*)&cmd, BIO_PRIORITY_HIGH, &cmdResult,
-                                       cmd.base.timeout_ms);
-    
-    if ((error == SUCCESS || error == BIO_ERR_PARTIAL_DATA) && result) {
-        *result = cmdResult.data.techniqueResult.techniqueData;
-        // Transfer ownership - don't free in adapter
-        cmdResult.data.techniqueResult.techniqueData = NULL;
-    }
-    
-    return error;
-}
-
-int BIO_RunSPEISQueued(int ID, uint8_t channel,
-                      bool vs_initial,
-                      bool vs_final,
-                      double initial_voltage_step,
-                      double final_voltage_step,
-                      double duration_step,
-                      int step_number,
-                      double record_every_dT,
-                      double record_every_dI,
-                      double initial_freq,
-                      double final_freq,
-                      bool sweep_linear,
-                      double amplitude_voltage,
-                      int frequency_number,
-                      int average_n_times,
-                      bool correction,
-                      double wait_for_steady,
-					  bool processData,
-                      BIO_TechniqueData **result,
-                      int timeout_ms,
-                      BioTechniqueProgressCallback progressCallback,
-                      void *userData) {
-    
-    BioQueueManager *mgr = BIO_GetGlobalQueueManager();
-    if (!mgr) {
-        return ERR_QUEUE_NOT_INIT;
-    }
-    
-    BioSPEISCommand cmd = {
-        .base = {
-            .type = BIO_CMD_RUN_SPEIS,
-            .channel = channel,
-            .timeout_ms = timeout_ms > 0 ? timeout_ms : 
-                         (int)((duration_step * step_number + 60) * 1000),
-            .progressCallback = progressCallback,
-            .userData = userData
-        },
-        .vs_initial = vs_initial,
-        .vs_final = vs_final,
-        .initial_voltage_step = initial_voltage_step,
-        .final_voltage_step = final_voltage_step,
-        .duration_step = duration_step,
-        .step_number = step_number,
-        .record_every_dT = record_every_dT,
-        .record_every_dI = record_every_dI,
-        .initial_freq = initial_freq,
-        .final_freq = final_freq,
-        .sweep_linear = sweep_linear,
-        .amplitude_voltage = amplitude_voltage,
-        .frequency_number = frequency_number,
-        .average_n_times = average_n_times,
-        .correction = correction,
-        .wait_for_steady = wait_for_steady,
-		.processData = processData
-    };
-    
-    BioCommandResult cmdResult;
-    int error = BIO_QueueCommandBlocking(mgr, BIO_CMD_RUN_SPEIS,
-                                       (BioCommandParams*)&cmd, BIO_PRIORITY_HIGH, &cmdResult,
+                                       (BioCommandParams*)&cmd, priority, &cmdResult,
                                        cmd.base.timeout_ms);
     
     if ((error == SUCCESS || error == BIO_ERR_PARTIAL_DATA) && result) {
@@ -1412,6 +1122,7 @@ int BIO_RunGEISQueued(int ID, uint8_t channel,
 					 bool processData,
                      BIO_TechniqueData **result,
                      int timeout_ms,
+                     DevicePriority priority,
                      BioTechniqueProgressCallback progressCallback,
                      void *userData) {
     
@@ -1447,79 +1158,7 @@ int BIO_RunGEISQueued(int ID, uint8_t channel,
     
     BioCommandResult cmdResult;
     int error = BIO_QueueCommandBlocking(mgr, BIO_CMD_RUN_GEIS,
-                                       (BioCommandParams*)&cmd, BIO_PRIORITY_HIGH, &cmdResult,
-                                       cmd.base.timeout_ms);
-    
-    if ((error == SUCCESS || error == BIO_ERR_PARTIAL_DATA) && result) {
-        *result = cmdResult.data.techniqueResult.techniqueData;
-        // Transfer ownership - don't free in adapter
-        cmdResult.data.techniqueResult.techniqueData = NULL;
-    }
-    
-    return error;
-}
-
-int BIO_RunSGEISQueued(int ID, uint8_t channel,
-                      bool vs_initial,
-                      bool vs_final,
-                      double initial_current_step,
-                      double final_current_step,
-                      double duration_step,
-                      int step_number,
-                      double record_every_dT,
-                      double record_every_dE,
-                      double initial_freq,
-                      double final_freq,
-                      bool sweep_linear,
-                      double amplitude_current,
-                      int frequency_number,
-                      int average_n_times,
-                      bool correction,
-                      double wait_for_steady,
-                      int i_range,
-					  bool processData,
-                      BIO_TechniqueData **result,
-                      int timeout_ms,
-                      BioTechniqueProgressCallback progressCallback,
-                      void *userData) {
-    
-    BioQueueManager *mgr = BIO_GetGlobalQueueManager();
-    if (!mgr) {
-        return ERR_QUEUE_NOT_INIT;
-    }
-    
-    BioSGEISCommand cmd = {
-        .base = {
-            .type = BIO_CMD_RUN_SGEIS,
-            .channel = channel,
-            .timeout_ms = timeout_ms > 0 ? timeout_ms : 
-                         (int)((duration_step * step_number + 60) * 1000),
-            .progressCallback = progressCallback,
-            .userData = userData
-        },
-        .vs_initial = vs_initial,
-        .vs_final = vs_final,
-        .initial_current_step = initial_current_step,
-        .final_current_step = final_current_step,
-        .duration_step = duration_step,
-        .step_number = step_number,
-        .record_every_dT = record_every_dT,
-        .record_every_dE = record_every_dE,
-        .initial_freq = initial_freq,
-        .final_freq = final_freq,
-        .sweep_linear = sweep_linear,
-        .amplitude_current = amplitude_current,
-        .frequency_number = frequency_number,
-        .average_n_times = average_n_times,
-        .correction = correction,
-        .wait_for_steady = wait_for_steady,
-        .i_range = i_range,
-		.processData = processData
-    };
-    
-    BioCommandResult cmdResult;
-    int error = BIO_QueueCommandBlocking(mgr, BIO_CMD_RUN_SGEIS,
-                                       (BioCommandParams*)&cmd, BIO_PRIORITY_HIGH, &cmdResult,
+                                       (BioCommandParams*)&cmd, priority, &cmdResult,
                                        cmd.base.timeout_ms);
     
     if ((error == SUCCESS || error == BIO_ERR_PARTIAL_DATA) && result) {
@@ -1542,11 +1181,12 @@ BioCommandID BIO_RunOCVAsync(int ID, uint8_t channel,
                             double record_every_dT,
                             int e_range,
 							bool processData,
+                            DevicePriority priority,
                             BioCommandCallback callback,
                             void *userData) {
     
     BioQueueManager *mgr = BIO_GetGlobalQueueManager();
-    if (!mgr) return ERR_QUEUE_NOT_INIT;
+    if (!mgr) return 0;
     
     BioOCVCommand cmd = {
         .base = {
@@ -1565,7 +1205,7 @@ BioCommandID BIO_RunOCVAsync(int ID, uint8_t channel,
     };
     
     return BIO_QueueCommandAsync(mgr, BIO_CMD_RUN_OCV, (BioCommandParams*)&cmd,
-                                BIO_PRIORITY_HIGH, callback, userData);
+                                priority, callback, userData);
 }
 
 BioCommandID BIO_RunPEISAsync(int ID, uint8_t channel,
@@ -1583,11 +1223,12 @@ BioCommandID BIO_RunPEISAsync(int ID, uint8_t channel,
                              bool correction,
                              double wait_for_steady,
 							 bool processData,
+                             DevicePriority priority,
                              BioCommandCallback callback,
                              void *userData) {
     
     BioQueueManager *mgr = BIO_GetGlobalQueueManager();
-    if (!mgr) return ERR_QUEUE_NOT_INIT;
+    if (!mgr) return 0;
     
     BioPEISCommand cmd = {
         .base = {
@@ -1614,64 +1255,7 @@ BioCommandID BIO_RunPEISAsync(int ID, uint8_t channel,
     };
     
     return BIO_QueueCommandAsync(mgr, BIO_CMD_RUN_PEIS, (BioCommandParams*)&cmd,
-                                BIO_PRIORITY_HIGH, callback, userData);
-}
-
-
-
-BioCommandID BIO_RunSPEISAsync(int ID, uint8_t channel,
-                              bool vs_initial,
-                              bool vs_final,
-                              double initial_voltage_step,
-                              double final_voltage_step,
-                              double duration_step,
-                              int step_number,
-                              double record_every_dT,
-                              double record_every_dI,
-                              double initial_freq,
-                              double final_freq,
-                              bool sweep_linear,
-                              double amplitude_voltage,
-                              int frequency_number,
-                              int average_n_times,
-                              bool correction,
-                              double wait_for_steady,
-							  bool processData,
-                              BioCommandCallback callback,
-                              void *userData) {
-    
-    BioQueueManager *mgr = BIO_GetGlobalQueueManager();
-    if (!mgr) return ERR_QUEUE_NOT_INIT;
-    
-    BioSPEISCommand cmd = {
-        .base = {
-            .type = BIO_CMD_RUN_SPEIS,
-            .channel = channel,
-            .timeout_ms = (int)((duration_step * step_number + 60) * 1000),
-            .progressCallback = NULL,
-            .userData = NULL
-        },
-        .vs_initial = vs_initial,
-        .vs_final = vs_final,
-        .initial_voltage_step = initial_voltage_step,
-        .final_voltage_step = final_voltage_step,
-        .duration_step = duration_step,
-        .step_number = step_number,
-        .record_every_dT = record_every_dT,
-        .record_every_dI = record_every_dI,
-        .initial_freq = initial_freq,
-        .final_freq = final_freq,
-        .sweep_linear = sweep_linear,
-        .amplitude_voltage = amplitude_voltage,
-        .frequency_number = frequency_number,
-        .average_n_times = average_n_times,
-        .correction = correction,
-        .wait_for_steady = wait_for_steady,
-		.processData = processData
-    };
-    
-    return BIO_QueueCommandAsync(mgr, BIO_CMD_RUN_SPEIS, (BioCommandParams*)&cmd,
-                                BIO_PRIORITY_HIGH, callback, userData);
+                                priority, callback, userData);
 }
 
 BioCommandID BIO_RunGEISAsync(int ID, uint8_t channel,
@@ -1690,11 +1274,12 @@ BioCommandID BIO_RunGEISAsync(int ID, uint8_t channel,
                              double wait_for_steady,
                              int i_range,
 							 bool processData,
+                             DevicePriority priority,
                              BioCommandCallback callback,
                              void *userData) {
     
     BioQueueManager *mgr = BIO_GetGlobalQueueManager();
-    if (!mgr) return ERR_QUEUE_NOT_INIT;
+    if (!mgr) return 0;
     
     BioGEISCommand cmd = {
         .base = {
@@ -1722,64 +1307,7 @@ BioCommandID BIO_RunGEISAsync(int ID, uint8_t channel,
     };
     
     return BIO_QueueCommandAsync(mgr, BIO_CMD_RUN_GEIS, (BioCommandParams*)&cmd,
-                                BIO_PRIORITY_HIGH, callback, userData);
-}
-
-BioCommandID BIO_RunSGEISAsync(int ID, uint8_t channel,
-                              bool vs_initial,
-                              bool vs_final,
-                              double initial_current_step,
-                              double final_current_step,
-                              double duration_step,
-                              int step_number,
-                              double record_every_dT,
-                              double record_every_dE,
-                              double initial_freq,
-                              double final_freq,
-                              bool sweep_linear,
-                              double amplitude_current,
-                              int frequency_number,
-                              int average_n_times,
-                              bool correction,
-                              double wait_for_steady,
-                              int i_range,
-							  bool processData,
-                              BioCommandCallback callback,
-                              void *userData) {
-    
-    BioQueueManager *mgr = BIO_GetGlobalQueueManager();
-    if (!mgr) return ERR_QUEUE_NOT_INIT;
-    
-    BioSGEISCommand cmd = {
-        .base = {
-            .type = BIO_CMD_RUN_SGEIS,
-            .channel = channel,
-            .timeout_ms = (int)((duration_step * step_number + 60) * 1000),
-            .progressCallback = NULL,
-            .userData = NULL
-        },
-        .vs_initial = vs_initial,
-        .vs_final = vs_final,
-        .initial_current_step = initial_current_step,
-        .final_current_step = final_current_step,
-        .duration_step = duration_step,
-        .step_number = step_number,
-        .record_every_dT = record_every_dT,
-        .record_every_dE = record_every_dE,
-        .initial_freq = initial_freq,
-        .final_freq = final_freq,
-        .sweep_linear = sweep_linear,
-        .amplitude_current = amplitude_current,
-        .frequency_number = frequency_number,
-        .average_n_times = average_n_times,
-        .correction = correction,
-        .wait_for_steady = wait_for_steady,
-        .i_range = i_range,
-		.processData = processData
-    };
-    
-    return BIO_QueueCommandAsync(mgr, BIO_CMD_RUN_SGEIS, (BioCommandParams*)&cmd,
-                                BIO_PRIORITY_HIGH, callback, userData);
+                                priority, callback, userData);
 }
 
 /******************************************************************************
@@ -1803,7 +1331,7 @@ int BIO_QueueGetDeviceID(BioQueueManager *mgr) {
     return context->deviceID;
 }
 
-int BIO_ConnectQueued(const char* address, uint8_t timeout, int* pID, TDeviceInfos_t* pInfos) {
+int BIO_ConnectQueued(const char* address, uint8_t timeout, int* pID, TDeviceInfos_t* pInfos, DevicePriority priority) {
     if (!g_bioQueueManager) return ERR_QUEUE_NOT_INIT;
     
     BioConnectCommand cmd = {
@@ -1820,7 +1348,7 @@ int BIO_ConnectQueued(const char* address, uint8_t timeout, int* pID, TDeviceInf
     
     BioCommandResult result;
     int error = BIO_QueueCommandBlocking(g_bioQueueManager, BIO_CMD_CONNECT,
-                                       (BioCommandParams*)&cmd, BIO_PRIORITY_HIGH, &result,
+                                       (BioCommandParams*)&cmd, priority, &result,
                                        BIO_QUEUE_COMMAND_TIMEOUT_MS);
     
     if (error == SUCCESS) {
@@ -1831,18 +1359,18 @@ int BIO_ConnectQueued(const char* address, uint8_t timeout, int* pID, TDeviceInf
     return error;
 }
 
-int BIO_DisconnectQueued(int ID) {
+int BIO_DisconnectQueued(int ID, DevicePriority priority) {
     if (!g_bioQueueManager) return ERR_QUEUE_NOT_INIT;
     
     BioCommandParams params = {0};
     BioCommandResult result;
     
     return BIO_QueueCommandBlocking(g_bioQueueManager, BIO_CMD_DISCONNECT,
-                                  &params, BIO_PRIORITY_HIGH, &result,
+                                  &params, priority, &result,
                                   BIO_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int BIO_TestConnectionQueued(int ID) {
+int BIO_TestConnectionQueued(int ID, DevicePriority priority) {
     if (!g_bioQueueManager) return ERR_QUEUE_NOT_INIT;
     
     BioChannelCommand cmd = {
@@ -1857,11 +1385,11 @@ int BIO_TestConnectionQueued(int ID) {
     
     BioCommandResult result;
     return BIO_QueueCommandBlocking(g_bioQueueManager, BIO_CMD_TEST_CONNECTION,
-                                  (BioCommandParams*)&cmd, BIO_PRIORITY_NORMAL, &result,
+                                  (BioCommandParams*)&cmd, priority, &result,
                                   BIO_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int BIO_GetHardConfQueued(int ID, uint8_t ch, THardwareConf_t* pHardConf) {
+int BIO_GetHardConfQueued(int ID, uint8_t ch, THardwareConf_t* pHardConf, DevicePriority priority) {
     if (!g_bioQueueManager || !pHardConf) return ERR_QUEUE_NOT_INIT;
     
     BioChannelCommand cmd = {
@@ -1876,7 +1404,7 @@ int BIO_GetHardConfQueued(int ID, uint8_t ch, THardwareConf_t* pHardConf) {
     
     BioCommandResult result;
     int error = BIO_QueueCommandBlocking(g_bioQueueManager, BIO_CMD_GET_HARDWARE_CONFIG,
-                                       (BioCommandParams*)&cmd, BIO_PRIORITY_NORMAL, &result,
+                                       (BioCommandParams*)&cmd, priority, &result,
                                        BIO_QUEUE_COMMAND_TIMEOUT_MS);
     
     if (error == SUCCESS) {
@@ -1885,7 +1413,7 @@ int BIO_GetHardConfQueued(int ID, uint8_t ch, THardwareConf_t* pHardConf) {
     return error;
 }
 
-int BIO_SetHardConfQueued(int ID, uint8_t ch, THardwareConf_t HardConf) {
+int BIO_SetHardConfQueued(int ID, uint8_t ch, THardwareConf_t HardConf, DevicePriority priority) {
     if (!g_bioQueueManager) return ERR_QUEUE_NOT_INIT;
     
     BioHardwareConfigCommand cmd = {
@@ -1901,11 +1429,11 @@ int BIO_SetHardConfQueued(int ID, uint8_t ch, THardwareConf_t HardConf) {
     
     BioCommandResult result;
     return BIO_QueueCommandBlocking(g_bioQueueManager, BIO_CMD_SET_HARDWARE_CONFIG,
-                                  (BioCommandParams*)&cmd, BIO_PRIORITY_HIGH, &result,
+                                  (BioCommandParams*)&cmd, priority, &result,
                                   BIO_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int BIO_StopChannelQueued(int ID, uint8_t channel) {
+int BIO_StopChannelQueued(int ID, uint8_t channel, DevicePriority priority) {
     if (!g_bioQueueManager) return ERR_QUEUE_NOT_INIT;
     
     BioChannelCommand cmd = {
@@ -1920,11 +1448,11 @@ int BIO_StopChannelQueued(int ID, uint8_t channel) {
     
     BioCommandResult result;
     return BIO_QueueCommandBlocking(g_bioQueueManager, BIO_CMD_STOP_CHANNEL,
-                                  (BioCommandParams*)&cmd, BIO_PRIORITY_HIGH, &result,
+                                  (BioCommandParams*)&cmd, priority, &result,
                                   BIO_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int BIO_StartChannelQueued(int ID, uint8_t channel) {
+int BIO_StartChannelQueued(int ID, uint8_t channel, DevicePriority priority) {
     if (!g_bioQueueManager) return ERR_QUEUE_NOT_INIT;
     
     BioChannelCommand cmd = {
@@ -1939,11 +1467,11 @@ int BIO_StartChannelQueued(int ID, uint8_t channel) {
     
     BioCommandResult result;
     return BIO_QueueCommandBlocking(g_bioQueueManager, BIO_CMD_START_CHANNEL,
-                                  (BioCommandParams*)&cmd, BIO_PRIORITY_HIGH, &result,
+                                  (BioCommandParams*)&cmd, priority, &result,
                                   BIO_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int BIO_GetCurrentValuesQueued(int ID, uint8_t channel, TCurrentValues_t* pValues) {
+int BIO_GetCurrentValuesQueued(int ID, uint8_t channel, TCurrentValues_t* pValues, DevicePriority priority) {
     if (!g_bioQueueManager || !pValues) return ERR_QUEUE_NOT_INIT;
     
     BioChannelCommand cmd = {
@@ -1958,7 +1486,7 @@ int BIO_GetCurrentValuesQueued(int ID, uint8_t channel, TCurrentValues_t* pValue
     
     BioCommandResult result;
     int error = BIO_QueueCommandBlocking(g_bioQueueManager, BIO_CMD_GET_CURRENT_VALUES,
-                                       (BioCommandParams*)&cmd, BIO_PRIORITY_NORMAL, &result,
+                                       (BioCommandParams*)&cmd, priority, &result,
                                        BIO_QUEUE_COMMAND_TIMEOUT_MS);
     
     if (error == SUCCESS) {
@@ -1967,7 +1495,7 @@ int BIO_GetCurrentValuesQueued(int ID, uint8_t channel, TCurrentValues_t* pValue
     return error;
 }
 
-int BIO_GetChannelInfosQueued(int ID, uint8_t channel, TChannelInfos_t* pInfos) {
+int BIO_GetChannelInfosQueued(int ID, uint8_t channel, TChannelInfos_t* pInfos, DevicePriority priority) {
     if (!g_bioQueueManager || !pInfos) return ERR_QUEUE_NOT_INIT;
     
     BioChannelCommand cmd = {
@@ -1982,7 +1510,7 @@ int BIO_GetChannelInfosQueued(int ID, uint8_t channel, TChannelInfos_t* pInfos) 
     
     BioCommandResult result;
     int error = BIO_QueueCommandBlocking(g_bioQueueManager, BIO_CMD_GET_CHANNEL_INFOS,
-                                       (BioCommandParams*)&cmd, BIO_PRIORITY_NORMAL, &result,
+                                       (BioCommandParams*)&cmd, priority, &result,
                                        BIO_QUEUE_COMMAND_TIMEOUT_MS);
     
     if (error == SUCCESS) {
@@ -1991,7 +1519,7 @@ int BIO_GetChannelInfosQueued(int ID, uint8_t channel, TChannelInfos_t* pInfos) 
     return error;
 }
 
-bool BIO_IsChannelPluggedQueued(int ID, uint8_t channel) {
+bool BIO_IsChannelPluggedQueued(int ID, uint8_t channel, DevicePriority priority) {
     if (!g_bioQueueManager) return false;
     
     BioChannelCommand cmd = {
@@ -2006,13 +1534,13 @@ bool BIO_IsChannelPluggedQueued(int ID, uint8_t channel) {
     
     BioCommandResult result;
     int error = BIO_QueueCommandBlocking(g_bioQueueManager, BIO_CMD_IS_CHANNEL_PLUGGED,
-                                       (BioCommandParams*)&cmd, BIO_PRIORITY_NORMAL, &result,
+                                       (BioCommandParams*)&cmd, priority, &result,
                                        BIO_QUEUE_COMMAND_TIMEOUT_MS);
     
     return (error == SUCCESS) ? result.data.isPlugged : false;
 }
 
-int BIO_GetChannelsPluggedQueued(int ID, uint8_t* pChPlugged, uint8_t Size) {
+int BIO_GetChannelsPluggedQueued(int ID, uint8_t* pChPlugged, uint8_t Size, DevicePriority priority) {
     if (!g_bioQueueManager || !pChPlugged) return ERR_QUEUE_NOT_INIT;
     
     BioGetChannelsPluggedCommand cmd = {
@@ -2028,7 +1556,7 @@ int BIO_GetChannelsPluggedQueued(int ID, uint8_t* pChPlugged, uint8_t Size) {
     
     BioCommandResult result;
     int error = BIO_QueueCommandBlocking(g_bioQueueManager, BIO_CMD_GET_CHANNELS_PLUGGED,
-                                       (BioCommandParams*)&cmd, BIO_PRIORITY_NORMAL, &result,
+                                       (BioCommandParams*)&cmd, priority, &result,
                                        BIO_QUEUE_COMMAND_TIMEOUT_MS);
     
     if (error == SUCCESS) {
@@ -2037,7 +1565,7 @@ int BIO_GetChannelsPluggedQueued(int ID, uint8_t* pChPlugged, uint8_t Size) {
     return error;
 }
 
-int BIO_GetDataQueued(int ID, uint8_t channel, TDataBuffer_t* pBuf, TDataInfos_t* pInfos, TCurrentValues_t* pValues) {
+int BIO_GetDataQueued(int ID, uint8_t channel, TDataBuffer_t* pBuf, TDataInfos_t* pInfos, TCurrentValues_t* pValues, DevicePriority priority) {
     if (!g_bioQueueManager || !pBuf || !pInfos || !pValues) return ERR_QUEUE_NOT_INIT;
     
     BioChannelCommand cmd = {
@@ -2052,7 +1580,7 @@ int BIO_GetDataQueued(int ID, uint8_t channel, TDataBuffer_t* pBuf, TDataInfos_t
     
     BioCommandResult result;
     int error = BIO_QueueCommandBlocking(g_bioQueueManager, BIO_CMD_GET_DATA,
-                                       (BioCommandParams*)&cmd, BIO_PRIORITY_NORMAL, &result,
+                                       (BioCommandParams*)&cmd, priority, &result,
                                        BIO_QUEUE_COMMAND_TIMEOUT_MS);
     
     if (error == SUCCESS) {
@@ -2069,7 +1597,7 @@ int BIO_GetDataQueued(int ID, uint8_t channel, TDataBuffer_t* pBuf, TDataInfos_t
     return error;
 }
 
-int BIO_GetExperimentInfosQueued(int ID, uint8_t channel, TExperimentInfos_t* pExpInfos) {
+int BIO_GetExperimentInfosQueued(int ID, uint8_t channel, TExperimentInfos_t* pExpInfos, DevicePriority priority) {
     if (!g_bioQueueManager || !pExpInfos) return ERR_QUEUE_NOT_INIT;
     
     BioChannelCommand cmd = {
@@ -2084,7 +1612,7 @@ int BIO_GetExperimentInfosQueued(int ID, uint8_t channel, TExperimentInfos_t* pE
     
     BioCommandResult result;
     int error = BIO_QueueCommandBlocking(g_bioQueueManager, BIO_CMD_GET_EXPERIMENT_INFOS,
-                                       (BioCommandParams*)&cmd, BIO_PRIORITY_NORMAL, &result,
+                                       (BioCommandParams*)&cmd, priority, &result,
                                        BIO_QUEUE_COMMAND_TIMEOUT_MS);
     
     if (error == SUCCESS) {
@@ -2093,7 +1621,7 @@ int BIO_GetExperimentInfosQueued(int ID, uint8_t channel, TExperimentInfos_t* pE
     return error;
 }
 
-int BIO_SetExperimentInfosQueued(int ID, uint8_t channel, TExperimentInfos_t ExpInfos) {
+int BIO_SetExperimentInfosQueued(int ID, uint8_t channel, TExperimentInfos_t ExpInfos, DevicePriority priority) {
     if (!g_bioQueueManager) return ERR_QUEUE_NOT_INIT;
     
     BioSetExperimentInfosCommand cmd = {
@@ -2109,12 +1637,12 @@ int BIO_SetExperimentInfosQueued(int ID, uint8_t channel, TExperimentInfos_t Exp
     
     BioCommandResult result;
     return BIO_QueueCommandBlocking(g_bioQueueManager, BIO_CMD_SET_EXPERIMENT_INFOS,
-                                  (BioCommandParams*)&cmd, BIO_PRIORITY_NORMAL, &result,
+                                  (BioCommandParams*)&cmd, priority, &result,
                                   BIO_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
 int BIO_LoadFirmwareQueued(int ID, uint8_t* pChannels, int* pResults, uint8_t Length, 
-                          bool ShowGauge, bool ForceReload, const char* BinFile, const char* XlxFile) {
+                          bool ShowGauge, bool ForceReload, const char* BinFile, const char* XlxFile, DevicePriority priority) {
     if (!g_bioQueueManager || !pChannels || !pResults) return ERR_QUEUE_NOT_INIT;
     
     BioLoadFirmwareCommand cmd = {
@@ -2146,7 +1674,7 @@ int BIO_LoadFirmwareQueued(int ID, uint8_t* pChannels, int* pResults, uint8_t Le
     
     BioCommandResult result;
     int error = BIO_QueueCommandBlocking(g_bioQueueManager, BIO_CMD_LOAD_FIRMWARE,
-                                       (BioCommandParams*)&cmd, BIO_PRIORITY_HIGH, &result,
+                                       (BioCommandParams*)&cmd, priority, &result,
                                        cmd.base.timeout_ms);
     
     if (error == SUCCESS) {
@@ -2155,14 +1683,14 @@ int BIO_LoadFirmwareQueued(int ID, uint8_t* pChannels, int* pResults, uint8_t Le
     return error;
 }
 
-int BIO_GetLibVersionQueued(char* pVersion, unsigned int* psize) {
+int BIO_GetLibVersionQueued(char* pVersion, unsigned int* psize, DevicePriority priority) {
     if (!g_bioQueueManager || !pVersion || !psize) return ERR_QUEUE_NOT_INIT;
     
     BioCommandParams params = {.type = BIO_CMD_GET_LIB_VERSION};
     BioCommandResult result;
     
     int error = BIO_QueueCommandBlocking(g_bioQueueManager, BIO_CMD_GET_LIB_VERSION,
-                                       &params, BIO_PRIORITY_LOW, &result,
+                                       &params, priority, &result,
                                        BIO_QUEUE_COMMAND_TIMEOUT_MS);
     
     if (error == SUCCESS) {
@@ -2179,7 +1707,7 @@ int BIO_GetLibVersionQueued(char* pVersion, unsigned int* psize) {
     return error;
 }
 
-int BIO_GetMessageQueued(int ID, uint8_t channel, char* msg, unsigned int* size) {
+int BIO_GetMessageQueued(int ID, uint8_t channel, char* msg, unsigned int* size, DevicePriority priority) {
     if (!g_bioQueueManager || !msg || !size) return ERR_QUEUE_NOT_INIT;
     
     BioGetMessageCommand cmd = {
@@ -2195,7 +1723,7 @@ int BIO_GetMessageQueued(int ID, uint8_t channel, char* msg, unsigned int* size)
     
     BioCommandResult result;
     int error = BIO_QueueCommandBlocking(g_bioQueueManager, BIO_CMD_GET_MESSAGE,
-                                       (BioCommandParams*)&cmd, BIO_PRIORITY_NORMAL, &result,
+                                       (BioCommandParams*)&cmd, priority, &result,
                                        BIO_QUEUE_COMMAND_TIMEOUT_MS);
     
     if (error == SUCCESS && result.data.message) {
@@ -2233,9 +1761,7 @@ int BIO_QueueGetCommandDelay(BioCommandType type) {
             
         case BIO_CMD_RUN_OCV:
 		case BIO_CMD_RUN_PEIS:
-		case BIO_CMD_RUN_SPEIS:
 		case BIO_CMD_RUN_GEIS:
-		case BIO_CMD_RUN_SGEIS:
 		    return BIO_DELAY_AFTER_TECHNIQUE;
             
         case BIO_CMD_SET_HARDWARE_CONFIG:

@@ -132,7 +132,7 @@ static int StartCDCOperation(int panel, int control, CDCOperationMode mode) {
     
     // Check that PSB output is disabled
     PSB_Status status;
-    if (PSB_GetStatusQueued(&status) == PSB_SUCCESS) {
+    if (PSB_GetStatusQueued(&status, DEVICE_PRIORITY_NORMAL) == PSB_SUCCESS) {
         if (status.outputEnabled) {
             CmtGetLock(g_busyLock);
             g_systemBusy = 0;
@@ -258,7 +258,7 @@ static int CDCExperimentThread(void *functionData) {
     
     // Initialize PSB to safe state
     LogMessage("Initializing PSB to zeroed state...");
-    result = PSB_ZeroAllValuesQueued();
+    result = PSB_ZeroAllValuesQueued(DEVICE_PRIORITY_NORMAL);
     
     if (result != PSB_SUCCESS) {
         LogError("Failed to initialize PSB to safe state: %s", PSB_GetErrorString(result));
@@ -308,7 +308,7 @@ static int CDCExperimentThread(void *functionData) {
     
 cleanup:
 	// Turn off PSB output
-    PSB_SetOutputEnableQueued(0);
+    PSB_SetOutputEnableQueued(0, DEVICE_PRIORITY_NORMAL);
     
     // Update status based on final state
     if (ctx->state == CDC_STATE_COMPLETED) {
@@ -355,7 +355,7 @@ static int VerifyBatteryState(CDCTestContext *ctx) {
     
     // Get current battery voltage
 	PSB_Status status;
-    int error = PSB_GetStatusQueued(&status);
+    int error = PSB_GetStatusQueued(&status, DEVICE_PRIORITY_NORMAL);
 	
     if (error != PSB_SUCCESS) {
         LogError("Failed to read PSB status: %s", PSB_GetErrorString(error));
@@ -422,13 +422,13 @@ static int RunOperation(CDCTestContext *ctx) {
     GetCtrlVal(g_mainPanelHandle, PANEL_NUM_SET_DISCHARGE_I, &dischargeCurrent);
     
     // Set both source and sink current values
-    result = PSB_SetCurrentQueued(chargeCurrent);
+    result = PSB_SetCurrentQueued(chargeCurrent, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         LogError("Failed to set source current: %s", PSB_GetErrorString(result));
         return result;
     }
     
-    result = PSB_SetSinkCurrentQueued(dischargeCurrent);
+    result = PSB_SetSinkCurrentQueued(dischargeCurrent, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         LogError("Failed to set sink current: %s", PSB_GetErrorString(result));
         return result;
@@ -437,7 +437,7 @@ static int RunOperation(CDCTestContext *ctx) {
     LogMessage("Current values set - Source: %.2fA, Sink: %.2fA", chargeCurrent, dischargeCurrent);
     
     // Now set the actual target voltage
-    result = PSB_SetVoltageQueued(ctx->params.targetVoltage);
+    result = PSB_SetVoltageQueued(ctx->params.targetVoltage, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         LogError("Failed to set target voltage: %s", PSB_GetErrorString(result));
         return result;
@@ -446,18 +446,18 @@ static int RunOperation(CDCTestContext *ctx) {
     LogMessage("Target voltage set to %.2fV", ctx->params.targetVoltage);
     
     // Set power values high enough to avoid CP mode
-    result = PSB_SetPowerQueued(CDC_POWER_LIMIT_W);
+    result = PSB_SetPowerQueued(CDC_POWER_LIMIT_W, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         LogWarning("Failed to set power: %s", PSB_GetErrorString(result));
     }
     
-    result = PSB_SetSinkPowerQueued(CDC_POWER_LIMIT_W);
+    result = PSB_SetSinkPowerQueued(CDC_POWER_LIMIT_W, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         LogWarning("Failed to set sink power: %s", PSB_GetErrorString(result));
     }
     
     // Enable PSB output
-    PSB_SetOutputEnableQueued(1);
+    PSB_SetOutputEnableQueued(1, DEVICE_PRIORITY_NORMAL);
 	
     if (result != PSB_SUCCESS) {
         LogError("Failed to enable output: %s", PSB_GetErrorString(result));
@@ -502,7 +502,7 @@ static int RunOperation(CDCTestContext *ctx) {
         
         // Get current status
 		PSB_Status status;
-        result = PSB_GetStatusQueued(&status);
+        result = PSB_GetStatusQueued(&status, DEVICE_PRIORITY_NORMAL);
 		
         if (result != PSB_SUCCESS) {
             LogError("Failed to read status: %s", PSB_GetErrorString(result));
@@ -547,7 +547,7 @@ static int RunOperation(CDCTestContext *ctx) {
     }
     
     // Disable output
-    PSB_SetOutputEnableQueued(0);
+    PSB_SetOutputEnableQueued(0, DEVICE_PRIORITY_NORMAL);
     
     // Log summary
     LogMessage("%s completed - Duration: %.1f minutes, Peak current: %.3f A", 

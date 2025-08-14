@@ -103,7 +103,7 @@ int CVICALLBACK StartCapacityExperimentCallback(int panel, int control, int even
     
     // Check that PSB output is disabled
     PSB_Status status;
-    if (PSB_GetStatusQueued(&status) == PSB_SUCCESS) {
+    if (PSB_GetStatusQueued(&status, DEVICE_PRIORITY_NORMAL) == PSB_SUCCESS) {
         if (status.outputEnabled) {
             CmtGetLock(g_busyLock);
             g_systemBusy = 0;
@@ -232,7 +232,7 @@ static int CapacityExperimentThread(void *functionData) {
     
     // Initialize PSB to safe state
     LogMessage("Initializing PSB to zeroed state...");
-    result = PSB_ZeroAllValuesQueued();
+    result = PSB_ZeroAllValuesQueued(DEVICE_PRIORITY_NORMAL);
     
     if (result != PSB_SUCCESS) {
         LogError("Failed to initialize PSB to safe state: %s", PSB_GetErrorString(result));
@@ -361,7 +361,7 @@ static int CapacityExperimentThread(void *functionData) {
     
 cleanup:
 	// Turn off PSB output
-    PSB_SetOutputEnableQueued(0);
+    PSB_SetOutputEnableQueued(0, DEVICE_PRIORITY_NORMAL);
     
     // Update status based on final state
     if (ctx->state == CAPACITY_STATE_COMPLETED) {
@@ -436,7 +436,7 @@ static int VerifyBatteryCharged(CapacityTestContext *ctx) {
     
     // Get current battery voltage
 	PSB_Status status;
-	int error = PSB_GetStatusQueued(&status);
+	int error = PSB_GetStatusQueued(&status, DEVICE_PRIORITY_NORMAL);
 	
     if (error != PSB_SUCCESS) {
         LogError("Failed to read PSB status: %s", PSB_GetErrorString(error));
@@ -557,7 +557,7 @@ static int RunTestPhase(CapacityTestContext *ctx, CapacityTestPhase phase) {
     fprintf(ctx->csvFile, "Time_s,Voltage_V,Current_A,Power_W\n");
     
     // Set target voltage
-    result = PSB_SetVoltageQueued(targetVoltage);
+    result = PSB_SetVoltageQueued(targetVoltage, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         LogError("Failed to set voltage: %s", PSB_GetErrorString(result));
         fclose(ctx->csvFile);
@@ -566,9 +566,9 @@ static int RunTestPhase(CapacityTestContext *ctx, CapacityTestPhase phase) {
     
     // Set target current
     if (phase == CAPACITY_PHASE_DISCHARGE) {
-        result = PSB_SetSinkCurrentQueued(targetCurrent);
+        result = PSB_SetSinkCurrentQueued(targetCurrent, DEVICE_PRIORITY_NORMAL);
     } else {
-        result = PSB_SetCurrentQueued(targetCurrent);
+        result = PSB_SetCurrentQueued(targetCurrent, DEVICE_PRIORITY_NORMAL);
     }
     if (result != PSB_SUCCESS) {
         LogError("Failed to set current: %s", PSB_GetErrorString(result));
@@ -577,7 +577,7 @@ static int RunTestPhase(CapacityTestContext *ctx, CapacityTestPhase phase) {
     }
     
     // Enable PSB output
-    PSB_SetOutputEnableQueued(1);
+    PSB_SetOutputEnableQueued(1, DEVICE_PRIORITY_NORMAL);
 	
     if (result != PSB_SUCCESS) {
         LogError("Failed to enable output: %s", PSB_GetErrorString(result));
@@ -612,7 +612,7 @@ static int RunTestPhase(CapacityTestContext *ctx, CapacityTestPhase phase) {
     
     // Get initial status for start voltage
     PSB_Status status;
-	result = PSB_GetStatusQueued(&status);
+	result = PSB_GetStatusQueued(&status, DEVICE_PRIORITY_NORMAL);
 	
     if (result == PSB_SUCCESS) {
         phaseResults->startVoltage = status.voltage;
@@ -638,7 +638,7 @@ static int RunTestPhase(CapacityTestContext *ctx, CapacityTestPhase phase) {
         }
         
         PSB_Status status;
-		result = PSB_GetStatusQueued(&status);
+		result = PSB_GetStatusQueued(&status, DEVICE_PRIORITY_NORMAL);
 		
 		if (result != PSB_SUCCESS) {
             LogError("Failed to read status: %s", PSB_GetErrorString(result));
@@ -681,7 +681,7 @@ static int RunTestPhase(CapacityTestContext *ctx, CapacityTestPhase phase) {
     }
     
     // Disable output
-    PSB_SetOutputEnableQueued(0);
+    PSB_SetOutputEnableQueued(0, DEVICE_PRIORITY_NORMAL);
     
     // Store final results
     phaseResults->capacity_mAh = ctx->accumulatedCapacity_mAh;

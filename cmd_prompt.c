@@ -208,7 +208,7 @@ static int TeensyCommandManager(CommandContext *ctx) {
 	
 	int error;
 	char response[16];
-	error = TNY_SendRawCommandQueued(ctx->command, response, 16);
+	error = TNY_SendRawCommandQueued(ctx->command, response, 16, DEVICE_PRIORITY_HIGH);
 	
 	if (error != SUCCESS) {
 		char message[1024];
@@ -245,7 +245,7 @@ static int DTBCommandManager(CommandContext *ctx) {
 	ctx->commandLength -= 2;
 	
 	if (strcmp(ctx->command, "RESET") == 0) {
-		int error = DTB_FactoryResetQueued(slaveAddress);
+		int error = DTB_FactoryResetQueued(slaveAddress, DEVICE_PRIORITY_HIGH);
 		
 		if (error != SUCCESS) {
 			char message[1024];
@@ -256,7 +256,7 @@ static int DTBCommandManager(CommandContext *ctx) {
 		
 		LogPromptTextbox(CMD_OUTPUT, "Reset command success.");
 	} else if (strcmp(ctx->command, "SETUP") == 0) {
-		int error = DTB_EnableWriteAccessQueued(slaveAddress);
+		int error = DTB_EnableWriteAccessQueued(slaveAddress, DEVICE_PRIORITY_HIGH);
 		
 		if (error != SUCCESS) {
 			char message[1024];
@@ -265,7 +265,7 @@ static int DTBCommandManager(CommandContext *ctx) {
 			return -1;
 		}
 		
-		error = DTB_ConfigureDefaultQueued(slaveAddress);
+		error = DTB_ConfigureDefaultQueued(slaveAddress, DEVICE_PRIORITY_HIGH);
 		
 		if (error != SUCCESS) {
 			char message[1024];
@@ -276,7 +276,7 @@ static int DTBCommandManager(CommandContext *ctx) {
 		
 		LogPromptTextbox(CMD_OUTPUT, "Setup command success.");
 	} else if (strcmp(ctx->command, "AT") == 0) {
-		int error = DTB_StartAutoTuningQueued(slaveAddress);
+		int error = DTB_StartAutoTuningQueued(slaveAddress, DEVICE_PRIORITY_HIGH);
 		
 		if (error != SUCCESS) {
 			char message[1024];

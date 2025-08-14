@@ -49,12 +49,12 @@ static DTBQueueManager *g_dtbQueueManager = NULL;
 
 // Queue a command (blocking)
 static int DTB_QueueCommandBlocking(DTBQueueManager *mgr, DTBCommandType type,
-                           DTBCommandParams *params, DTBPriority priority,
+                           DTBCommandParams *params, DevicePriority priority,
                            DTBCommandResult *result, int timeoutMs);
 
 // Queue a command (async with callback)
 static CommandID DTB_QueueCommandAsync(DTBQueueManager *mgr, DTBCommandType type,
-                              DTBCommandParams *params, DTBPriority priority,
+                              DTBCommandParams *params, DevicePriority priority,
                               DTBCommandCallback callback, void *userData);
 
 /******************************************************************************
@@ -724,13 +724,13 @@ void DTB_QueueGetStats(DTBQueueManager *mgr, DTBQueueStats *stats) {
  ******************************************************************************/
 
 static int DTB_QueueCommandBlocking(DTBQueueManager *mgr, DTBCommandType type,
-                           DTBCommandParams *params, DTBPriority priority,
+                           DTBCommandParams *params, DevicePriority priority,
                            DTBCommandResult *result, int timeoutMs) {
     return DeviceQueue_CommandBlocking(mgr, type, params, priority, result, timeoutMs);
 }
 
 static CommandID DTB_QueueCommandAsync(DTBQueueManager *mgr, DTBCommandType type,
-                              DTBCommandParams *params, DTBPriority priority,
+                              DTBCommandParams *params, DevicePriority priority,
                               DTBCommandCallback callback, void *userData) {
     return DeviceQueue_CommandAsync(mgr, type, params, priority, callback, userData);
 }
@@ -777,117 +777,117 @@ DTBQueueManager* DTB_GetGlobalQueueManager(void) {
  * Individual Device Wrapper Functions
  ******************************************************************************/
 
-int DTB_SetRunStopQueued(int slaveAddress, int run) {
+int DTB_SetRunStopQueued(int slaveAddress, int run, DevicePriority priority) {
     if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     
     DTBCommandParams params = {.runStop = {slaveAddress, run}};
     DTBCommandResult result;
     
     return DTB_QueueCommandBlocking(g_dtbQueueManager, DTB_CMD_SET_RUN_STOP,
-                                  &params, DTB_PRIORITY_HIGH, &result,
+                                  &params, priority, &result,
                                   DTB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int DTB_SetSetPointQueued(int slaveAddress, double temperature) {
+int DTB_SetSetPointQueued(int slaveAddress, double temperature, DevicePriority priority) {
     if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     
     DTBCommandParams params = {.setpoint = {slaveAddress, temperature}};
     DTBCommandResult result;
     
     return DTB_QueueCommandBlocking(g_dtbQueueManager, DTB_CMD_SET_SETPOINT,
-                                  &params, DTB_PRIORITY_HIGH, &result,
+                                  &params, priority, &result,
                                   DTB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int DTB_StartAutoTuningQueued(int slaveAddress) {
+int DTB_StartAutoTuningQueued(int slaveAddress, DevicePriority priority) {
     if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     
     DTBCommandParams params = {.runStop = {slaveAddress}};  // Reusing struct with just slaveAddress
     DTBCommandResult result;
     
     return DTB_QueueCommandBlocking(g_dtbQueueManager, DTB_CMD_START_AUTO_TUNING,
-                                  &params, DTB_PRIORITY_HIGH, &result,
+                                  &params, priority, &result,
                                   DTB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int DTB_StopAutoTuningQueued(int slaveAddress) {
+int DTB_StopAutoTuningQueued(int slaveAddress, DevicePriority priority) {
     if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     
     DTBCommandParams params = {.runStop = {slaveAddress}};  // Reusing struct with just slaveAddress
     DTBCommandResult result;
     
     return DTB_QueueCommandBlocking(g_dtbQueueManager, DTB_CMD_STOP_AUTO_TUNING,
-                                  &params, DTB_PRIORITY_HIGH, &result,
+                                  &params, priority, &result,
                                   DTB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int DTB_SetControlMethodQueued(int slaveAddress, int method) {
+int DTB_SetControlMethodQueued(int slaveAddress, int method, DevicePriority priority) {
     if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     
     DTBCommandParams params = {.controlMethod = {slaveAddress, method}};
     DTBCommandResult result;
     
     return DTB_QueueCommandBlocking(g_dtbQueueManager, DTB_CMD_SET_CONTROL_METHOD,
-                                  &params, DTB_PRIORITY_HIGH, &result,
+                                  &params, priority, &result,
                                   DTB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int DTB_SetPIDModeQueued(int slaveAddress, int mode) {
+int DTB_SetPIDModeQueued(int slaveAddress, int mode, DevicePriority priority) {
     if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     
     DTBCommandParams params = {.pidMode = {slaveAddress, mode}};
     DTBCommandResult result;
     
     return DTB_QueueCommandBlocking(g_dtbQueueManager, DTB_CMD_SET_PID_MODE,
-                                  &params, DTB_PRIORITY_HIGH, &result,
+                                  &params, priority, &result,
                                   DTB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int DTB_SetSensorTypeQueued(int slaveAddress, int sensorType) {
+int DTB_SetSensorTypeQueued(int slaveAddress, int sensorType, DevicePriority priority) {
     if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     
     DTBCommandParams params = {.sensorType = {slaveAddress, sensorType}};
     DTBCommandResult result;
     
     return DTB_QueueCommandBlocking(g_dtbQueueManager, DTB_CMD_SET_SENSOR_TYPE,
-                                  &params, DTB_PRIORITY_HIGH, &result,
+                                  &params, priority, &result,
                                   DTB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int DTB_SetTemperatureLimitsQueued(int slaveAddress, double upperLimit, double lowerLimit) {
+int DTB_SetTemperatureLimitsQueued(int slaveAddress, double upperLimit, double lowerLimit, DevicePriority priority) {
     if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     
     DTBCommandParams params = {.temperatureLimits = {slaveAddress, upperLimit, lowerLimit}};
     DTBCommandResult result;
     
     return DTB_QueueCommandBlocking(g_dtbQueueManager, DTB_CMD_SET_TEMPERATURE_LIMITS,
-                                  &params, DTB_PRIORITY_HIGH, &result,
+                                  &params, priority, &result,
                                   DTB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int DTB_SetAlarmLimitsQueued(int slaveAddress, double upperLimit, double lowerLimit) {
+int DTB_SetAlarmLimitsQueued(int slaveAddress, double upperLimit, double lowerLimit, DevicePriority priority) {
     if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     
     DTBCommandParams params = {.alarmLimits = {slaveAddress, upperLimit, lowerLimit}};
     DTBCommandResult result;
     
     return DTB_QueueCommandBlocking(g_dtbQueueManager, DTB_CMD_SET_ALARM_LIMITS,
-                                  &params, DTB_PRIORITY_HIGH, &result,
+                                  &params, priority, &result,
                                   DTB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int DTB_SetHeatingCoolingQueued(int slaveAddress, int mode) {
+int DTB_SetHeatingCoolingQueued(int slaveAddress, int mode, DevicePriority priority) {
     if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     
     DTBCommandParams params = {.heatingCooling = {slaveAddress, mode}};
     DTBCommandResult result;
     
     return DTB_QueueCommandBlocking(g_dtbQueueManager, DTB_CMD_SET_HEATING_COOLING,
-                                  &params, DTB_PRIORITY_HIGH, &result,
+                                  &params, priority, &result,
                                   DTB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int DTB_ConfigureQueued(int slaveAddress, const DTB_Configuration *config) {
+int DTB_ConfigureQueued(int slaveAddress, const DTB_Configuration *config, DevicePriority priority) {
     if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     if (!config) return ERR_NULL_POINTER;
     
@@ -895,33 +895,33 @@ int DTB_ConfigureQueued(int slaveAddress, const DTB_Configuration *config) {
     DTBCommandResult result;
     
     return DTB_QueueCommandBlocking(g_dtbQueueManager, DTB_CMD_CONFIGURE,
-                                  &params, DTB_PRIORITY_HIGH, &result,
+                                  &params, priority, &result,
                                   DTB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int DTB_ConfigureDefaultQueued(int slaveAddress) {
+int DTB_ConfigureDefaultQueued(int slaveAddress, DevicePriority priority) {
     if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     
     DTBCommandParams params = {.configureDefault = {slaveAddress}};
     DTBCommandResult result;
     
     return DTB_QueueCommandBlocking(g_dtbQueueManager, DTB_CMD_CONFIGURE_DEFAULT,
-                                  &params, DTB_PRIORITY_HIGH, &result,
+                                  &params, priority, &result,
                                   DTB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int DTB_FactoryResetQueued(int slaveAddress) {
+int DTB_FactoryResetQueued(int slaveAddress, DevicePriority priority) {
     if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     
     DTBCommandParams params = {.factoryReset = {slaveAddress}};
     DTBCommandResult result;
     
     return DTB_QueueCommandBlocking(g_dtbQueueManager, DTB_CMD_FACTORY_RESET,
-                                  &params, DTB_PRIORITY_HIGH, &result,
+                                  &params, priority, &result,
                                   DTB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int DTB_GetStatusQueued(int slaveAddress, DTB_Status *status) {
+int DTB_GetStatusQueued(int slaveAddress, DTB_Status *status, DevicePriority priority) {
     if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     if (!status) return ERR_NULL_POINTER;
     
@@ -929,7 +929,7 @@ int DTB_GetStatusQueued(int slaveAddress, DTB_Status *status) {
     DTBCommandResult result;
     
     int error = DTB_QueueCommandBlocking(g_dtbQueueManager, DTB_CMD_GET_STATUS,
-                                       &params, DTB_PRIORITY_NORMAL, &result,
+                                       &params, priority, &result,
                                        DTB_QUEUE_COMMAND_TIMEOUT_MS);
     
     if (error == DTB_SUCCESS) {
@@ -938,7 +938,7 @@ int DTB_GetStatusQueued(int slaveAddress, DTB_Status *status) {
     return error;
 }
 
-int DTB_GetProcessValueQueued(int slaveAddress, double *temperature) {
+int DTB_GetProcessValueQueued(int slaveAddress, double *temperature, DevicePriority priority) {
     if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     if (!temperature) return ERR_NULL_POINTER;
     
@@ -946,7 +946,7 @@ int DTB_GetProcessValueQueued(int slaveAddress, double *temperature) {
     DTBCommandResult result;
     
     int error = DTB_QueueCommandBlocking(g_dtbQueueManager, DTB_CMD_GET_PROCESS_VALUE,
-                                       &params, DTB_PRIORITY_NORMAL, &result,
+                                       &params, priority, &result,
                                        DTB_QUEUE_COMMAND_TIMEOUT_MS);
     
     if (error == DTB_SUCCESS) {
@@ -955,7 +955,7 @@ int DTB_GetProcessValueQueued(int slaveAddress, double *temperature) {
     return error;
 }
 
-int DTB_GetSetPointQueued(int slaveAddress, double *setPoint) {
+int DTB_GetSetPointQueued(int slaveAddress, double *setPoint, DevicePriority priority) {
     if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     if (!setPoint) return ERR_NULL_POINTER;
     
@@ -963,7 +963,7 @@ int DTB_GetSetPointQueued(int slaveAddress, double *setPoint) {
     DTBCommandResult result;
     
     int error = DTB_QueueCommandBlocking(g_dtbQueueManager, DTB_CMD_GET_SETPOINT,
-                                       &params, DTB_PRIORITY_NORMAL, &result,
+                                       &params, priority, &result,
                                        DTB_QUEUE_COMMAND_TIMEOUT_MS);
     
     if (error == DTB_SUCCESS) {
@@ -972,7 +972,7 @@ int DTB_GetSetPointQueued(int slaveAddress, double *setPoint) {
     return error;
 }
 
-int DTB_GetPIDParamsQueued(int slaveAddress, int pidNumber, DTB_PIDParams *pidParams) {
+int DTB_GetPIDParamsQueued(int slaveAddress, int pidNumber, DTB_PIDParams *pidParams, DevicePriority priority) {
     if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     if (!pidParams) return ERR_NULL_POINTER;
     
@@ -980,7 +980,7 @@ int DTB_GetPIDParamsQueued(int slaveAddress, int pidNumber, DTB_PIDParams *pidPa
     DTBCommandResult result;
     
     int error = DTB_QueueCommandBlocking(g_dtbQueueManager, DTB_CMD_GET_PID_PARAMS,
-                                       &params, DTB_PRIORITY_NORMAL, &result,
+                                       &params, priority, &result,
                                        DTB_QUEUE_COMMAND_TIMEOUT_MS);
     
     if (error == DTB_SUCCESS) {
@@ -989,7 +989,7 @@ int DTB_GetPIDParamsQueued(int slaveAddress, int pidNumber, DTB_PIDParams *pidPa
     return error;
 }
 
-int DTB_GetAlarmStatusQueued(int slaveAddress, int *alarmActive) {
+int DTB_GetAlarmStatusQueued(int slaveAddress, int *alarmActive, DevicePriority priority) {
     if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     if (!alarmActive) return ERR_NULL_POINTER;
     
@@ -997,7 +997,7 @@ int DTB_GetAlarmStatusQueued(int slaveAddress, int *alarmActive) {
     DTBCommandResult result;
     
     int error = DTB_QueueCommandBlocking(g_dtbQueueManager, DTB_CMD_GET_ALARM_STATUS,
-                                       &params, DTB_PRIORITY_NORMAL, &result,
+                                       &params, priority, &result,
                                        DTB_QUEUE_COMMAND_TIMEOUT_MS);
     
     if (error == DTB_SUCCESS) {
@@ -1006,29 +1006,29 @@ int DTB_GetAlarmStatusQueued(int slaveAddress, int *alarmActive) {
     return error;
 }
 
-int DTB_ClearAlarmQueued(int slaveAddress) {
+int DTB_ClearAlarmQueued(int slaveAddress, DevicePriority priority) {
     if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     
     DTBCommandParams params = {.clearAlarm = {slaveAddress}};
     DTBCommandResult result;
     
     return DTB_QueueCommandBlocking(g_dtbQueueManager, DTB_CMD_CLEAR_ALARM,
-                                  &params, DTB_PRIORITY_HIGH, &result,
+                                  &params, priority, &result,
                                   DTB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int DTB_SetFrontPanelLockQueued(int slaveAddress, int lockMode) {
+int DTB_SetFrontPanelLockQueued(int slaveAddress, int lockMode, DevicePriority priority) {
     if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     
     DTBCommandParams params = {.frontPanelLock = {slaveAddress, lockMode}};
     DTBCommandResult result;
     
     return DTB_QueueCommandBlocking(g_dtbQueueManager, DTB_CMD_SET_FRONT_PANEL_LOCK,
-                                  &params, DTB_PRIORITY_HIGH, &result,
+                                  &params, priority, &result,
                                   DTB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int DTB_GetFrontPanelLockQueued(int slaveAddress, int *lockMode) {
+int DTB_GetFrontPanelLockQueued(int slaveAddress, int *lockMode, DevicePriority priority) {
     if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     if (!lockMode) return ERR_NULL_POINTER;
     
@@ -1036,7 +1036,7 @@ int DTB_GetFrontPanelLockQueued(int slaveAddress, int *lockMode) {
     DTBCommandResult result;
     
     int error = DTB_QueueCommandBlocking(g_dtbQueueManager, DTB_CMD_GET_FRONT_PANEL_LOCK,
-                                       &params, DTB_PRIORITY_NORMAL, &result,
+                                       &params, priority, &result,
                                        DTB_QUEUE_COMMAND_TIMEOUT_MS);
     
     if (error == DTB_SUCCESS) {
@@ -1045,38 +1045,38 @@ int DTB_GetFrontPanelLockQueued(int slaveAddress, int *lockMode) {
     return error;
 }
 
-int DTB_UnlockFrontPanelQueued(int slaveAddress) {
-    return DTB_SetFrontPanelLockQueued(slaveAddress, FRONT_PANEL_UNLOCKED);
+int DTB_UnlockFrontPanelQueued(int slaveAddress, DevicePriority priority) {
+    return DTB_SetFrontPanelLockQueued(slaveAddress, FRONT_PANEL_UNLOCKED, priority);
 }
 
-int DTB_LockFrontPanelQueued(int slaveAddress, int allowSetpointChange) {
+int DTB_LockFrontPanelQueued(int slaveAddress, int allowSetpointChange, DevicePriority priority) {
     int lockMode = allowSetpointChange ? FRONT_PANEL_LOCK_EXCEPT_SV : FRONT_PANEL_LOCK_ALL;
-    return DTB_SetFrontPanelLockQueued(slaveAddress, lockMode);
+    return DTB_SetFrontPanelLockQueued(slaveAddress, lockMode, priority);
 }
 
-int DTB_EnableWriteAccessQueued(int slaveAddress) {
+int DTB_EnableWriteAccessQueued(int slaveAddress, DevicePriority priority) {
     if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     
     DTBCommandParams params = {.enableWriteAccess = {slaveAddress}};
     DTBCommandResult result;
     
     return DTB_QueueCommandBlocking(g_dtbQueueManager, DTB_CMD_ENABLE_WRITE_ACCESS,
-                                  &params, DTB_PRIORITY_HIGH, &result,
+                                  &params, priority, &result,
                                   DTB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int DTB_DisableWriteAccessQueued(int slaveAddress) {
+int DTB_DisableWriteAccessQueued(int slaveAddress, DevicePriority priority) {
     if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     
     DTBCommandParams params = {.disableWriteAccess = {slaveAddress}};
     DTBCommandResult result;
     
     return DTB_QueueCommandBlocking(g_dtbQueueManager, DTB_CMD_DISABLE_WRITE_ACCESS,
-                                  &params, DTB_PRIORITY_HIGH, &result,
+                                  &params, priority, &result,
                                   DTB_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int DTB_GetWriteAccessStatusQueued(int slaveAddress, int *isEnabled) {
+int DTB_GetWriteAccessStatusQueued(int slaveAddress, int *isEnabled, DevicePriority priority) {
     if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     if (!isEnabled) return ERR_NULL_POINTER;
     
@@ -1084,7 +1084,7 @@ int DTB_GetWriteAccessStatusQueued(int slaveAddress, int *isEnabled) {
     DTBCommandResult result;
     
     int error = DTB_QueueCommandBlocking(g_dtbQueueManager, DTB_CMD_GET_WRITE_ACCESS_STATUS,
-                                       &params, DTB_PRIORITY_NORMAL, &result,
+                                       &params, priority, &result,
                                        DTB_QUEUE_COMMAND_TIMEOUT_MS);
     
     if (error == DTB_SUCCESS) {
@@ -1095,7 +1095,7 @@ int DTB_GetWriteAccessStatusQueued(int slaveAddress, int *isEnabled) {
 
 int DTB_SendRawModbusQueued(int slaveAddress, unsigned char functionCode,
                            unsigned short address, unsigned short data,
-                           unsigned char *rxBuffer, int rxBufferSize) {
+                           unsigned char *rxBuffer, int rxBufferSize, DevicePriority priority) {
     if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     
     DTBCommandParams params = {
@@ -1111,7 +1111,7 @@ int DTB_SendRawModbusQueued(int slaveAddress, unsigned char functionCode,
     DTBCommandResult result;
     
     int error = DTB_QueueCommandBlocking(g_dtbQueueManager, DTB_CMD_RAW_MODBUS,
-                                       &params, DTB_PRIORITY_NORMAL, &result,
+                                       &params, priority, &result,
                                        DTB_QUEUE_COMMAND_TIMEOUT_MS);
     
     // Response data is already copied to rxBuffer in DTB_AdapterExecuteCommand
@@ -1123,7 +1123,7 @@ int DTB_SendRawModbusQueued(int slaveAddress, unsigned char functionCode,
  * "All Devices" Convenience Functions
  ******************************************************************************/
 
-int DTB_SetRunStopAllQueued(int run) {
+int DTB_SetRunStopAllQueued(int run, DevicePriority priority) {
     if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     
     DTBDeviceContext *ctx = (DTBDeviceContext*)DeviceQueue_GetDeviceContext(g_dtbQueueManager);
@@ -1136,7 +1136,7 @@ int DTB_SetRunStopAllQueued(int run) {
                  run ? "RUN" : "STOP", ctx->numDevices);
     
     for (int i = 0; i < ctx->numDevices; i++) {
-        int result = DTB_SetRunStopQueued(ctx->slaveAddresses[i], run);
+        int result = DTB_SetRunStopQueued(ctx->slaveAddresses[i], run, priority);
         if (result != DTB_SUCCESS) {
             LogErrorEx(LOG_DEVICE_DTB, "Failed to set run/stop for slave %d: %s", 
                        ctx->slaveAddresses[i], DTB_GetErrorString(result));
@@ -1157,7 +1157,7 @@ int DTB_SetRunStopAllQueued(int run) {
     return allSuccess;
 }
 
-int DTB_ConfigureAllDefaultQueued() {
+int DTB_ConfigureAllDefaultQueued(DevicePriority priority) {
     if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     
     DTBDeviceContext *ctx = (DTBDeviceContext*)DeviceQueue_GetDeviceContext(g_dtbQueueManager);
@@ -1169,7 +1169,7 @@ int DTB_ConfigureAllDefaultQueued() {
     LogMessageEx(LOG_DEVICE_DTB, "Configuring all %d DTB devices...", ctx->numDevices);
     
     for (int i = 0; i < ctx->numDevices; i++) {
-        int result = DTB_ConfigureDefaultQueued(ctx->slaveAddresses[i]);
+        int result = DTB_ConfigureDefaultQueued(ctx->slaveAddresses[i], priority);
         if (result != DTB_SUCCESS) {
             LogErrorEx(LOG_DEVICE_DTB, "Failed to configure slave %d: %s", 
                        ctx->slaveAddresses[i], DTB_GetErrorString(result));
@@ -1190,7 +1190,7 @@ int DTB_ConfigureAllDefaultQueued() {
     return allSuccess;
 }
 
-int DTB_EnableWriteAccessAllQueued(void) {
+int DTB_EnableWriteAccessAllQueued(DevicePriority priority) {
     if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
     
     DTBDeviceContext *ctx = (DTBDeviceContext*)DeviceQueue_GetDeviceContext(g_dtbQueueManager);
@@ -1202,7 +1202,7 @@ int DTB_EnableWriteAccessAllQueued(void) {
     LogMessageEx(LOG_DEVICE_DTB, "Enabling write access for all %d DTB devices...", ctx->numDevices);
     
     for (int i = 0; i < ctx->numDevices; i++) {
-        int result = DTB_EnableWriteAccessQueued(ctx->slaveAddresses[i]);
+        int result = DTB_EnableWriteAccessQueued(ctx->slaveAddresses[i], priority);
         if (result != DTB_SUCCESS) {
             LogErrorEx(LOG_DEVICE_DTB, "Failed to enable write access for slave %d: %s", 
                        ctx->slaveAddresses[i], DTB_GetErrorString(result));
@@ -1227,7 +1227,8 @@ int DTB_EnableWriteAccessAllQueued(void) {
  * Async Command Function Implementations
  ******************************************************************************/
 
-CommandID DTB_GetStatusAsync(int slaveAddress, DTBCommandCallback callback, void *userData) {
+CommandID DTB_GetStatusAsync(int slaveAddress, DTBCommandCallback callback, void *userData, DevicePriority priority) {
+    
     DTBQueueManager *mgr = DTB_GetGlobalQueueManager();
     if (!mgr) {
         return ERR_QUEUE_NOT_INIT;
@@ -1236,10 +1237,11 @@ CommandID DTB_GetStatusAsync(int slaveAddress, DTBCommandCallback callback, void
     DTBCommandParams params = {.getStatus = {slaveAddress}};
     
     return DTB_QueueCommandAsync(mgr, DTB_CMD_GET_STATUS, &params,
-                                DTB_PRIORITY_NORMAL, callback, userData);
+                                priority, callback, userData);
 }
 
-CommandID DTB_SetRunStopAsync(int slaveAddress, int run, DTBCommandCallback callback, void *userData) {
+CommandID DTB_SetRunStopAsync(int slaveAddress, int run, DTBCommandCallback callback, void *userData, DevicePriority priority) {
+    
     DTBQueueManager *mgr = DTB_GetGlobalQueueManager();
     if (!mgr) {
         return ERR_QUEUE_NOT_INIT;
@@ -1248,10 +1250,11 @@ CommandID DTB_SetRunStopAsync(int slaveAddress, int run, DTBCommandCallback call
     DTBCommandParams params = {.runStop = {slaveAddress, run}};
     
     return DTB_QueueCommandAsync(mgr, DTB_CMD_SET_RUN_STOP, &params,
-                                DTB_PRIORITY_HIGH, callback, userData);
+                                priority, callback, userData);
 }
 
-CommandID DTB_SetSetPointAsync(int slaveAddress, double temperature, DTBCommandCallback callback, void *userData) {
+CommandID DTB_SetSetPointAsync(int slaveAddress, double temperature, DTBCommandCallback callback, void *userData, DevicePriority priority) {
+    
     DTBQueueManager *mgr = DTB_GetGlobalQueueManager();
     if (!mgr) {
         return ERR_QUEUE_NOT_INIT;
@@ -1260,7 +1263,7 @@ CommandID DTB_SetSetPointAsync(int slaveAddress, double temperature, DTBCommandC
     DTBCommandParams params = {.setpoint = {slaveAddress, temperature}};
     
     return DTB_QueueCommandAsync(mgr, DTB_CMD_SET_SETPOINT, &params,
-                                DTB_PRIORITY_HIGH, callback, userData);
+                                priority, callback, userData);
 }
 
 /******************************************************************************
@@ -1346,7 +1349,8 @@ int DTB_QueueCancelTransaction(DTBQueueManager *mgr, TransactionHandle txn) {
  ******************************************************************************/
 
 int DTB_ConfigureAtomic(int slaveAddress, const DTB_Configuration *config,
-                       DTBTransactionCallback callback, void *userData) {
+                       DTBTransactionCallback callback, void *userData, DevicePriority priority) {
+    
     DTBQueueManager *queueMgr = DTB_GetGlobalQueueManager();
     if (!queueMgr) {
         LogErrorEx(LOG_DEVICE_DTB, "Queue manager not initialized for atomic configuration");
@@ -1364,8 +1368,14 @@ int DTB_ConfigureAtomic(int slaveAddress, const DTB_Configuration *config,
         return ERR_QUEUE_NOT_INIT;
     }
     
+    // Set transaction priority
+    int result = DeviceQueue_SetTransactionPriority(queueMgr, txn, priority);
+    if (result != SUCCESS) {
+        DTB_QueueCancelTransaction(queueMgr, txn);
+        return result;
+    }
+    
     DTBCommandParams params;
-    int result = SUCCESS;
     
     // Add all configuration commands to transaction
     
@@ -1431,7 +1441,8 @@ cleanup:
 }
 
 int DTB_SetControlMethodWithParams(int slaveAddress, int method, int pidMode,
-                                  const DTB_PIDParams *pidParams) {
+                                  const DTB_PIDParams *pidParams, DevicePriority priority) {
+    
     DTBQueueManager *queueMgr = DTB_GetGlobalQueueManager();
     if (!queueMgr) {
         LogErrorEx(LOG_DEVICE_DTB, "Queue manager not initialized for control method change");
@@ -1440,7 +1451,7 @@ int DTB_SetControlMethodWithParams(int slaveAddress, int method, int pidMode,
     
     // For non-PID methods, just set the control method
     if (method != CONTROL_METHOD_PID) {
-        return DTB_SetControlMethodQueued(slaveAddress, method);
+        return DTB_SetControlMethodQueued(slaveAddress, method, priority);
     }
     
     // For PID control, use transaction to ensure consistency
@@ -1451,8 +1462,14 @@ int DTB_SetControlMethodWithParams(int slaveAddress, int method, int pidMode,
         return ERR_QUEUE_NOT_INIT;
     }
     
+    // Set transaction priority
+    int result = DeviceQueue_SetTransactionPriority(queueMgr, txn, priority);
+    if (result != SUCCESS) {
+        DTB_QueueCancelTransaction(queueMgr, txn);
+        return result;
+    }
+    
     DTBCommandParams params;
-    int result = SUCCESS;
     
     // 1. Set control method to PID
     params.controlMethod.slaveAddress = slaveAddress;

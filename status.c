@@ -287,7 +287,7 @@ static void Status_TimerUpdate(void) {
                 // Get initial values if just connected
                 if (stats.isConnected && currentState == CONN_STATE_CONNECTED) {
                     PSB_Status status;
-                    if (PSB_GetStatusQueued(&status) == PSB_SUCCESS) {
+                    if (PSB_GetStatusQueued(&status, DEVICE_PRIORITY_LOW) == PSB_SUCCESS) {
                         UpdatePSBValues(&status);
                         
                         // Set initial remote mode LED state
@@ -335,7 +335,7 @@ static void Status_TimerUpdate(void) {
             
             // Queue periodic status update if connected (async call)
             if (stats.isConnected && !PSB_QueueHasCommandType(psbQueueMgr, PSB_CMD_GET_STATUS)) {
-				PSB_GetStatusAsync(PSBStatusCallback, NULL);
+				PSB_GetStatusAsync(DEVICE_PRIORITY_LOW, PSBStatusCallback, NULL);
             }
         }
     }
@@ -375,7 +375,7 @@ static void Status_TimerUpdate(void) {
             } else if (stats.isConnected && g_status.lastDTBState == CONN_STATE_ERROR) {
                 // Just connected - get initial status
                 DTB_Status status;
-                if (DTB_GetStatusQueued(DTB1_SLAVE_ADDRESS, &status) == DTB_SUCCESS) {
+                if (DTB_GetStatusQueued(DTB1_SLAVE_ADDRESS, &status, DEVICE_PRIORITY_LOW) == DTB_SUCCESS) {
                     UpdateDTBValues(&status);
                     // Set state based on output enabled
                     g_status.lastDTBState = status.outputEnabled ? CONN_STATE_CONNECTED : CONN_STATE_IDLE;
@@ -385,7 +385,7 @@ static void Status_TimerUpdate(void) {
             
             // Queue periodic status update if connected (async call)
             if (stats.isConnected && !DTB_QueueHasCommandType(dtbQueueMgr, DTB_CMD_GET_STATUS)) {
-				DTB_GetStatusAsync(DTB1_SLAVE_ADDRESS, DTBStatusCallback, NULL);
+				DTB_GetStatusAsync(DTB1_SLAVE_ADDRESS, DTBStatusCallback, NULL, DEVICE_PRIORITY_LOW);
             }
         }
     }

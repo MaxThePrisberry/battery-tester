@@ -26,12 +26,12 @@ static TNYQueueManager *g_tnyQueueManager = NULL;
 
 // Queue a command (blocking)
 static int TNY_QueueCommandBlocking(TNYQueueManager *mgr, TNYCommandType type,
-                           TNYCommandParams *params, TNYPriority priority,
+                           TNYCommandParams *params, DevicePriority priority,
                            TNYCommandResult *result, int timeoutMs);
 
 // Queue a command (async with callback)
 static CommandID TNY_QueueCommandAsync(TNYQueueManager *mgr, TNYCommandType type,
-                              TNYCommandParams *params, TNYPriority priority,
+                              TNYCommandParams *params, DevicePriority priority,
                               TNYCommandCallback callback, void *userData);
 
 /******************************************************************************
@@ -330,14 +330,14 @@ void TNY_QueueGetStats(TNYQueueManager *mgr, TNYQueueStats *stats) {
  * Command Queueing Functions
  ******************************************************************************/
 
-static TNY_QueueCommandBlocking(TNYQueueManager *mgr, TNYCommandType type,
-                           TNYCommandParams *params, TNYPriority priority,
+static int TNY_QueueCommandBlocking(TNYQueueManager *mgr, TNYCommandType type,
+                           TNYCommandParams *params, DevicePriority priority,
                            TNYCommandResult *result, int timeoutMs) {
     return DeviceQueue_CommandBlocking(mgr, type, params, priority, result, timeoutMs);
 }
 
 static CommandID TNY_QueueCommandAsync(TNYQueueManager *mgr, TNYCommandType type,
-                              TNYCommandParams *params, TNYPriority priority,
+                              TNYCommandParams *params, DevicePriority priority,
                               TNYCommandCallback callback, void *userData) {
     return DeviceQueue_CommandAsync(mgr, type, params, priority, callback, userData);
 }
@@ -380,47 +380,47 @@ TNYQueueManager* TNY_GetGlobalQueueManager(void) {
     return g_tnyQueueManager;
 }
 
-int TNY_SetPinQueued(int pin, int state) {
+int TNY_SetPinQueued(int pin, int state, DevicePriority priority) {
     if (!g_tnyQueueManager) return ERR_QUEUE_NOT_INIT;
     
     TNYCommandParams params = {.setPin = {pin, state}};
     TNYCommandResult result;
     
     return TNY_QueueCommandBlocking(g_tnyQueueManager, TNY_CMD_SET_PIN,
-                                  &params, TNY_PRIORITY_HIGH, &result,
+                                  &params, priority, &result,
                                   TNY_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int TNY_SetMultiplePinsQueued(const int *pins, const int *states, int count) {
+int TNY_SetMultiplePinsQueued(const int *pins, const int *states, int count, DevicePriority priority) {
     if (!g_tnyQueueManager) return ERR_QUEUE_NOT_INIT;
     
     TNYCommandParams params = {.setMultiplePins = {(int*)pins, (int*)states, count}};
     TNYCommandResult result;
     
     return TNY_QueueCommandBlocking(g_tnyQueueManager, TNY_CMD_SET_MULTIPLE_PINS,
-                                  &params, TNY_PRIORITY_HIGH, &result,
+                                  &params, priority, &result,
                                   TNY_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int TNY_SendRawCommandQueued(char *command, char *response, int responseSize) {
+int TNY_SendRawCommandQueued(char *command, char *response, int responseSize, DevicePriority priority) {
 	if (!g_tnyQueueManager) return ERR_QUEUE_NOT_INIT;
 	
 	TNYCommandParams params = {.sendRawCommand = {command, response, responseSize}};
 	TNYCommandResult result;
 	
 	return TNY_QueueCommandBlocking(g_tnyQueueManager, TNY_CMD_SEND_RAW_COMMAND, 
-									&params, TNY_PRIORITY_HIGH, &result, 
+									&params, priority, &result, 
 									TNY_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
-int TNY_TestConnectionQueued(void) {
+int TNY_TestConnectionQueued(DevicePriority priority) {
     if (!g_tnyQueueManager) return ERR_QUEUE_NOT_INIT;
     
     TNYCommandParams params = {0};
     TNYCommandResult result;
     
     return TNY_QueueCommandBlocking(g_tnyQueueManager, TNY_CMD_TEST_CONNECTION,
-                                  &params, TNY_PRIORITY_NORMAL, &result,
+                                  &params, priority, &result,
                                   TNY_QUEUE_COMMAND_TIMEOUT_MS);
 }
 
@@ -474,7 +474,7 @@ int TNY_QueueCancelTransaction(TNYQueueManager *mgr, TransactionHandle txn) {
  * Advanced Transaction-Based Functions
  ******************************************************************************/
 
-int TNY_SetPinsAtomic(const TNYPinState *pinStates, int count,
+int TNY_SetPinsAtomic(const TNYPinState *pinStates, int count, DevicePriority priority,
                      TNYTransactionCallback callback, void *userData) {
     if (!g_tnyQueueManager) return ERR_QUEUE_NOT_INIT;
 	
@@ -489,8 +489,8 @@ int TNY_SetPinsAtomic(const TNYPinState *pinStates, int count,
         return ERR_QUEUE_NOT_INIT;
     }
     
-    // Set transaction to high priority for atomic operations
-    DeviceQueue_SetTransactionPriority(g_tnyQueueManager, txn, TNY_PRIORITY_HIGH);
+    // Set transaction priority
+    DeviceQueue_SetTransactionPriority(g_tnyQueueManager, txn, priority);
     
     TNYCommandParams params;
     int result = SUCCESS;
@@ -522,7 +522,7 @@ cleanup:
 }
 
 int TNY_InitializePins(const int *lowPins, int lowCount,
-                      const int *highPins, int highCount) {
+                      const int *highPins, int highCount, DevicePriority priority) {
     if (!g_tnyQueueManager) return ERR_QUEUE_NOT_INIT;
     
     int totalPins = (lowPins ? lowCount : 0) + (highPins ? highCount : 0);
@@ -540,8 +540,8 @@ int TNY_InitializePins(const int *lowPins, int lowCount,
         return ERR_QUEUE_NOT_INIT;
 	}
     
-    // Set high priority for initialization
-    DeviceQueue_SetTransactionPriority(g_tnyQueueManager, txn, TNY_PRIORITY_HIGH);
+    // Set transaction priority
+    DeviceQueue_SetTransactionPriority(g_tnyQueueManager, txn, priority);
     
     TNYCommandParams params;
     int result = SUCCESS;

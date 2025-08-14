@@ -32,15 +32,9 @@
 typedef DeviceQueueManager PSBQueueManager;
 typedef DeviceTransactionHandle TransactionHandle;
 typedef DeviceCommandID CommandID;
-typedef DevicePriority PSBPriority;
 typedef DeviceCommandCallback PSBCommandCallback;
 typedef DeviceTransactionCallback PSBTransactionCallback;
 typedef DeviceQueueStats PSBQueueStats;
-
-// Map priority levels
-#define PSB_PRIORITY_HIGH    DEVICE_PRIORITY_HIGH
-#define PSB_PRIORITY_NORMAL  DEVICE_PRIORITY_NORMAL
-#define PSB_PRIORITY_LOW     DEVICE_PRIORITY_LOW
 
 // Map transaction constants
 #define PSB_MAX_TRANSACTION_COMMANDS  DEVICE_MAX_TRANSACTION_COMMANDS
@@ -175,22 +169,22 @@ int PSB_QueueCancelTransaction(PSBQueueManager *mgr, TransactionHandle txn);
  ******************************************************************************/
 
 // These functions use the global queue manager and return ERR_QUEUE_NOT_INIT if not initialized
-int PSB_SetRemoteModeQueued(int enable);
-int PSB_SetOutputEnableQueued(int enable);
-int PSB_SetVoltageQueued(double voltage);
-int PSB_SetCurrentQueued(double current);
-int PSB_SetPowerQueued(double power);
-int PSB_SetVoltageLimitsQueued(double minVoltage, double maxVoltage);
-int PSB_SetCurrentLimitsQueued(double minCurrent, double maxCurrent);
-int PSB_SetPowerLimitQueued(double maxPower);
-int PSB_SetSinkCurrentQueued(double current);
-int PSB_SetSinkPowerQueued(double power);
-int PSB_SetSinkCurrentLimitsQueued(double minCurrent, double maxCurrent);
-int PSB_SetSinkPowerLimitQueued(double maxPower);
-int PSB_GetStatusQueued(PSB_Status *status);
-int PSB_GetActualValuesQueued(double *voltage, double *current, double *power);
+int PSB_SetRemoteModeQueued(int enable, DevicePriority priority);
+int PSB_SetOutputEnableQueued(int enable, DevicePriority priority);
+int PSB_SetVoltageQueued(double voltage, DevicePriority priority);
+int PSB_SetCurrentQueued(double current, DevicePriority priority);
+int PSB_SetPowerQueued(double power, DevicePriority priority);
+int PSB_SetVoltageLimitsQueued(double minVoltage, double maxVoltage, DevicePriority priority);
+int PSB_SetCurrentLimitsQueued(double minCurrent, double maxCurrent, DevicePriority priority);
+int PSB_SetPowerLimitQueued(double maxPower, DevicePriority priority);
+int PSB_SetSinkCurrentQueued(double current, DevicePriority priority);
+int PSB_SetSinkPowerQueued(double power, DevicePriority priority);
+int PSB_SetSinkCurrentLimitsQueued(double minCurrent, double maxCurrent, DevicePriority priority);
+int PSB_SetSinkPowerLimitQueued(double maxPower, DevicePriority priority);
+int PSB_GetStatusQueued(PSB_Status *status, DevicePriority priority);
+int PSB_GetActualValuesQueued(double *voltage, double *current, double *power, DevicePriority priority);
 int PSB_SendRawModbusQueued(unsigned char *txBuffer, int txLength,
-                            unsigned char *rxBuffer, int rxBufferSize, int expectedRxLength);
+                            unsigned char *rxBuffer, int rxBufferSize, int expectedRxLength, DevicePriority priority);
 
 /******************************************************************************
  * Async Command Functions
@@ -201,37 +195,41 @@ int PSB_SendRawModbusQueued(unsigned char *txBuffer, int txLength,
 
 /**
  * Get PSB status asynchronously
+ * @param priority - Command priority
  * @param callback - Callback function to be called when command completes
  * @param userData - User data passed to callback
  * @return Command ID on success or ERR_QUEUE_NOT_INIT if queue not initialized
  */
-CommandID PSB_GetStatusAsync(PSBCommandCallback callback, void *userData);
+CommandID PSB_GetStatusAsync(DevicePriority priority, PSBCommandCallback callback, void *userData);
 
 /**
  * Set PSB remote mode asynchronously
  * @param enable - 1 to enable remote mode, 0 to disable
+ * @param priority - Command priority
  * @param callback - Callback function to be called when command completes
  * @param userData - User data passed to callback
  * @return Command ID on success or ERR_QUEUE_NOT_INIT if queue not initialized
  */
-CommandID PSB_SetRemoteModeAsync(int enable, PSBCommandCallback callback, void *userData);
+CommandID PSB_SetRemoteModeAsync(int enable, DevicePriority priority, PSBCommandCallback callback, void *userData);
 
 /**
  * Set PSB output enable asynchronously
  * @param enable - 1 to enable output, 0 to disable
+ * @param priority - Command priority
  * @param callback - Callback function to be called when command completes
  * @param userData - User data passed to callback
  * @return Command ID on success or ERR_QUEUE_NOT_INIT if queue not initialized
  */
-CommandID PSB_SetOutputEnableAsync(int enable, PSBCommandCallback callback, void *userData);
+CommandID PSB_SetOutputEnableAsync(int enable, DevicePriority priority, PSBCommandCallback callback, void *userData);
 
 /**
  * Get PSB actual values (voltage, current, power) asynchronously
+ * @param priority - Command priority
  * @param callback - Callback function to be called when command completes
  * @param userData - User data passed to callback
  * @return Command ID on success or ERR_QUEUE_NOT_INIT if queue not initialized
  */
-CommandID PSB_GetActualValuesAsync(PSBCommandCallback callback, void *userData);
+CommandID PSB_GetActualValuesAsync(DevicePriority priority, PSBCommandCallback callback, void *userData);
 
 /******************************************************************************
  * Utility Functions
@@ -253,16 +251,18 @@ PSBQueueManager* PSB_GetGlobalQueueManager(void);
  * 1. Disabling output
  * 2. Setting all values (voltage, current, power, sink current, sink power) to zero
  * 
+ * @param priority - Priority for all commands in this operation
  * @return PSB_SUCCESS or error code (ERR_QUEUE_NOT_INIT if queue not initialized)
  */
-int PSB_ZeroAllValuesQueued(void);
+int PSB_ZeroAllValuesQueued(DevicePriority priority);
 
 /**
  * Set all PSB limits to safe maximum values using the queue manager
  * This function sets all PSB limits to their safe maximum ranges
  * 
+ * @param priority - Priority for all commands in this operation
  * @return PSB_SUCCESS or error code (ERR_QUEUE_NOT_INIT if queue not initialized)
  */
-int PSB_SetSafeLimitsQueued(void);
+int PSB_SetSafeLimitsQueued(DevicePriority priority);
 
 #endif // PSB10000_QUEUE_H

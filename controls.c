@@ -127,7 +127,7 @@ void Controls_UpdateFromDeviceStates(void) {
         PSBQueueManager *psbQueueMgr = PSB_GetGlobalQueueManager();
         if (psbQueueMgr) {
             PSB_Status status;
-            if (PSB_GetStatusQueued(&status) == PSB_SUCCESS) {
+            if (PSB_GetStatusQueued(&status, DEVICE_PRIORITY_NORMAL) == PSB_SUCCESS) {
                 if (status.remoteMode != g_controls.lastKnownRemoteMode) {
                     g_controls.lastKnownRemoteMode = status.remoteMode;
                     UpdateRemoteToggleState(status.remoteMode);
@@ -144,7 +144,7 @@ void Controls_UpdateFromDeviceStates(void) {
         DTBQueueManager *dtbQueueMgr = DTB_GetGlobalQueueManager();
         if (dtbQueueMgr) {
             DTB_Status status;
-            if (DTB_GetStatusQueued(DTB1_SLAVE_ADDRESS, &status) == DTB_SUCCESS) {
+            if (DTB_GetStatusQueued(DTB1_SLAVE_ADDRESS, &status, DEVICE_PRIORITY_NORMAL) == DTB_SUCCESS) {
                 int stateChanged = (status.outputEnabled != g_controls.lastKnownDTBRunState);
                 int setpointChanged = (fabs(status.setPoint - g_controls.lastKnownDTBSetpoint) >= 0.1);
                 
@@ -227,7 +227,7 @@ int CVICALLBACK RemoteModeToggle(int panel, int control, int event,
             LogMessage("Changing remote mode to %s...", enable ? "ON" : "OFF");
             
             // Queue the command asynchronously
-			CommandID cmdId = PSB_SetRemoteModeAsync(enable, RemoteModeCallback, NULL);
+			CommandID cmdId = PSB_SetRemoteModeAsync(enable, DEVICE_PRIORITY_NORMAL, RemoteModeCallback, NULL);
             
             if (cmdId == 0) {
                 LogError("Failed to queue remote mode command");
@@ -326,7 +326,7 @@ int CVICALLBACK DTBRunStopCallback(int panel, int control, int event,
                 LogMessage("Stopping DTB temperature control...");
                 
                 // Queue stop command
-				CommandID cmdId = DTB_SetRunStopAsync(DTB1_SLAVE_ADDRESS, 0, DTBRunStopQueueCallback, NULL);
+				CommandID cmdId = DTB_SetRunStopAsync(DTB1_SLAVE_ADDRESS, 0, DTBRunStopQueueCallback, NULL, DEVICE_PRIORITY_NORMAL);
                 
                 if (cmdId == 0) {
                     LogError("Failed to queue DTB stop command");
@@ -351,7 +351,7 @@ int CVICALLBACK DTBRunStopCallback(int panel, int control, int event,
                 g_controls.lastKnownDTBSetpoint = setpoint;
                 
                 // Queue setpoint command first
-				CommandID cmdId = DTB_SetSetPointAsync(DTB1_SLAVE_ADDRESS, setpoint, DTBSetpointCallback, NULL);
+				CommandID cmdId = DTB_SetSetPointAsync(DTB1_SLAVE_ADDRESS, setpoint, DTBSetpointCallback, NULL, DEVICE_PRIORITY_NORMAL);
                 
                 if (cmdId == 0) {
                     LogError("Failed to queue DTB setpoint command");
@@ -377,7 +377,7 @@ static void DTBSetpointCallback(CommandID cmdId, DTBCommandType type,
         if (dtbQueueMgr) {
             LogMessage("Starting DTB temperature control...");
             
-			CommandID cmdId = DTB_SetRunStopAsync(DTB1_SLAVE_ADDRESS, 1, DTBRunStopQueueCallback, NULL);
+			CommandID cmdId = DTB_SetRunStopAsync(DTB1_SLAVE_ADDRESS, 1, DTBRunStopQueueCallback, NULL, DEVICE_PRIORITY_NORMAL);
             
             if (cmdId == 0) {
                 LogError("Failed to queue DTB start command");
@@ -556,7 +556,7 @@ int CVICALLBACK TestTeensyCallback(int panel, int control, int event,
             LogMessage("Setting Teensy pin 13 to %s", toggleValue ? "HIGH" : "LOW");
             
             // Set pin 13 through the queue
-            int result = TNY_SetPinQueued(13, toggleValue ? TNY_PIN_STATE_HIGH : TNY_PIN_STATE_LOW);
+            int result = TNY_SetPinQueued(13, toggleValue ? TNY_PIN_STATE_HIGH : TNY_PIN_STATE_LOW, DEVICE_PRIORITY_NORMAL);
             
             if (result != TNY_SUCCESS) {
                 LogError("Failed to set Teensy pin 13: %s", TNY_GetErrorString(result));

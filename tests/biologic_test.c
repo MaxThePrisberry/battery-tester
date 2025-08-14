@@ -34,9 +34,7 @@ static BioTestCase testCases[] = {
     {"Connection Test", Test_BIO_Connection, 0, "", 0.0},
     {"OCV Test", Test_BIO_OCV, 0, "", 0.0},
     {"PEIS Test", Test_BIO_PEIS, 0, "", 0.0},
-    //{"SPEIS Test", Test_BIO_SPEIS, 0, "", 0.0},
-    {"GEIS Test", Test_BIO_GEIS, 0, "", 0.0},
-    {"SGEIS Test", Test_BIO_SGEIS, 0, "", 0.0}
+    {"GEIS Test", Test_BIO_GEIS, 0, "", 0.0}
 };
 static int numTestCases = sizeof(testCases) / sizeof(testCases[0]);
 
@@ -416,7 +414,7 @@ int Test_BIO_Connection(BioQueueManager *bioQueueMgr, char *errorMsg, int errorM
     LogDebugEx(LOG_DEVICE_BIO, "BioLogic queue manager is connected, testing communication...");
     
     // Test the connection
-	int result = BIO_TestConnectionQueued(0);
+	int result = BIO_TestConnectionQueued(0, DEVICE_PRIORITY_NORMAL);
     
     if (result != SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Connection test failed: %s", GetErrorString(result));
@@ -454,6 +452,7 @@ int Test_BIO_OCV(BioQueueManager *bioQueueMgr, char *errorMsg, int errorMsgSize)
         true,                   // Process the data
         &ocvData,
         0,                      // Use default timeout
+		DEVICE_PRIORITY_NORMAL,
         Test_BIO_TechniqueProgress,  // Progress callback
         g_biologicTestSuiteContext   // Pass test context
     );
@@ -554,6 +553,7 @@ int Test_BIO_PEIS(BioQueueManager *bioQueueMgr, char *errorMsg, int errorMsgSize
         true,                          // Process the data
         &peisData,
         0,                             // Use default timeout
+		DEVICE_PRIORITY_NORMAL,
         Test_BIO_TechniqueProgress,    // Progress callback
         g_biologicTestSuiteContext     // Pass test context
     );
@@ -623,123 +623,6 @@ int Test_BIO_PEIS(BioQueueManager *bioQueueMgr, char *errorMsg, int errorMsgSize
     return 1;
 }
 
-/*int Test_BIO_SPEIS(BioQueueManager *bioQueueMgr, char *errorMsg, int errorMsgSize) {
-    LogDebugEx(LOG_DEVICE_BIO, "Testing BioLogic SPEIS functionality...");
-    
-    const uint8_t TEST_CHANNEL = 0;
-    
-    // Get device ID from queue manager
-    int deviceID = BIO_QueueGetDeviceID(bioQueueMgr);
-    if (deviceID < 0) {
-        snprintf(errorMsg, errorMsgSize, "No device connected");
-        return -1;
-    }
-    
-    LogDebugEx(LOG_DEVICE_BIO, "Running SPEIS measurement from %.1fV to %.1fV in %d steps...", 
-               BIO_TEST_SPEIS_INIT_V, BIO_TEST_SPEIS_FINAL_V, BIO_TEST_SPEIS_STEPS);
-    
-    // Run SPEIS measurement using high-level function
-    BIO_TechniqueData *speisData = NULL;
-    int result = BIO_RunSPEISQueued(
-        deviceID,
-        TEST_CHANNEL,
-        true,                         // vs_initial
-		true,                         // vs_final
-        BIO_TEST_SPEIS_INIT_V,        // initial_voltage_step
-        BIO_TEST_SPEIS_FINAL_V,       // final_voltage_step
-        1.0,                          // duration_step (1s per step)
-        BIO_TEST_SPEIS_STEPS,         // step_number
-        0.1,                          // record_every_dT (100ms)
-        0.0,                          // record_every_dI (not used)
-        1000.0,                       // initial_freq (1kHz)
-        100.0,                        // final_freq (100Hz)
-        false,                        // sweep_linear (FALSE = logarithmic)
-        0.001,                        // amplitude_voltage (10mV)
-        1,                            // frequency_number
-        1,                            // average_n_times
-        false,                        // correction (no non-stationary correction)
-        0.0,                          // wait_for_steady (0 periods)
-        true,                         // Process the data
-        &speisData,
-        0,                            // Use default timeout
-        Test_BIO_TechniqueProgress,   // Progress callback
-        g_biologicTestSuiteContext    // Pass test context
-    );
-    
-    if (result == BIO_ERR_PARTIAL_DATA) {
-        LogWarningEx(LOG_DEVICE_BIO, "SPEIS measurement stopped with error, but partial data retrieved");
-    } else if (result != SUCCESS) {
-        snprintf(errorMsg, errorMsgSize, "SPEIS measurement failed: %s", BIO_GetErrorString(result));
-        return -1;
-    }
-    
-    // Verify we got data
-    if (!speisData || !speisData->rawData || speisData->rawData->numPoints == 0) {
-        snprintf(errorMsg, errorMsgSize, "No data received from SPEIS measurement");
-        if (speisData) BIO_FreeTechniqueData(speisData);
-        return -1;
-    }
-    
-    LogMessageEx(LOG_DEVICE_BIO, "========================================");
-    LogMessageEx(LOG_DEVICE_BIO, "SPEIS Test Results:");
-    LogMessageEx(LOG_DEVICE_BIO, "  Data Points: %d", speisData->rawData->numPoints);
-    LogMessageEx(LOG_DEVICE_BIO, "  Variables per Point: %d", speisData->rawData->numVariables);
-    LogMessageEx(LOG_DEVICE_BIO, "  Technique ID: %d", speisData->rawData->techniqueID);
-    LogMessageEx(LOG_DEVICE_BIO, "  Process Index: %d", speisData->rawData->processIndex);
-    
-    // If we have converted data, display step and impedance information
-    if (speisData->convertedData && speisData->convertedData->numPoints > 0) {
-        LogMessageEx(LOG_DEVICE_BIO, "  Converted Variables: %d", speisData->convertedData->numVariables);
-        
-        // Find step, frequency, and impedance columns
-        int stepCol = -1, freqCol = -1, reCol = -1, imCol = -1;
-        for (int i = 0; i < speisData->convertedData->numVariables; i++) {
-            if (strcmp(speisData->convertedData->variableNames[i], "Step") == 0) stepCol = i;
-            if (strcmp(speisData->convertedData->variableNames[i], "Frequency") == 0) freqCol = i;
-            if (strcmp(speisData->convertedData->variableNames[i], "Re(Zwe)") == 0) reCol = i;
-            if (strcmp(speisData->convertedData->variableNames[i], "Im(Zwe)") == 0) imCol = i;
-        }
-        
-        if (stepCol >= 0 && freqCol >= 0 && reCol >= 0 && imCol >= 0) {
-            LogMessageEx(LOG_DEVICE_BIO, "  Sample Step Data:");
-            
-            // Find first point of first step
-            for (int i = 0; i < speisData->convertedData->numPoints && i < 10; i++) {
-                if ((int)speisData->convertedData->data[stepCol][i] == 0) {
-                    double mag = sqrt(pow(speisData->convertedData->data[reCol][i], 2) + 
-                                     pow(speisData->convertedData->data[imCol][i], 2));
-                    LogMessageEx(LOG_DEVICE_BIO, "    Step %d: f=%.1f Hz, |Z|=%.3f Ohm", 
-                                (int)speisData->convertedData->data[stepCol][i],
-                                speisData->convertedData->data[freqCol][i],
-                                mag);
-                    break;
-                }
-            }
-            
-            // Find first point of last step
-            for (int i = speisData->convertedData->numPoints - 1; i >= 0 && i > speisData->convertedData->numPoints - 10; i--) {
-                if ((int)speisData->convertedData->data[stepCol][i] == BIO_TEST_SPEIS_STEPS - 1) {
-                    double mag = sqrt(pow(speisData->convertedData->data[reCol][i], 2) + 
-                                     pow(speisData->convertedData->data[imCol][i], 2));
-                    LogMessageEx(LOG_DEVICE_BIO, "    Step %d: f=%.1f Hz, |Z|=%.3f Ohm", 
-                                (int)speisData->convertedData->data[stepCol][i],
-                                speisData->convertedData->data[freqCol][i],
-                                mag);
-                    break;
-                }
-            }
-        }
-    }
-    
-    LogMessageEx(LOG_DEVICE_BIO, "========================================");
-    
-    // Clean up
-    BIO_FreeTechniqueData(speisData);
-    
-    LogDebugEx(LOG_DEVICE_BIO, "SPEIS test completed successfully");
-    return 1;
-}*/
-
 int Test_BIO_GEIS(BioQueueManager *bioQueueMgr, char *errorMsg, int errorMsgSize) {
     LogDebugEx(LOG_DEVICE_BIO, "Testing BioLogic GEIS functionality...");
     
@@ -777,6 +660,7 @@ int Test_BIO_GEIS(BioQueueManager *bioQueueMgr, char *errorMsg, int errorMsgSize
         true,                         // Process the data
         &geisData,
         0,                            // Use default timeout
+		DEVICE_PRIORITY_NORMAL,
         Test_BIO_TechniqueProgress,   // Progress callback
         g_biologicTestSuiteContext    // Pass test context
     );
@@ -843,124 +727,5 @@ int Test_BIO_GEIS(BioQueueManager *bioQueueMgr, char *errorMsg, int errorMsgSize
     BIO_FreeTechniqueData(geisData);
     
     LogDebugEx(LOG_DEVICE_BIO, "GEIS test completed successfully");
-    return 1;
-}
-
-int Test_BIO_SGEIS(BioQueueManager *bioQueueMgr, char *errorMsg, int errorMsgSize) {
-    LogDebugEx(LOG_DEVICE_BIO, "Testing BioLogic SGEIS functionality...");
-    
-    const uint8_t TEST_CHANNEL = 0;
-    
-    // Get device ID from queue manager
-    int deviceID = BIO_QueueGetDeviceID(bioQueueMgr);
-    if (deviceID < 0) {
-        snprintf(errorMsg, errorMsgSize, "No device connected");
-        return -1;
-    }
-    
-    LogDebugEx(LOG_DEVICE_BIO, "Running SGEIS measurement from %.1fmA to %.1fmA in %d steps...", 
-               BIO_TEST_SGEIS_INIT_I * 1000, BIO_TEST_SGEIS_FINAL_I * 1000, BIO_TEST_SGEIS_STEPS);
-    
-    // Run SGEIS measurement using high-level function
-    BIO_TechniqueData *sgeisData = NULL;
-    int result = BIO_RunSGEISQueued(
-        deviceID,
-        TEST_CHANNEL,
-        true,                         // vs_initial (vs initial current)
-        false,                        // vs_final (not vs initial)
-        BIO_TEST_SGEIS_INIT_I,       // initial_current_step (0A)
-        BIO_TEST_SGEIS_FINAL_I,      // final_current_step (100mA)
-        1.0,                         // duration_step (1s per step)
-        BIO_TEST_SGEIS_STEPS,        // step_number (10 steps)
-        0.1,                         // record_every_dT (100ms)
-        0.010,                       // record_every_dE (10mV)
-        1000.0,                      // initial_freq (1kHz)
-        100.0,                       // final_freq (100Hz)
-        false,                       // sweep_linear (FALSE = logarithmic)
-        BIO_TEST_SGEIS_AMPLITUDE_I,  // amplitude_current (10mA)
-        3,                           // frequency_number (3 frequencies per step)
-        1,                           // average_n_times (1 repeat)
-        false,                       // correction (no non-stationary correction)
-        0.0,                         // wait_for_steady (0 periods)
-        KBIO_IRANGE_100mA,           // i_range (100mA range)
-        true,                        // Process the data
-        &sgeisData,
-        0,                           // Use default timeout
-        Test_BIO_TechniqueProgress,  // Progress callback
-        g_biologicTestSuiteContext   // Pass test context
-    );
-    
-    if (result == BIO_ERR_PARTIAL_DATA) {
-        LogWarningEx(LOG_DEVICE_BIO, "SGEIS measurement stopped with error, but partial data retrieved");
-    } else if (result != SUCCESS) {
-        snprintf(errorMsg, errorMsgSize, "SGEIS measurement failed: %s", BIO_GetErrorString(result));
-        return -1;
-    }
-    
-    // Verify we got data
-    if (!sgeisData || !sgeisData->rawData || sgeisData->rawData->numPoints == 0) {
-        snprintf(errorMsg, errorMsgSize, "No data received from SGEIS measurement");
-        if (sgeisData) BIO_FreeTechniqueData(sgeisData);
-        return -1;
-    }
-    
-    LogMessageEx(LOG_DEVICE_BIO, "========================================");
-    LogMessageEx(LOG_DEVICE_BIO, "SGEIS Test Results:");
-    LogMessageEx(LOG_DEVICE_BIO, "  Data Points: %d", sgeisData->rawData->numPoints);
-    LogMessageEx(LOG_DEVICE_BIO, "  Variables per Point: %d", sgeisData->rawData->numVariables);
-    LogMessageEx(LOG_DEVICE_BIO, "  Technique ID: %d", sgeisData->rawData->techniqueID);
-    LogMessageEx(LOG_DEVICE_BIO, "  Process Index: %d", sgeisData->rawData->processIndex);
-    
-    // If we have converted data, display step and impedance information
-    if (sgeisData->convertedData && sgeisData->convertedData->numPoints > 0) {
-        LogMessageEx(LOG_DEVICE_BIO, "  Converted Variables: %d", sgeisData->convertedData->numVariables);
-        
-        // Find step, frequency, and impedance columns
-        int stepCol = -1, freqCol = -1, reCol = -1, imCol = -1;
-        for (int i = 0; i < sgeisData->convertedData->numVariables; i++) {
-            if (strcmp(sgeisData->convertedData->variableNames[i], "Step") == 0) stepCol = i;
-            if (strcmp(sgeisData->convertedData->variableNames[i], "Frequency") == 0) freqCol = i;
-            if (strcmp(sgeisData->convertedData->variableNames[i], "Re(Zwe)") == 0) reCol = i;
-            if (strcmp(sgeisData->convertedData->variableNames[i], "Im(Zwe)") == 0) imCol = i;
-        }
-        
-        if (stepCol >= 0 && freqCol >= 0 && reCol >= 0 && imCol >= 0) {
-            LogMessageEx(LOG_DEVICE_BIO, "  Sample SGEIS Step Data:");
-            
-            // Find first point of first step
-            for (int i = 0; i < sgeisData->convertedData->numPoints && i < 10; i++) {
-                if ((int)sgeisData->convertedData->data[stepCol][i] == 0) {
-                    double mag = sqrt(pow(sgeisData->convertedData->data[reCol][i], 2) + 
-                                     pow(sgeisData->convertedData->data[imCol][i], 2));
-                    LogMessageEx(LOG_DEVICE_BIO, "    Step %d (0mA): f=%.1f Hz, |Z|=%.3f Ohm", 
-                                (int)sgeisData->convertedData->data[stepCol][i],
-                                sgeisData->convertedData->data[freqCol][i],
-                                mag);
-                    break;
-                }
-            }
-            
-            // Find first point of last step
-            for (int i = sgeisData->convertedData->numPoints - 1; i >= 0 && i > sgeisData->convertedData->numPoints - 10; i--) {
-                if ((int)sgeisData->convertedData->data[stepCol][i] == BIO_TEST_SGEIS_STEPS - 1) {
-                    double mag = sqrt(pow(sgeisData->convertedData->data[reCol][i], 2) + 
-                                     pow(sgeisData->convertedData->data[imCol][i], 2));
-                    LogMessageEx(LOG_DEVICE_BIO, "    Step %d (%.0fmA): f=%.1f Hz, |Z|=%.3f Ohm", 
-                                (int)sgeisData->convertedData->data[stepCol][i],
-                                BIO_TEST_SGEIS_FINAL_I * 1000,
-                                sgeisData->convertedData->data[freqCol][i],
-                                mag);
-                    break;
-                }
-            }
-        }
-    }
-    
-    LogMessageEx(LOG_DEVICE_BIO, "========================================");
-    
-    // Clean up
-    BIO_FreeTechniqueData(sgeisData);
-    
-    LogDebugEx(LOG_DEVICE_BIO, "SGEIS test completed successfully");
     return 1;
 }

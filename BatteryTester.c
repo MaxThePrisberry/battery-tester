@@ -83,13 +83,13 @@ int main (int argc, char *argv[]) {
 	            LogMessage("Initializing PSB to safe state...");
 	            
 	            // First set safe limits
-	            int limitResult = PSB_SetSafeLimitsQueued();
+	            int limitResult = PSB_SetSafeLimitsQueued(DEVICE_PRIORITY_NORMAL);
 	            if (limitResult != PSB_SUCCESS) {
 	                LogWarning("Failed to set all PSB safe limits: %s", PSB_GetErrorString(limitResult));
 	            }
 	            
 	            // Then zero all values
-	            int zeroResult = PSB_ZeroAllValuesQueued();
+	            int zeroResult = PSB_ZeroAllValuesQueued(DEVICE_PRIORITY_NORMAL);
 	            if (zeroResult != PSB_SUCCESS) {
 	                LogWarning("Failed to zero all PSB values: %s", PSB_GetErrorString(zeroResult));
 	            }
@@ -136,7 +136,7 @@ int main (int argc, char *argv[]) {
 	            
 	            // Enable write access for all devices
 	            LogMessage("Enabling DTB write access for all devices...");
-	            int writeResult = DTB_EnableWriteAccessAllQueued();
+	            int writeResult = DTB_EnableWriteAccessAllQueued(DEVICE_PRIORITY_NORMAL);
 	            if (writeResult != DTB_SUCCESS) {
 	                LogError("Failed to enable DTB write access for all devices: %s", 
 	                        DTB_GetErrorString(writeResult));
@@ -153,14 +153,14 @@ int main (int argc, char *argv[]) {
 	                
 	                // Check current write access status for this device
 	                int writeEnabled = 0;
-	                int statusResult = DTB_GetWriteAccessStatusQueued(slaveAddr, &writeEnabled);
+	                int statusResult = DTB_GetWriteAccessStatusQueued(slaveAddr, &writeEnabled, DEVICE_PRIORITY_NORMAL);
 	                if (statusResult == DTB_SUCCESS) {
 	                    LogMessage("DTB slave %d write access currently: %s", 
 	                              slaveAddr, writeEnabled ? "ENABLED" : "DISABLED");
 	                }
 	                
 	                // Configure this device
-	                int configResult = DTB_ConfigureDefaultQueued(slaveAddr);
+	                int configResult = DTB_ConfigureDefaultQueued(slaveAddr, DEVICE_PRIORITY_NORMAL);
 	                if (configResult == DTB_SUCCESS) {
 	                    LogMessage("DTB4848 slave %d configured successfully", slaveAddr);
 	                } else {
@@ -195,7 +195,7 @@ int main (int argc, char *argv[]) {
 	            
 	            // Optional: Initialize pins to known state
 	            int lowPins[] = {0, 1};
-	            TNY_InitializePins(lowPins, 2, NULL, 0);
+	            TNY_InitializePins(lowPins, 2, NULL, 0, DEVICE_PRIORITY_NORMAL);
 	        } else {
 	            LogWarning("Teensy queue manager initialized but not connected on COM%d", TNY_COM_PORT);
 	        }

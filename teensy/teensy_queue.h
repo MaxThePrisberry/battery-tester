@@ -28,15 +28,9 @@
 typedef DeviceQueueManager TNYQueueManager;
 typedef DeviceTransactionHandle TransactionHandle;
 typedef DeviceCommandID CommandID;
-typedef DevicePriority TNYPriority;
 typedef DeviceCommandCallback TNYCommandCallback;
 typedef DeviceTransactionCallback TNYTransactionCallback;
 typedef DeviceQueueStats TNYQueueStats;
-
-// Map priority levels
-#define TNY_PRIORITY_HIGH    DEVICE_PRIORITY_HIGH
-#define TNY_PRIORITY_NORMAL  DEVICE_PRIORITY_NORMAL
-#define TNY_PRIORITY_LOW     DEVICE_PRIORITY_LOW
 
 // Map transaction constants
 #define TNY_MAX_TRANSACTION_COMMANDS  DEVICE_MAX_TRANSACTION_COMMANDS
@@ -159,14 +153,14 @@ int TNY_QueueCancelTransaction(TNYQueueManager *mgr, TransactionHandle txn);
  ******************************************************************************/
 
 // Pin control functions
-int TNY_SetPinQueued(int pin, int state);
-int TNY_SetMultiplePinsQueued(const int *pins, const int *states, int count);
+int TNY_SetPinQueued(int pin, int state, DevicePriority priority);
+int TNY_SetMultiplePinsQueued(const int *pins, const int *states, int count, DevicePriority priority);
 
 // Send raw command (Should only be used by cmd_prompt.c/h)
-int TNY_SendRawCommandQueued(char *command, char *response, int responseSize);
+int TNY_SendRawCommandQueued(char *command, char *response, int responseSize, DevicePriority priority);
 
 // Test function
-int TNY_TestConnectionQueued(void);
+int TNY_TestConnectionQueued(DevicePriority priority);
 
 /******************************************************************************
  * Utility Functions
@@ -192,11 +186,12 @@ TNYQueueManager* TNY_GetGlobalQueueManager(void);
  * 
  * @param pinStates - Array of pin/state pairs
  * @param count - Number of pins to set
+ * @param priority - Priority for all commands in the transaction
  * @param callback - Optional callback for transaction completion
  * @param userData - User data for callback
  * @return SUCCESS or error code
  */
-int TNY_SetPinsAtomic(const TNYPinState *pinStates, int count,
+int TNY_SetPinsAtomic(const TNYPinState *pinStates, int count, DevicePriority priority,
                      TNYTransactionCallback callback, void *userData);
 
 /**
@@ -206,9 +201,10 @@ int TNY_SetPinsAtomic(const TNYPinState *pinStates, int count,
  * @param lowCount - Number of pins to set LOW
  * @param highPins - Array of pins to set HIGH
  * @param highCount - Number of pins to set HIGH
+ * @param priority - Priority for all commands in the transaction
  * @return SUCCESS or error code
  */
 int TNY_InitializePins(const int *lowPins, int lowCount,
-                      const int *highPins, int highCount);
+                      const int *highPins, int highCount, DevicePriority priority);
 
 #endif // TEENSY_QUEUE_H

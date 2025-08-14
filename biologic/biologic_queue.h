@@ -37,15 +37,9 @@
 typedef DeviceQueueManager BioQueueManager;
 typedef DeviceTransactionHandle BioTransactionHandle;
 typedef DeviceCommandID BioCommandID;
-typedef DevicePriority BioPriority;
 typedef DeviceCommandCallback BioCommandCallback;
 typedef DeviceTransactionCallback BioTransactionCallback;
 typedef DeviceQueueStats BioQueueStats;
-
-// Map priority levels
-#define BIO_PRIORITY_HIGH    DEVICE_PRIORITY_HIGH
-#define BIO_PRIORITY_NORMAL  DEVICE_PRIORITY_NORMAL
-#define BIO_PRIORITY_LOW     DEVICE_PRIORITY_LOW
 
 // Map transaction constants
 #define BIO_MAX_TRANSACTION_COMMANDS  DEVICE_MAX_TRANSACTION_COMMANDS
@@ -69,9 +63,7 @@ typedef enum {
     // High-level technique commands
     BIO_CMD_RUN_OCV,
     BIO_CMD_RUN_PEIS,
-	BIO_CMD_RUN_SPEIS,
 	BIO_CMD_RUN_GEIS,
-	BIO_CMD_RUN_SGEIS,
     
     // Configuration commands
     BIO_CMD_SET_HARDWARE_CONFIG,
@@ -93,7 +85,7 @@ typedef enum {
     BIO_CMD_TYPE_COUNT
 } BioCommandType;
 
-// Base command structure
+// Base command structure (priority removed - now explicit parameter)
 typedef struct {
     BioCommandType type;
     uint8_t channel;
@@ -139,28 +131,6 @@ typedef struct {
 	bool processData;
 } BioPEISCommand;
 
-// SPEIS command
-typedef struct {
-    BioCommandParams base;
-    bool vs_initial;               // Voltage step vs initial
-    bool vs_final;                 // Voltage step vs final
-    double initial_voltage_step;   // Initial voltage step (V)
-    double final_voltage_step;     // Final voltage step (V)
-    double duration_step;          // Step duration (s)
-    int step_number;               // Number of voltage steps [0..98]
-    double record_every_dT;        // Record every dt (s)
-    double record_every_dI;        // Record every dI (A)
-    double initial_freq;           // Initial frequency (Hz)
-    double final_freq;             // Final frequency (Hz)
-    bool sweep_linear;             // TRUE for linear, FALSE for logarithmic
-    double amplitude_voltage;      // Sine amplitude (V)
-    int frequency_number;          // Number of frequencies
-    int average_n_times;           // Number of repeat times
-    bool correction;               // Non-stationary correction
-    double wait_for_steady;        // Number of periods to wait
-	bool processData;
-} BioSPEISCommand;
-
 // GEIS command
 typedef struct {
     BioCommandParams base;
@@ -180,29 +150,6 @@ typedef struct {
     int i_range;                   // Current range (cannot be auto)
 	bool processData;
 } BioGEISCommand;
-
-// SGEIS command
-typedef struct {
-    BioCommandParams base;
-    bool vs_initial;               // Current step vs initial
-    bool vs_final;                 // Current step vs final
-    double initial_current_step;   // Initial current step (A)
-    double final_current_step;     // Final current step (A)
-    double duration_step;          // Step duration (s)
-    int step_number;               // Number of current steps [0..98]
-    double record_every_dT;        // Record every dt (s)
-    double record_every_dE;        // Record every dE (V)
-    double initial_freq;           // Initial frequency (Hz)
-    double final_freq;             // Final frequency (Hz)
-    bool sweep_linear;             // TRUE for linear, FALSE for logarithmic
-    double amplitude_current;      // Sine amplitude (A)
-    int frequency_number;          // Number of frequencies
-    int average_n_times;           // Number of repeat times
-    bool correction;               // Non-stationary correction
-    double wait_for_steady;        // Number of periods to wait
-    int i_range;                   // Current range (cannot be auto)
-	bool processData;
-} BioSGEISCommand;
 
 // Get channels plugged command
 typedef struct {
@@ -326,7 +273,7 @@ int BIO_QueueCancelTransaction(BioQueueManager *mgr, BioTransactionHandle txn);
  * High-Level Technique Functions (Blocking)
  * 
  * These functions will use the queue if initialized, otherwise return
- * ERR_QUEUE_NOT_INIT
+ * ERR_QUEUE_NOT_INIT. Priority parameter is required.
  ******************************************************************************/
 
 // OCV measurement (blocking)
@@ -339,6 +286,7 @@ int BIO_RunOCVQueued(int ID, uint8_t channel,
 					bool processData,
                     BIO_TechniqueData **result,
                     int timeout_ms,
+                    DevicePriority priority,
                     BioTechniqueProgressCallback progressCallback,
                     void *userData);
 
@@ -360,32 +308,9 @@ int BIO_RunPEISQueued(int ID, uint8_t channel,
 					 bool processData,
                      BIO_TechniqueData **result,
                      int timeout_ms,
+                     DevicePriority priority,
                      BioTechniqueProgressCallback progressCallback,
                      void *userData);
-
-// SPEIS measurement (blocking)
-int BIO_RunSPEISQueued(int ID, uint8_t channel,
-                      bool vs_initial,
-                      bool vs_final,
-                      double initial_voltage_step,
-                      double final_voltage_step,
-                      double duration_step,
-                      int step_number,
-                      double record_every_dT,
-                      double record_every_dI,
-                      double initial_freq,
-                      double final_freq,
-                      bool sweep_linear,
-                      double amplitude_voltage,
-                      int frequency_number,
-                      int average_n_times,
-                      bool correction,
-                      double wait_for_steady,
-					  bool processData,
-                      BIO_TechniqueData **result,
-                      int timeout_ms,
-                      BioTechniqueProgressCallback progressCallback,
-                      void *userData);
 
 // GEIS measurement (blocking)
 int BIO_RunGEISQueued(int ID, uint8_t channel,
@@ -406,38 +331,15 @@ int BIO_RunGEISQueued(int ID, uint8_t channel,
 					 bool processData,
                      BIO_TechniqueData **result,
                      int timeout_ms,
+                     DevicePriority priority,
                      BioTechniqueProgressCallback progressCallback,
                      void *userData);
-
-// SGEIS measurement (blocking)
-int BIO_RunSGEISQueued(int ID, uint8_t channel,
-                      bool vs_initial,
-                      bool vs_final,
-                      double initial_current_step,
-                      double final_current_step,
-                      double duration_step,
-                      int step_number,
-                      double record_every_dT,
-                      double record_every_dE,
-                      double initial_freq,
-                      double final_freq,
-                      bool sweep_linear,
-                      double amplitude_current,
-                      int frequency_number,
-                      int average_n_times,
-                      bool correction,
-                      double wait_for_steady,
-                      int i_range,
-					  bool processData,
-                      BIO_TechniqueData **result,
-                      int timeout_ms,
-                      BioTechniqueProgressCallback progressCallback,
-                      void *userData);
 
 /******************************************************************************
  * High-Level Technique Functions (Async)
  * 
  * These functions return ERR_QUEUE_NOT_INIT if the queue is not initialized
+ * Priority parameter is required.
  ******************************************************************************/
 
 // OCV measurement (async)
@@ -448,6 +350,7 @@ BioCommandID BIO_RunOCVAsync(int ID, uint8_t channel,
                             double record_every_dT,
                             int e_range,
 							bool processData,
+                            DevicePriority priority,
                             BioCommandCallback callback,
                             void *userData);
 
@@ -467,30 +370,9 @@ BioCommandID BIO_RunPEISAsync(int ID, uint8_t channel,
                              bool correction,
                              double wait_for_steady,
 							 bool processData,
+                             DevicePriority priority,
                              BioCommandCallback callback,
                              void *userData);
-
-// SPEIS measurement (async)
-BioCommandID BIO_RunSPEISAsync(int ID, uint8_t channel,
-                              bool vs_initial,
-                              bool vs_final,
-                              double initial_voltage_step,
-                              double final_voltage_step,
-                              double duration_step,
-                              int step_number,
-                              double record_every_dT,
-                              double record_every_dI,
-                              double initial_freq,
-                              double final_freq,
-                              bool sweep_linear,
-                              double amplitude_voltage,
-                              int frequency_number,
-                              int average_n_times,
-                              bool correction,
-                              double wait_for_steady,
-							  bool processData,
-                              BioCommandCallback callback,
-                              void *userData);
 
 // GEIS measurement (async)
 BioCommandID BIO_RunGEISAsync(int ID, uint8_t channel,
@@ -509,74 +391,53 @@ BioCommandID BIO_RunGEISAsync(int ID, uint8_t channel,
                              double wait_for_steady,
                              int i_range,
 							 bool processData,
+                             DevicePriority priority,
                              BioCommandCallback callback,
                              void *userData);
-
-// SGEIS measurement (async)
-BioCommandID BIO_RunSGEISAsync(int ID, uint8_t channel,
-                              bool vs_initial,
-                              bool vs_final,
-                              double initial_current_step,
-                              double final_current_step,
-                              double duration_step,
-                              int step_number,
-                              double record_every_dT,
-                              double record_every_dE,
-                              double initial_freq,
-                              double final_freq,
-                              bool sweep_linear,
-                              double amplitude_current,
-                              int frequency_number,
-                              int average_n_times,
-                              bool correction,
-                              double wait_for_steady,
-                              int i_range,
-							  bool processData,
-                              BioCommandCallback callback,
-                              void *userData);
 
 /******************************************************************************
  * Connection and Configuration Functions
  * 
  * These functions will use the queue if initialized, otherwise return
- * ERR_QUEUE_NOT_INIT
+ * ERR_QUEUE_NOT_INIT. Priority parameter is required.
  ******************************************************************************/
 
 // Connection wrappers
-int BIO_ConnectQueued(const char* address, uint8_t timeout, int* pID, TDeviceInfos_t* pInfos);
-int BIO_DisconnectQueued(int ID);
-int BIO_TestConnectionQueued(int ID);
+int BIO_ConnectQueued(const char* address, uint8_t timeout, int* pID, TDeviceInfos_t* pInfos, DevicePriority priority);
+int BIO_DisconnectQueued(int ID, DevicePriority priority);
+int BIO_TestConnectionQueued(int ID, DevicePriority priority);
 
 // Configuration wrappers
-int BIO_GetHardConfQueued(int ID, uint8_t ch, THardwareConf_t* pHardConf);
-int BIO_SetHardConfQueued(int ID, uint8_t ch, THardwareConf_t HardConf);
+int BIO_GetHardConfQueued(int ID, uint8_t ch, THardwareConf_t* pHardConf, DevicePriority priority);
+int BIO_SetHardConfQueued(int ID, uint8_t ch, THardwareConf_t HardConf, DevicePriority priority);
 
 /******************************************************************************
  * General queued functions
+ * Priority parameter is required.
  ******************************************************************************/
 
 // Channel control
-int BIO_StopChannelQueued(int ID, uint8_t channel);
-int BIO_StartChannelQueued(int ID, uint8_t channel);
+int BIO_StopChannelQueued(int ID, uint8_t channel, DevicePriority priority);
+int BIO_StartChannelQueued(int ID, uint8_t channel, DevicePriority priority);
 
 // Channel status
-int BIO_GetCurrentValuesQueued(int ID, uint8_t channel, TCurrentValues_t* pValues);
-int BIO_GetChannelInfosQueued(int ID, uint8_t channel, TChannelInfos_t* pInfos);
-bool BIO_IsChannelPluggedQueued(int ID, uint8_t channel);
-int BIO_GetChannelsPluggedQueued(int ID, uint8_t* pChPlugged, uint8_t Size);
+int BIO_GetCurrentValuesQueued(int ID, uint8_t channel, TCurrentValues_t* pValues, DevicePriority priority);
+int BIO_GetChannelInfosQueued(int ID, uint8_t channel, TChannelInfos_t* pInfos, DevicePriority priority);
+bool BIO_IsChannelPluggedQueued(int ID, uint8_t channel, DevicePriority priority);
+int BIO_GetChannelsPluggedQueued(int ID, uint8_t* pChPlugged, uint8_t Size, DevicePriority priority);
 
 // Data retrieval
-int BIO_GetDataQueued(int ID, uint8_t channel, TDataBuffer_t* pBuf, TDataInfos_t* pInfos, TCurrentValues_t* pValues);
+int BIO_GetDataQueued(int ID, uint8_t channel, TDataBuffer_t* pBuf, TDataInfos_t* pInfos, TCurrentValues_t* pValues, DevicePriority priority);
 
 // Experiment info
-int BIO_GetExperimentInfosQueued(int ID, uint8_t channel, TExperimentInfos_t* pExpInfos);
-int BIO_SetExperimentInfosQueued(int ID, uint8_t channel, TExperimentInfos_t ExpInfos);
+int BIO_GetExperimentInfosQueued(int ID, uint8_t channel, TExperimentInfos_t* pExpInfos, DevicePriority priority);
+int BIO_SetExperimentInfosQueued(int ID, uint8_t channel, TExperimentInfos_t ExpInfos, DevicePriority priority);
 
 // System functions
 int BIO_LoadFirmwareQueued(int ID, uint8_t* pChannels, int* pResults, uint8_t Length, 
-                          bool ShowGauge, bool ForceReload, const char* BinFile, const char* XlxFile);
-int BIO_GetLibVersionQueued(char* pVersion, unsigned int* psize);
-int BIO_GetMessageQueued(int ID, uint8_t channel, char* msg, unsigned int* size);
+                          bool ShowGauge, bool ForceReload, const char* BinFile, const char* XlxFile, DevicePriority priority);
+int BIO_GetLibVersionQueued(char* pVersion, unsigned int* psize, DevicePriority priority);
+int BIO_GetMessageQueued(int ID, uint8_t channel, char* msg, unsigned int* size, DevicePriority priority);
 
 /******************************************************************************
  * Utility Functions

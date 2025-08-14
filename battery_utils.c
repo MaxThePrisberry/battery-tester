@@ -89,7 +89,7 @@ int Battery_GoToVoltage(VoltageTargetParams *params) {
     
     // Get current battery voltage to determine direction
     PSB_Status initialStatus;
-    result = PSB_GetStatusQueued(&initialStatus);
+    result = PSB_GetStatusQueued(&initialStatus, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         LogError("Failed to read initial status: %s", PSB_GetErrorString(result));
         return result;
@@ -121,7 +121,7 @@ int Battery_GoToVoltage(VoltageTargetParams *params) {
     }
     
     // Set voltage
-    result = PSB_SetVoltageQueued(params->targetVoltage_V);
+    result = PSB_SetVoltageQueued(params->targetVoltage_V, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         LogError("Failed to set voltage: %s", PSB_GetErrorString(result));
         return result;
@@ -129,9 +129,9 @@ int Battery_GoToVoltage(VoltageTargetParams *params) {
     
     // Set current based on direction
     if (params->wasCharging) {
-        result = PSB_SetCurrentQueued(params->maxCurrent_A);
+        result = PSB_SetCurrentQueued(params->maxCurrent_A, DEVICE_PRIORITY_NORMAL);
     } else {
-        result = PSB_SetSinkCurrentQueued(params->maxCurrent_A);
+        result = PSB_SetSinkCurrentQueued(params->maxCurrent_A, DEVICE_PRIORITY_NORMAL);
     }
     if (result != PSB_SUCCESS) {
         LogError("Failed to set current: %s", PSB_GetErrorString(result));
@@ -139,7 +139,7 @@ int Battery_GoToVoltage(VoltageTargetParams *params) {
     }
     
     // Enable output
-    PSB_SetOutputEnableQueued(1);
+    PSB_SetOutputEnableQueued(1, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         LogError("Failed to enable output: %s", PSB_GetErrorString(result));
         return result;
@@ -183,7 +183,7 @@ int Battery_GoToVoltage(VoltageTargetParams *params) {
             
             // Get current status
             PSB_Status status;
-            result = PSB_GetStatusQueued(&status);
+            result = PSB_GetStatusQueued(&status, DEVICE_PRIORITY_NORMAL);
             if (result != PSB_SUCCESS) {
                 LogError("Failed to read status: %s", PSB_GetErrorString(result));
                 params->result = BATTERY_OP_ERROR;
@@ -272,7 +272,7 @@ int Battery_GoToVoltage(VoltageTargetParams *params) {
     params->elapsedTime_s = Timer() - startTime;
     
     // Disable output
-    PSB_SetOutputEnableQueued(0);
+    PSB_SetOutputEnableQueued(0, DEVICE_PRIORITY_NORMAL);
     
     // Final status update
     char finalMsg[256];
@@ -331,21 +331,21 @@ int Battery_DischargeCapacity(DischargeParams *params) {
     }
     
     // Set discharge voltage
-    result = PSB_SetVoltageQueued(params->dischargeVoltage_V);
+    result = PSB_SetVoltageQueued(params->dischargeVoltage_V, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         LogError("Failed to set discharge voltage: %s", PSB_GetErrorString(result));
         return result;
     }
     
     // Set sink current
-    result = PSB_SetSinkCurrentQueued(params->dischargeCurrent_A);
+    result = PSB_SetSinkCurrentQueued(params->dischargeCurrent_A, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         LogError("Failed to set sink current: %s", PSB_GetErrorString(result));
         return result;
     }
     
     // Enable output
-    PSB_SetOutputEnableQueued(1);
+    PSB_SetOutputEnableQueued(1, DEVICE_PRIORITY_NORMAL);
 	
     if (result != PSB_SUCCESS) {
         LogError("Failed to enable output: %s", PSB_GetErrorString(result));
@@ -388,7 +388,7 @@ int Battery_DischargeCapacity(DischargeParams *params) {
             
             // Get current status
             PSB_Status status;
-            result = PSB_GetStatusQueued(&status);
+            result = PSB_GetStatusQueued(&status, DEVICE_PRIORITY_NORMAL);
             if (result != PSB_SUCCESS) {
                 LogError("Failed to read status during discharge: %s", PSB_GetErrorString(result));
                 params->result = BATTERY_OP_ERROR;
@@ -468,7 +468,7 @@ int Battery_DischargeCapacity(DischargeParams *params) {
     params->elapsedTime_s = Timer() - startTime;
     
     // Disable output
-    PSB_SetOutputEnableQueued(0);
+    PSB_SetOutputEnableQueued(0, DEVICE_PRIORITY_NORMAL);
     
     // Final status update
     char finalMsg[256];

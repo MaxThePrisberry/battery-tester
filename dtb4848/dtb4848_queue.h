@@ -38,15 +38,9 @@
 typedef DeviceQueueManager DTBQueueManager;
 typedef DeviceTransactionHandle TransactionHandle;
 typedef DeviceCommandID CommandID;
-typedef DevicePriority DTBPriority;
 typedef DeviceCommandCallback DTBCommandCallback;
 typedef DeviceTransactionCallback DTBTransactionCallback;
 typedef DeviceQueueStats DTBQueueStats;
-
-// Map priority levels
-#define DTB_PRIORITY_HIGH    DEVICE_PRIORITY_HIGH
-#define DTB_PRIORITY_NORMAL  DEVICE_PRIORITY_NORMAL
-#define DTB_PRIORITY_LOW     DEVICE_PRIORITY_LOW
 
 // Map transaction constants
 #define DTB_MAX_TRANSACTION_COMMANDS  DEVICE_MAX_TRANSACTION_COMMANDS
@@ -215,47 +209,47 @@ int DTB_QueueCancelTransaction(DTBQueueManager *mgr, TransactionHandle txn);
  ******************************************************************************/
 
 // Control functions
-int DTB_SetRunStopQueued(int slaveAddress, int run);
-int DTB_SetSetPointQueued(int slaveAddress, double temperature);
-int DTB_StartAutoTuningQueued(int slaveAddress);
-int DTB_StopAutoTuningQueued(int slaveAddress);
+int DTB_SetRunStopQueued(int slaveAddress, int run, DevicePriority priority);
+int DTB_SetSetPointQueued(int slaveAddress, double temperature, DevicePriority priority);
+int DTB_StartAutoTuningQueued(int slaveAddress, DevicePriority priority);
+int DTB_StopAutoTuningQueued(int slaveAddress, DevicePriority priority);
 
 // Configuration functions
-int DTB_SetControlMethodQueued(int slaveAddress, int method);
-int DTB_SetPIDModeQueued(int slaveAddress, int mode);
-int DTB_SetSensorTypeQueued(int slaveAddress, int sensorType);
-int DTB_SetTemperatureLimitsQueued(int slaveAddress, double upperLimit, double lowerLimit);
-int DTB_SetAlarmLimitsQueued(int slaveAddress, double upperLimit, double lowerLimit);
-int DTB_SetHeatingCoolingQueued(int slaveAddress, int mode);
-int DTB_ConfigureQueued(int slaveAddress, const DTB_Configuration *config);
-int DTB_ConfigureDefaultQueued(int slaveAddress);
-int DTB_FactoryResetQueued(int slaveAddress);
+int DTB_SetControlMethodQueued(int slaveAddress, int method, DevicePriority priority);
+int DTB_SetPIDModeQueued(int slaveAddress, int mode, DevicePriority priority);
+int DTB_SetSensorTypeQueued(int slaveAddress, int sensorType, DevicePriority priority);
+int DTB_SetTemperatureLimitsQueued(int slaveAddress, double upperLimit, double lowerLimit, DevicePriority priority);
+int DTB_SetAlarmLimitsQueued(int slaveAddress, double upperLimit, double lowerLimit, DevicePriority priority);
+int DTB_SetHeatingCoolingQueued(int slaveAddress, int mode, DevicePriority priority);
+int DTB_ConfigureQueued(int slaveAddress, const DTB_Configuration *config, DevicePriority priority);
+int DTB_ConfigureDefaultQueued(int slaveAddress, DevicePriority priority);
+int DTB_FactoryResetQueued(int slaveAddress, DevicePriority priority);
 
 // Read functions
-int DTB_GetStatusQueued(int slaveAddress, DTB_Status *status);
-int DTB_GetProcessValueQueued(int slaveAddress, double *temperature);
-int DTB_GetSetPointQueued(int slaveAddress, double *setPoint);
-int DTB_GetPIDParamsQueued(int slaveAddress, int pidNumber, DTB_PIDParams *params);
-int DTB_GetAlarmStatusQueued(int slaveAddress, int *alarmActive);
+int DTB_GetStatusQueued(int slaveAddress, DTB_Status *status, DevicePriority priority);
+int DTB_GetProcessValueQueued(int slaveAddress, double *temperature, DevicePriority priority);
+int DTB_GetSetPointQueued(int slaveAddress, double *setPoint, DevicePriority priority);
+int DTB_GetPIDParamsQueued(int slaveAddress, int pidNumber, DTB_PIDParams *params, DevicePriority priority);
+int DTB_GetAlarmStatusQueued(int slaveAddress, int *alarmActive, DevicePriority priority);
 
 // Alarm functions
-int DTB_ClearAlarmQueued(int slaveAddress);
+int DTB_ClearAlarmQueued(int slaveAddress, DevicePriority priority);
 
 // Front panel lock functions
-int DTB_SetFrontPanelLockQueued(int slaveAddress, int lockMode);
-int DTB_GetFrontPanelLockQueued(int slaveAddress, int *lockMode);
-int DTB_UnlockFrontPanelQueued(int slaveAddress);
-int DTB_LockFrontPanelQueued(int slaveAddress, int allowSetpointChange);
+int DTB_SetFrontPanelLockQueued(int slaveAddress, int lockMode, DevicePriority priority);
+int DTB_GetFrontPanelLockQueued(int slaveAddress, int *lockMode, DevicePriority priority);
+int DTB_UnlockFrontPanelQueued(int slaveAddress, DevicePriority priority);
+int DTB_LockFrontPanelQueued(int slaveAddress, int allowSetpointChange, DevicePriority priority);
 
 // Write protection functions
-int DTB_EnableWriteAccessQueued(int slaveAddress);
-int DTB_DisableWriteAccessQueued(int slaveAddress);
-int DTB_GetWriteAccessStatusQueued(int slaveAddress, int *isEnabled);
+int DTB_EnableWriteAccessQueued(int slaveAddress, DevicePriority priority);
+int DTB_DisableWriteAccessQueued(int slaveAddress, DevicePriority priority);
+int DTB_GetWriteAccessStatusQueued(int slaveAddress, int *isEnabled, DevicePriority priority);
 
 // Raw command support
 int DTB_SendRawModbusQueued(int slaveAddress, unsigned char functionCode,
                            unsigned short address, unsigned short data,
-                           unsigned char *rxBuffer, int rxBufferSize);
+                           unsigned char *rxBuffer, int rxBufferSize, DevicePriority priority);
 
 /******************************************************************************
  * "All Devices" Convenience Functions
@@ -264,21 +258,24 @@ int DTB_SendRawModbusQueued(int slaveAddress, unsigned char functionCode,
 /**
  * Set run/stop state for all initialized DTB devices
  * @param run - 1 to run, 0 to stop
+ * @param priority - Command priority for all device commands
  * @return DTB_SUCCESS if all devices succeeded, error code of first failure otherwise
  */
-int DTB_SetRunStopAllQueued(int run);
+int DTB_SetRunStopAllQueued(int run, DevicePriority priority);
 
 /**
  * Configure all initialized DTB devices with the same default configuration
+ * @param priority - Command priority for all device commands
  * @return DTB_SUCCESS if all devices succeeded, error code of first failure otherwise
  */
-int DTB_ConfigureAllDefaultQueued();
+int DTB_ConfigureAllDefaultQueued(DevicePriority priority);
 
 /**
  * Enable write access for all initialized DTB devices
+ * @param priority - Command priority for all device commands
  * @return DTB_SUCCESS if all devices succeeded, error code of first failure otherwise
  */
-int DTB_EnableWriteAccessAllQueued(void);
+int DTB_EnableWriteAccessAllQueued(DevicePriority priority);
 
 /******************************************************************************
  * Async Command Functions
@@ -292,9 +289,10 @@ int DTB_EnableWriteAccessAllQueued(void);
  * @param slaveAddress - Modbus slave address of target device
  * @param callback - Callback function to be called when command completes
  * @param userData - User data passed to callback
+ * @param priority - Command priority
  * @return Command ID on success or ERR_QUEUE_NOT_INIT if queue not initialized
  */
-CommandID DTB_GetStatusAsync(int slaveAddress, DTBCommandCallback callback, void *userData);
+CommandID DTB_GetStatusAsync(int slaveAddress, DTBCommandCallback callback, void *userData, DevicePriority priority);
 
 /**
  * Set DTB run/stop state asynchronously
@@ -302,9 +300,10 @@ CommandID DTB_GetStatusAsync(int slaveAddress, DTBCommandCallback callback, void
  * @param run - 1 to run, 0 to stop
  * @param callback - Callback function to be called when command completes
  * @param userData - User data passed to callback
+ * @param priority - Command priority
  * @return Command ID on success or ERR_QUEUE_NOT_INIT if queue not initialized
  */
-CommandID DTB_SetRunStopAsync(int slaveAddress, int run, DTBCommandCallback callback, void *userData);
+CommandID DTB_SetRunStopAsync(int slaveAddress, int run, DTBCommandCallback callback, void *userData, DevicePriority priority);
 
 /**
  * Set DTB temperature setpoint asynchronously
@@ -312,9 +311,10 @@ CommandID DTB_SetRunStopAsync(int slaveAddress, int run, DTBCommandCallback call
  * @param temperature - Target temperature in degrees Celsius
  * @param callback - Callback function to be called when command completes
  * @param userData - User data passed to callback
+ * @param priority - Command priority
  * @return Command ID on success or ERR_QUEUE_NOT_INIT if queue not initialized
  */
-CommandID DTB_SetSetPointAsync(int slaveAddress, double temperature, DTBCommandCallback callback, void *userData);
+CommandID DTB_SetSetPointAsync(int slaveAddress, double temperature, DTBCommandCallback callback, void *userData, DevicePriority priority);
 
 /******************************************************************************
  * Utility Functions
@@ -338,10 +338,11 @@ DTBQueueManager* DTB_GetGlobalQueueManager(void);
  * @param config - Complete configuration structure
  * @param callback - Optional callback for transaction completion
  * @param userData - User data for callback
+ * @param priority - Priority for all commands in the transaction
  * @return SUCCESS or error code
  */
 int DTB_ConfigureAtomic(int slaveAddress, const DTB_Configuration *config,
-                       DTBTransactionCallback callback, void *userData);
+                       DTBTransactionCallback callback, void *userData, DevicePriority priority);
 
 /**
  * Safely change control method with PID parameters
@@ -351,9 +352,10 @@ int DTB_ConfigureAtomic(int slaveAddress, const DTB_Configuration *config,
  * @param method - Control method (PID, ON/OFF, etc.)
  * @param pidMode - PID mode (if method is PID)
  * @param pidParams - PID parameters (if method is PID, can be NULL)
+ * @param priority - Priority for all commands in the transaction
  * @return SUCCESS or error code
  */
 int DTB_SetControlMethodWithParams(int slaveAddress, int method, int pidMode,
-                                  const DTB_PIDParams *pidParams);
+                                  const DTB_PIDParams *pidParams, DevicePriority priority);
 
 #endif // DTB4848_QUEUE_H
