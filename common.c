@@ -68,8 +68,8 @@ const char* GetErrorString(int errorCode) {
         case ERR_THREAD_SYNC: return "Thread synchronization error";
     }
     
-    // Check if it's a BioLogic error (-1 to -405 range)
-    if (errorCode >= -405 && errorCode <= -1) {
+    // Check if it's a BioLogic error (-2000 range)
+    if (errorCode <= ERR_BASE_BIOLOGIC && errorCode > (ERR_BASE_BIOLOGIC - 1000)) {
         return BIO_GetErrorString(errorCode);
     }
     
@@ -185,7 +185,7 @@ void FormatTimeString(double seconds, char *buffer, int bufferSize) {
     int minutes = (int)((seconds - hours * 3600) / 60);
     int secs = (int)(seconds - hours * 3600 - minutes * 60);
     
-    SAFE_SPRINTF(buffer, bufferSize, "%02d:%02d:%02d", hours, minutes, secs);
+    snprintf(buffer, bufferSize, "%02d:%02d:%02d", hours, minutes, secs);
 }
 
 void FormatTimestamp(time_t timestamp, char *buffer, int bufferSize) {
@@ -266,7 +266,7 @@ int GetExecutableDirectory(char *path, int pathSize) {
                 return ERR_OPERATION_FAILED;
             }
         }
-        SAFE_STRCPY(path, fullPath, pathSize);
+        strncpy(path, fullPath, pathSize);
     #elif defined(_WIN32)
         char fullPath[MAX_PATH_LENGTH];
         if (GetModuleFileName(NULL, fullPath, MAX_PATH_LENGTH) == 0) {
@@ -375,11 +375,11 @@ int CreateTimestampedDirectory(const char *baseDir, const char *prefix,
     
     // Build full path
     if (prefix && strlen(prefix) > 0) {
-        SAFE_SPRINTF(resultPath, resultPathSize, "%s%s%s_%s", 
-                    baseDir, PATH_SEPARATOR, prefix, timestamp);
+        snprintf(resultPath, resultPathSize, "%s%s%s_%s", 
+                 baseDir, PATH_SEPARATOR, prefix, timestamp);
     } else {
-        SAFE_SPRINTF(resultPath, resultPathSize, "%s%s%s", 
-                    baseDir, PATH_SEPARATOR, timestamp);
+        snprintf(resultPath, resultPathSize, "%s%s%s", 
+                 baseDir, PATH_SEPARATOR, timestamp);
     }
     
     // Create the directory
@@ -453,7 +453,7 @@ int WriteINIDouble(FILE *file, const char *key, double value, int precision) {
     if (!file || !key) return ERR_NULL_POINTER;
     
     char format[32];
-    SAFE_SPRINTF(format, sizeof(format), "%%.%df", precision);
+    snprintf(format, sizeof(format), "%%.%df", precision);
     
     return WriteINIValue(file, key, format, value);
 }

@@ -206,20 +206,20 @@ int CVICALLBACK TestBiologicWorkerThread(void *functionData) {
     // Create one-line summary for status control
     char statusMsg[MEDIUM_BUFFER_SIZE];
     if (context->state == TEST_STATE_ABORTED) {
-        SAFE_SPRINTF(statusMsg, sizeof(statusMsg), 
-                    "Test cancelled: %d/%d passed", 
-                    context->summary.passedTests, 
-                    context->summary.totalTests);
+        snprintf(statusMsg, sizeof(statusMsg), 
+                 "Test cancelled: %d/%d passed", 
+                 context->summary.passedTests, 
+                 context->summary.totalTests);
     } else if (context->state == TEST_STATE_COMPLETED) {
-        SAFE_SPRINTF(statusMsg, sizeof(statusMsg), 
-                    "All tests passed (%d/%d)", 
-                    context->summary.passedTests,
-                    context->summary.totalTests);
+        snprintf(statusMsg, sizeof(statusMsg), 
+                 "All tests passed (%d/%d)", 
+                 context->summary.passedTests,
+                 context->summary.totalTests);
     } else {
-        SAFE_SPRINTF(statusMsg, sizeof(statusMsg), 
-                    "Tests failed: %d/%d passed", 
-                    context->summary.passedTests,
-                    context->summary.totalTests);
+        snprintf(statusMsg, sizeof(statusMsg), 
+                 "Tests failed: %d/%d passed", 
+                 context->summary.passedTests,
+				 context->summary.totalTests);
     }
     
     // Update status control with summary

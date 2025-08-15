@@ -214,31 +214,7 @@ int main (int argc, char *argv[]) {
     
     // Run the UI
     RunUserInterface();
-    
-    // Cleanup
-    if (g_psbQueueMgr) {
-        PSB_QueueShutdown(g_psbQueueMgr);
-        PSB_SetGlobalQueueManager(NULL);
-    }
-    
-    if (g_bioQueueMgr) {
-        BIO_QueueShutdown(g_bioQueueMgr);
-        BIO_SetGlobalQueueManager(NULL);
-    }
-    
-    Status_Cleanup();
-    
-    // Dispose lock
-    if (g_busyLock) {
-        CmtDiscardLock(g_busyLock);
-    }
-    
-    // Discard panel and thread pool
-    DiscardPanel (g_mainPanelHandle);
-    if (g_threadPool) {
-        CmtDiscardThreadPool(g_threadPool);
-    }
-    
+	
     return 0;
 }
 
@@ -282,9 +258,9 @@ int CVICALLBACK PanelCallback(int panel, int event, void *callbackData,
             LogMessage("========================================");
             
 			// Check if CDC test is running and abort it
-			if (CDCTest_IsRunning()) {
+			if (CDCExperiment_IsRunning()) {
 			    LogMessage("Aborting running CDC test...");
-			    CDCTest_Abort();
+			    CDCExperiment_Abort();
 			    
 			    // Give it a moment to clean up properly
 			    ProcessSystemEvents();
@@ -292,9 +268,9 @@ int CVICALLBACK PanelCallback(int panel, int event, void *callbackData,
 			}
 			
             // Check if capacity test is running and abort it
-			if (CapacityTest_IsRunning()) {
+			if (CapacityExperiment_IsRunning()) {
 			    LogMessage("Aborting running capacity test...");
-			    CapacityTest_Abort();
+			    CapacityExperiment_Abort();
 			    
 			    // Give it a moment to clean up properly
 			    ProcessSystemEvents();
@@ -302,9 +278,9 @@ int CVICALLBACK PanelCallback(int panel, int event, void *callbackData,
 			}
 
 			// Check if SOCEIS test is running and abort it
-			if (SOCEISTest_IsRunning()) {
+			if (SOCEISExperiment_IsRunning()) {
 			    LogMessage("Aborting running SOCEIS test...");
-			    SOCEISTest_Abort();
+			    SOCEISExperiment_Abort();
 			    
 			    // Give it a moment to clean up properly
 			    ProcessSystemEvents();
@@ -363,21 +339,21 @@ int CVICALLBACK PanelCallback(int panel, int event, void *callbackData,
 			
 			// Clean up CDC test module
 			LogMessage("Cleaning up CDC test module...");
-			CDCTest_Cleanup();
+			CDCExperiment_Cleanup();
             
             // Clean up capacity test module
             LogMessage("Cleaning up capacity test module...");
-            CapacityTest_Cleanup();
+            CapacityExperiment_Cleanup();
 			
 			// Clean up SOCEIS test module
 			LogMessage("Cleaning up SOCEIS test module...");
-			SOCEISTest_Cleanup();
+			SOCEISExperiment_Cleanup();
             
-			LogMessage("Stopping controls module...");
+			LogMessage("Cleaning up controls module...");
 			Controls_Cleanup();
 
-			LogMessage("Stopping status monitoring...");
-			Status_Stop();
+			LogMessage("Cleaning up status monitoring...");
+			Status_Cleanup();
             
             // Clean up thread pool
             if (g_threadPool) {
@@ -399,15 +375,15 @@ int CVICALLBACK PanelCallback(int panel, int event, void *callbackData,
                 g_busyLock = 0;
             }
             
-            // Save any configuration or state if needed
-            // SaveConfiguration();  // Implement if needed
-            
             // Final cleanup
             LogMessage("Cleanup complete. Exiting application.");
             LogMessage("========================================");
             
-            // Close logging system
-            // CloseLogging();  // If you have a logging cleanup function
+            // Discard the panel
+			if (g_mainPanelHandle > 0) {
+			    DiscardPanel(g_mainPanelHandle);
+			    g_mainPanelHandle = 0;
+			}
             
             // Quit the user interface
             QuitUserInterface(0);

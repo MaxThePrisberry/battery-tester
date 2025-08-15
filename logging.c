@@ -144,7 +144,7 @@ static int InitializeLogging(void) {
         strcat(logPath, LOG_FILE_NAME);
         
         // Store the attempted log path
-        SAFE_STRCPY(g_actualLogPath, logPath, sizeof(g_actualLogPath));
+        strncpy(g_actualLogPath, logPath, sizeof(g_actualLogPath));
         
         // Debug: Print log file path
         #ifdef _DEBUG
@@ -183,12 +183,12 @@ static int InitializeLogging(void) {
                     strcat(tempPath, LOG_FILE_NAME);
                     g_logFile = fopen(tempPath, "a");
                     if (g_logFile) {
-                        SAFE_STRCPY(g_actualLogPath, tempPath, sizeof(g_actualLogPath));
+                        strncpy(g_actualLogPath, tempPath, sizeof(g_actualLogPath));
                     }
                 #endif
             } else {
                 // Update actual path to current directory
-                SAFE_STRCPY(g_actualLogPath, LOG_FILE_NAME, sizeof(g_actualLogPath));
+                strncpy(g_actualLogPath, LOG_FILE_NAME, sizeof(g_actualLogPath));
             }
         }
         
@@ -206,7 +206,7 @@ static int InitializeLogging(void) {
                 WriteToUI("[INFO] Log file created successfully");
                 
                 char logMsg[MEDIUM_BUFFER_SIZE];
-                SAFE_SPRINTF(logMsg, sizeof(logMsg), "[INFO] Log file location: %s", g_actualLogPath);
+                snprintf(logMsg, sizeof(logMsg), "[INFO] Log file location: %s", g_actualLogPath);
                 WriteToUI(logMsg);
             }
             
@@ -222,7 +222,7 @@ static int InitializeLogging(void) {
                 WriteToUI("[WARNING] Could not create log file");
                 
                 char errorMsg[LARGE_BUFFER_SIZE];
-                SAFE_SPRINTF(errorMsg, sizeof(errorMsg), 
+                snprintf(errorMsg, sizeof(errorMsg), 
                     "[WARNING] Failed to create log file at: %s", logPath);
                 WriteToUI(errorMsg);
                 
@@ -245,7 +245,7 @@ void LogStartupMessage(const char *message) {
     if (g_mainPanelHandle > 0) {
         // Try to write directly to UI if panel exists
         char fullMsg[LARGE_BUFFER_SIZE];
-        SAFE_SPRINTF(fullMsg, sizeof(fullMsg), "[STARTUP] %s", message);
+        snprintf(fullMsg, sizeof(fullMsg), "[STARTUP] %s", message);
         
         // Direct UI update if in main thread
         if (GetCurrentThreadId() == MainThreadId()) {
@@ -332,11 +332,11 @@ static void LogMessageInternalEx(LogDevice device, LogLevel level, const char *f
             
             // Format message with level and device prefixes (level first)
             if (device != LOG_DEVICE_NONE && strlen(deviceStr) > 0) {
-                SAFE_SPRINTF(uiMessage, sizeof(uiMessage), "[%s] [%s] %s", 
-                           levelStr, deviceStr, rawBuffer);
+                snprintf(uiMessage, sizeof(uiMessage), "[%s] [%s] %s", 
+                         levelStr, deviceStr, rawBuffer);
             } else {
-                SAFE_SPRINTF(uiMessage, sizeof(uiMessage), "[%s] %s", 
-                           levelStr, rawBuffer);
+                snprintf(uiMessage, sizeof(uiMessage), "[%s] %s", 
+                         levelStr, rawBuffer);
             }
             
             WriteToUI(uiMessage);

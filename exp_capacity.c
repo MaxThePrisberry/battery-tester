@@ -1,7 +1,7 @@
 /******************************************************************************
  * exp_capacity.c
  * 
- * Battery Capacity Testing Experiment Module Implementation
+ * Battery Capacity Experiment Module Implementation
  ******************************************************************************/
 
 #include "common.h"
@@ -19,31 +19,33 @@
  * Module Variables
  ******************************************************************************/
 
-// Test context and thread management
-static CapacityTestContext g_testContext = {0};
-static CmtThreadFunctionID g_testThreadId = 0;
+// Experiment context and thread management
+static CapacityExperimentContext g_experimentContext = {0};
+static CmtThreadFunctionID g_experimentThreadId = 0;
 
+// Controls to be dimmed during experiment
 static const int numControls = 3;
-static const int controls[numControls] = {CAPACITY_NUM_CURRENT_THRESHOLD, 
-					                      CAPACITY_NUM_INTERVAL,
-                                          CAPACITY_CHECKBOX_RETURN_50};
+static const int controls[3] = {
+    CAPACITY_NUM_CURRENT_THRESHOLD, 
+    CAPACITY_NUM_INTERVAL,
+    CAPACITY_CHECKBOX_RETURN_50
+};
 
 /******************************************************************************
  * Internal Function Prototypes
  ******************************************************************************/
 
 static int CapacityExperimentThread(void *functionData);
-static int VerifyBatteryCharged(CapacityTestContext *ctx);
-static int ConfigureGraphs(CapacityTestContext *ctx);
-static int RunTestPhase(CapacityTestContext *ctx, CapacityTestPhase phase);
-static int LogDataPoint(CapacityTestContext *ctx, CapacityDataPoint *point);
-static void UpdateGraphs(CapacityTestContext *ctx, CapacityDataPoint *point);
-static void ClearGraphs(CapacityTestContext *ctx);
-static void RestoreUI(CapacityTestContext *ctx);
-static int CreateTestDirectory(CapacityTestContext *ctx);
-static int WriteResultsFile(CapacityTestContext *ctx);
-static void UpdatePhaseResults(CapacityTestContext *ctx, PhaseResults *results, 
-                               CapacityDataPoint *point, double capacityIncrement, double energyIncrement);
+static int VerifyBatteryCharged(CapacityExperimentContext *ctx);
+static int ConfigureGraphs(CapacityExperimentContext *ctx);
+static int RunExperimentPhase(CapacityExperimentContext *ctx, CapacityExperimentPhase phase);
+static int LogDataPoint(CapacityExperimentContext *ctx, CapacityDataPoint *point);
+static void UpdateGraphs(CapacityExperimentContext *ctx, CapacityDataPoint *point);
+static void RestoreUI(CapacityExperimentContext *ctx);
+static int CreateExperimentDirectory(CapacityExperimentContext *ctx);
+static int WriteResultsFile(CapacityExperimentContext *ctx);
+static void UpdatePhaseResults(CapacityExperimentContext *ctx, PhaseResults *results, 
+                               CapacityDataPoint *point);
 
 /******************************************************************************
  * Public Functions Implementation
@@ -56,11 +58,11 @@ int CVICALLBACK StartCapacityExperimentCallback(int panel, int control, int even
         return 0;
     }
     
-    // Check if capacity test is already running
-    if (CapacityTest_IsRunning()) {
+    // Check if capacity experiment is already running
+    if (CapacityExperiment_IsRunning()) {
         // This is a Stop request
-        LogMessage("User requested to stop capacity test");
-        g_testContext.state = CAPACITY_STATE_CANCELLED;
+        LogMessage("User requested to stop capacity experiment");
+        g_experimentContext.state = CAPACITY_STATE_CANCELLED;
         return 0;
     }
     
@@ -70,7 +72,7 @@ int CVICALLBACK StartCapacityExperimentCallback(int panel, int control, int even
         CmtReleaseLock(g_busyLock);
         MessagePopup("System Busy", 
                      "Another operation is in progress.\n"
-                     "Please wait for it to complete before starting the capacity test.");
+                     "Please wait for it to complete before starting the capacity experiment.");
         return 0;
     }
     g_systemBusy = 1;
@@ -85,7 +87,7 @@ int CVICALLBACK StartCapacityExperimentCallback(int panel, int control, int even
         
         MessagePopup("PSB Not Connected", 
                      "The PSB power supply is not connected.\n"
-                     "Please ensure it is connected before running the capacity test.");
+                     "Please ensure it is connected before running the capacity experiment.");
         return 0;
     }
     
@@ -97,7 +99,7 @@ int CVICALLBACK StartCapacityExperimentCallback(int panel, int control, int even
         
         MessagePopup("PSB Not Connected", 
                      "The PSB power supply is not connected.\n"
-                     "Please ensure it is connected before running the capacity test.");
+                     "Please ensure it is connected before running the capacity experiment.");
         return 0;
     }
     
@@ -110,7 +112,7 @@ int CVICALLBACK StartCapacityExperimentCallback(int panel, int control, int even
             CmtReleaseLock(g_busyLock);
             
             MessagePopup("PSB Output Enabled", 
-                         "The PSB output must be disabled before starting the test.\n"
+                         "The PSB output must be disabled before starting the experiment.\n"
                          "Please turn off the output and try again.");
             return 0;
         }
@@ -125,36 +127,33 @@ int CVICALLBACK StartCapacityExperimentCallback(int panel, int control, int even
         return 0;
     }
     
-    // Initialize test context
-    memset(&g_testContext, 0, sizeof(g_testContext));
-    g_testContext.state = CAPACITY_STATE_PREPARING;
-    g_testContext.mainPanelHandle = g_mainPanelHandle;
-    g_testContext.tabPanelHandle = panel;
-    g_testContext.buttonControl = control;
-    g_testContext.statusControl = PANEL_STR_PSB_STATUS;
-    g_testContext.graph1Handle = PANEL_GRAPH_1;
-    g_testContext.graph2Handle = PANEL_GRAPH_2;
+    // Initialize experiment context
+    memset(&g_experimentContext, 0, sizeof(g_experimentContext));
+    g_experimentContext.state = CAPACITY_STATE_PREPARING;
+    g_experimentContext.mainPanelHandle = g_mainPanelHandle;
+    g_experimentContext.tabPanelHandle = panel;
+    g_experimentContext.buttonControl = control;
+    g_experimentContext.statusControl = PANEL_STR_PSB_STATUS;
+    g_experimentContext.graph1Handle = PANEL_GRAPH_1;
+    g_experimentContext.graph2Handle = PANEL_GRAPH_2;
     
-    // Read test parameters from UI
-    GetCtrlVal(g_mainPanelHandle, PANEL_NUM_SET_CHARGE_V, &g_testContext.params.chargeVoltage);
-    GetCtrlVal(g_mainPanelHandle, PANEL_NUM_SET_DISCHARGE_V, &g_testContext.params.dischargeVoltage);
-    GetCtrlVal(g_mainPanelHandle, PANEL_NUM_SET_CHARGE_I, &g_testContext.params.chargeCurrent);
-    GetCtrlVal(g_mainPanelHandle, PANEL_NUM_SET_DISCHARGE_I, &g_testContext.params.dischargeCurrent);
-    GetCtrlVal(panel, CAPACITY_NUM_CURRENT_THRESHOLD, &g_testContext.params.currentThreshold);
-    GetCtrlVal(panel, CAPACITY_NUM_INTERVAL, &g_testContext.params.logInterval);
+    // Read experiment parameters from UI
+    GetCtrlVal(g_mainPanelHandle, PANEL_NUM_SET_CHARGE_V, &g_experimentContext.params.chargeVoltage);
+    GetCtrlVal(g_mainPanelHandle, PANEL_NUM_SET_DISCHARGE_V, &g_experimentContext.params.dischargeVoltage);
+    GetCtrlVal(g_mainPanelHandle, PANEL_NUM_SET_CHARGE_I, &g_experimentContext.params.chargeCurrent);
+    GetCtrlVal(g_mainPanelHandle, PANEL_NUM_SET_DISCHARGE_I, &g_experimentContext.params.dischargeCurrent);
+    GetCtrlVal(panel, CAPACITY_NUM_CURRENT_THRESHOLD, &g_experimentContext.params.currentThreshold);
+    GetCtrlVal(panel, CAPACITY_NUM_INTERVAL, &g_experimentContext.params.logInterval);
     
-    // Change button text to "Stop"
+    // Update UI
     SetCtrlAttribute(panel, control, ATTR_LABEL_TEXT, "Stop");
-    
-    // Dim appropriate controls
     DimCapacityExperimentControls(g_mainPanelHandle, panel, 1, controls, numControls);
     
-    // Start test thread
+    // Start experiment thread
     int error = CmtScheduleThreadPoolFunction(g_threadPool, CapacityExperimentThread, 
-                                            &g_testContext, &g_testThreadId);
+                                            &g_experimentContext, &g_experimentThreadId);
     if (error != 0) {
-        // Failed to start thread
-        g_testContext.state = CAPACITY_STATE_ERROR;
+        g_experimentContext.state = CAPACITY_STATE_ERROR;
         SetCtrlAttribute(panel, control, ATTR_LABEL_TEXT, "Start");
         DimCapacityExperimentControls(g_mainPanelHandle, panel, 0, controls, numControls);
         
@@ -162,44 +161,44 @@ int CVICALLBACK StartCapacityExperimentCallback(int panel, int control, int even
         g_systemBusy = 0;
         CmtReleaseLock(g_busyLock);
         
-        MessagePopup("Error", "Failed to start capacity test thread.");
+        MessagePopup("Error", "Failed to start capacity experiment thread.");
         return 0;
     }
     
     return 0;
 }
 
-int CapacityTest_IsRunning(void) {
-    return !(g_testContext.state == CAPACITY_STATE_IDLE ||
-             g_testContext.state == CAPACITY_STATE_COMPLETED ||
-             g_testContext.state == CAPACITY_STATE_ERROR ||
-             g_testContext.state == CAPACITY_STATE_CANCELLED);
+int CapacityExperiment_IsRunning(void) {
+    return !(g_experimentContext.state == CAPACITY_STATE_IDLE ||
+             g_experimentContext.state == CAPACITY_STATE_COMPLETED ||
+             g_experimentContext.state == CAPACITY_STATE_ERROR ||
+             g_experimentContext.state == CAPACITY_STATE_CANCELLED);
 }
 
 /******************************************************************************
- * Test Thread Implementation
+ * Experiment Thread Implementation
  ******************************************************************************/
 
 static int CapacityExperimentThread(void *functionData) {
-    CapacityTestContext *ctx = (CapacityTestContext*)functionData;
+    CapacityExperimentContext *ctx = (CapacityExperimentContext*)functionData;
     char message[LARGE_BUFFER_SIZE];
     int result = SUCCESS;
     double chargeCapacity_mAh = 0.0;
     
-    LogMessage("=== Starting Battery Capacity Test ===");
+    LogMessage("=== Starting Battery Capacity Experiment ===");
     
-    // Record test start time
-    ctx->testStartTime = Timer();
+    // Record experiment start time
+    ctx->experimentStartTime = GetTimestamp();
     
     // Check if cancelled before showing confirmation
     if (ctx->state == CAPACITY_STATE_CANCELLED) {
-        LogMessage("Capacity test cancelled before confirmation");
+        LogMessage("Capacity experiment cancelled before confirmation");
         goto cleanup;
     }
     
     // Show confirmation popup
-    SAFE_SPRINTF(message, sizeof(message),
-        "Battery Capacity Test Parameters:\n\n"
+    snprintf(message, sizeof(message),
+        "Battery Capacity Experiment Parameters:\n\n"
         "Charge Voltage: %.2f V\n"
         "Discharge Voltage: %.2f V\n"
         "Charge Current: %.2f A\n"
@@ -214,18 +213,18 @@ static int CapacityExperimentThread(void *functionData) {
         ctx->params.currentThreshold,
         ctx->params.logInterval);
     
-    int response = ConfirmPopup("Confirm Test Parameters", message);
+    int response = ConfirmPopup("Confirm Experiment Parameters", message);
     if (!response || ctx->state == CAPACITY_STATE_CANCELLED) {
-        LogMessage("Capacity test cancelled by user");
+        LogMessage("Capacity experiment cancelled by user");
         ctx->state = CAPACITY_STATE_CANCELLED;
         goto cleanup;
     }
     
-    // Create test directory
-    result = CreateTestDirectory(ctx);
+    // Create experiment directory
+    result = CreateExperimentDirectory(ctx);
     if (result != SUCCESS) {
-        LogError("Failed to create test directory");
-        MessagePopup("Error", "Failed to create test directory.\nPlease check permissions.");
+        LogError("Failed to create experiment directory");
+        MessagePopup("Error", "Failed to create experiment directory.\nPlease check permissions.");
         ctx->state = CAPACITY_STATE_ERROR;
         goto cleanup;
     }
@@ -233,7 +232,6 @@ static int CapacityExperimentThread(void *functionData) {
     // Initialize PSB to safe state
     LogMessage("Initializing PSB to zeroed state...");
     result = PSB_ZeroAllValuesQueued(DEVICE_PRIORITY_NORMAL);
-    
     if (result != PSB_SUCCESS) {
         LogError("Failed to initialize PSB to safe state: %s", PSB_GetErrorString(result));
         MessagePopup("Error", "Failed to initialize PSB to safe state.\nPlease check the connection and try again.");
@@ -243,7 +241,7 @@ static int CapacityExperimentThread(void *functionData) {
     
     // Check for cancellation
     if (ctx->state == CAPACITY_STATE_CANCELLED) {
-        LogMessage("Capacity test cancelled during initialization");
+        LogMessage("Capacity experiment cancelled during initialization");
         goto cleanup;
     }
     
@@ -263,7 +261,7 @@ static int CapacityExperimentThread(void *functionData) {
     LogMessage("Starting discharge phase...");
     SetCtrlVal(ctx->mainPanelHandle, ctx->statusControl, "Discharging battery...");
     
-    result = RunTestPhase(ctx, CAPACITY_PHASE_DISCHARGE);
+    result = RunExperimentPhase(ctx, CAPACITY_PHASE_DISCHARGE);
     if (result != SUCCESS || ctx->state == CAPACITY_STATE_CANCELLED) {
         if (ctx->state != CAPACITY_STATE_CANCELLED) {
             ctx->state = CAPACITY_STATE_ERROR;
@@ -272,12 +270,11 @@ static int CapacityExperimentThread(void *functionData) {
     }
     
     // Clear graphs between phases
-    ClearGraphs(ctx);
+    int graphs[] = {ctx->graph1Handle, ctx->graph2Handle};
+    ClearAllGraphs(ctx->mainPanelHandle, graphs, 2);
     
     // Short delay between phases
     LogMessage("Switching from discharge to charge phase...");
-    
-    // Check for cancellation during delay
     for (int i = 0; i < 20; i++) {
         if (ctx->state == CAPACITY_STATE_CANCELLED) {
             goto cleanup;
@@ -289,7 +286,7 @@ static int CapacityExperimentThread(void *functionData) {
     LogMessage("Starting charge phase...");
     SetCtrlVal(ctx->mainPanelHandle, ctx->statusControl, "Charging battery...");
     
-    result = RunTestPhase(ctx, CAPACITY_PHASE_CHARGE);
+    result = RunExperimentPhase(ctx, CAPACITY_PHASE_CHARGE);
     if (result != SUCCESS || ctx->state == CAPACITY_STATE_CANCELLED) {
         if (ctx->state != CAPACITY_STATE_CANCELLED) {
             ctx->state = CAPACITY_STATE_ERROR;
@@ -300,11 +297,11 @@ static int CapacityExperimentThread(void *functionData) {
     // Store charge capacity for potential 50% return
     chargeCapacity_mAh = ctx->chargeResults.capacity_mAh;
     
-    // Record test end time
-    ctx->testEndTime = Timer();
+    // Record experiment end time
+    ctx->experimentEndTime = GetTimestamp();
     
     ctx->state = CAPACITY_STATE_COMPLETED;
-    LogMessage("=== Battery Capacity Test Completed Successfully ===");
+    LogMessage("=== Battery Capacity Experiment Completed Successfully ===");
     
     // Write results file
     result = WriteResultsFile(ctx);
@@ -322,7 +319,6 @@ static int CapacityExperimentThread(void *functionData) {
             LogMessage("Charge capacity measured: %.2f mAh", chargeCapacity_mAh);
             LogMessage("Target discharge: %.2f mAh", chargeCapacity_mAh * 0.5);
             
-            // Update UI
             SetCtrlVal(ctx->mainPanelHandle, ctx->statusControl, "Returning battery to 50% capacity...");
             
             // Configure discharge parameters
@@ -350,32 +346,36 @@ static int CapacityExperimentThread(void *functionData) {
                 LogMessage("  Final voltage: %.3f V", discharge50.finalVoltage_V);
                 
                 SetCtrlVal(ctx->mainPanelHandle, ctx->statusControl, 
-                          "Capacity test completed - battery at 50% capacity");
+                          "Capacity experiment completed - battery at 50% capacity");
             } else {
                 LogWarning("Failed to return to 50%% capacity");
                 SetCtrlVal(ctx->mainPanelHandle, ctx->statusControl, 
-                          "Capacity test completed - failed to return to 50%");
+                          "Capacity experiment completed - failed to return to 50%");
             }
         }
     }
     
 cleanup:
-	// Turn off PSB output
+    // Turn off PSB output
     PSB_SetOutputEnableQueued(0, DEVICE_PRIORITY_NORMAL);
     
     // Update status based on final state
-    if (ctx->state == CAPACITY_STATE_COMPLETED) {
-        SetCtrlVal(ctx->mainPanelHandle, ctx->statusControl, "Capacity test completed");
-    } else if (ctx->state == CAPACITY_STATE_CANCELLED) {
-        SetCtrlVal(ctx->mainPanelHandle, ctx->statusControl, "Capacity test cancelled");
-    } else {
-        SetCtrlVal(ctx->mainPanelHandle, ctx->statusControl, "Capacity test failed");
+    const char *statusMsg;
+    switch (ctx->state) {
+        case CAPACITY_STATE_COMPLETED:
+            statusMsg = "Capacity experiment completed";
+            break;
+        case CAPACITY_STATE_CANCELLED:
+            statusMsg = "Capacity experiment cancelled";
+            break;
+        default:
+            statusMsg = "Capacity experiment failed";
+            break;
     }
-    
-    // Restore button text
-    SetCtrlAttribute(ctx->tabPanelHandle, ctx->buttonControl, ATTR_LABEL_TEXT, "Start");
+    SetCtrlVal(ctx->mainPanelHandle, ctx->statusControl, statusMsg);
     
     // Restore UI
+    SetCtrlAttribute(ctx->tabPanelHandle, ctx->buttonControl, ATTR_LABEL_TEXT, "Start");
     RestoreUI(ctx);
     
     // Clear busy flag
@@ -384,7 +384,7 @@ cleanup:
     CmtReleaseLock(g_busyLock);
     
     // Clear thread ID
-    g_testThreadId = 0;
+    g_experimentThreadId = 0;
     
     return 0;
 }
@@ -393,51 +393,49 @@ cleanup:
  * Helper Functions Implementation
  ******************************************************************************/
 
-static int CreateTestDirectory(CapacityTestContext *ctx) {
+static int CreateExperimentDirectory(CapacityExperimentContext *ctx) {
     char basePath[MAX_PATH_LENGTH];
     char dataPath[MAX_PATH_LENGTH];
     
     // Get executable directory
     if (GetExecutableDirectory(basePath, sizeof(basePath)) != SUCCESS) {
-        // Fallback to current directory
         strcpy(basePath, ".");
     }
     
     // Create data directory
-    SAFE_SPRINTF(dataPath, sizeof(dataPath), "%s%s%s", 
-                basePath, PATH_SEPARATOR, CAPACITY_TEST_DATA_DIR);
+    snprintf(dataPath, sizeof(dataPath), "%s%s%s", 
+             basePath, PATH_SEPARATOR, CAPACITY_EXPERIMENT_DATA_DIR);
     
     if (CreateDirectoryPath(dataPath) != SUCCESS) {
         LogError("Failed to create data directory: %s", dataPath);
         return ERR_BASE_FILE;
     }
     
-    // Create timestamp subdirectory using new utility function
-    int result = CreateTimestampedDirectory(dataPath, NULL, 
-                                          ctx->testDirectory, sizeof(ctx->testDirectory));
+    // Create timestamped subdirectory
+    int result = CreateTimestampedDirectory(dataPath, "capacity_exp", 
+                                          ctx->experimentDirectory, sizeof(ctx->experimentDirectory));
     if (result != SUCCESS) {
-        LogError("Failed to create test directory");
+        LogError("Failed to create experiment directory");
         return result;
     }
     
-    LogMessage("Created test directory: %s", ctx->testDirectory);
+    LogMessage("Created experiment directory: %s", ctx->experimentDirectory);
     return SUCCESS;
 }
 
-static int VerifyBatteryCharged(CapacityTestContext *ctx) {
+static int VerifyBatteryCharged(CapacityExperimentContext *ctx) {
     char message[LARGE_BUFFER_SIZE];
     
     LogMessage("Verifying battery charge state...");
     
-    // Check for cancellation
     if (ctx->state == CAPACITY_STATE_CANCELLED) {
         return ERR_CANCELLED;
     }
     
     // Get current battery voltage
-	PSB_Status status;
-	int error = PSB_GetStatusQueued(&status, DEVICE_PRIORITY_NORMAL);
-	
+    PSB_Status status;
+    int error = PSB_GetStatusQueued(&status, DEVICE_PRIORITY_NORMAL);
+    
     if (error != PSB_SUCCESS) {
         LogError("Failed to read PSB status: %s", PSB_GetErrorString(error));
         return ERR_COMM_FAILED;
@@ -448,8 +446,8 @@ static int VerifyBatteryCharged(CapacityTestContext *ctx) {
     LogMessage("Battery voltage: %.3f V, Expected: %.3f V, Difference: %.3f V", 
                status.voltage, ctx->params.chargeVoltage, voltageDiff);
     
-    if (voltageDiff > CAPACITY_TEST_VOLTAGE_MARGIN) {
-        SAFE_SPRINTF(message, sizeof(message),
+    if (voltageDiff > CAPACITY_EXPERIMENT_VOLTAGE_MARGIN) {
+        snprintf(message, sizeof(message),
             "Battery may not be fully charged:\n\n"
             "Measured Voltage: %.3f V\n"
             "Expected Voltage: %.3f V\n"
@@ -459,9 +457,8 @@ static int VerifyBatteryCharged(CapacityTestContext *ctx) {
             status.voltage,
             ctx->params.chargeVoltage,
             voltageDiff,
-            CAPACITY_TEST_VOLTAGE_MARGIN);
+            CAPACITY_EXPERIMENT_VOLTAGE_MARGIN);
         
-        // Check for cancellation before showing dialog
         if (ctx->state == CAPACITY_STATE_CANCELLED) {
             return ERR_CANCELLED;
         }
@@ -477,45 +474,32 @@ static int VerifyBatteryCharged(CapacityTestContext *ctx) {
     return SUCCESS;
 }
 
-static int ConfigureGraphs(CapacityTestContext *ctx) {
+static int ConfigureGraphs(CapacityExperimentContext *ctx) {
     // Configure Graph 1 - Current vs Time
-    SetCtrlAttribute(ctx->mainPanelHandle, ctx->graph1Handle, ATTR_LABEL_TEXT, "Current vs Time");
-    SetCtrlAttribute(ctx->mainPanelHandle, ctx->graph1Handle, ATTR_XNAME, "Time (s)");
-    SetCtrlAttribute(ctx->mainPanelHandle, ctx->graph1Handle, ATTR_YNAME, "Current (A)");
-    
-    // Set Y-axis range for current
     double maxCurrent = MAX(ctx->params.chargeCurrent, ctx->params.dischargeCurrent);
-    SetAxisScalingMode(ctx->mainPanelHandle, ctx->graph1Handle, VAL_LEFT_YAXIS, 
-                       VAL_MANUAL, 0.0, maxCurrent * 1.1);
-    SetAxisScalingMode(ctx->mainPanelHandle, ctx->graph1Handle, VAL_BOTTOM_XAXIS, 
-                       VAL_AUTOSCALE, 0.0, 0.0);
+    ConfigureGraph(ctx->mainPanelHandle, ctx->graph1Handle, 
+                   "Current vs Time", "Time (s)", "Current (A)", 
+                   0.0, maxCurrent * 1.1);
     
     // Configure Graph 2 - Voltage vs Time
-    SetCtrlAttribute(ctx->mainPanelHandle, ctx->graph2Handle, ATTR_LABEL_TEXT, "Voltage vs Time");
-    SetCtrlAttribute(ctx->mainPanelHandle, ctx->graph2Handle, ATTR_XNAME, "Time (s)");
-    SetCtrlAttribute(ctx->mainPanelHandle, ctx->graph2Handle, ATTR_YNAME, "Voltage (V)");
-    
-    // Set Y-axis range for voltage
-    SetAxisScalingMode(ctx->mainPanelHandle, ctx->graph2Handle, VAL_LEFT_YAXIS, 
-                       VAL_MANUAL, ctx->params.dischargeVoltage * 0.9, 
-                       ctx->params.chargeVoltage * 1.1);
-    SetAxisScalingMode(ctx->mainPanelHandle, ctx->graph2Handle, VAL_BOTTOM_XAXIS, 
-                       VAL_AUTOSCALE, 0.0, 0.0);
+    ConfigureGraph(ctx->mainPanelHandle, ctx->graph2Handle, 
+                   "Voltage vs Time", "Time (s)", "Voltage (V)", 
+                   ctx->params.dischargeVoltage * 0.9, 
+                   ctx->params.chargeVoltage * 1.1);
     
     // Clear any existing plots
-    DeleteGraphPlot(ctx->mainPanelHandle, ctx->graph1Handle, -1, VAL_DELAYED_DRAW);
-    DeleteGraphPlot(ctx->mainPanelHandle, ctx->graph2Handle, -1, VAL_DELAYED_DRAW);
+    int graphs[] = {ctx->graph1Handle, ctx->graph2Handle};
+    ClearAllGraphs(ctx->mainPanelHandle, graphs, 2);
     
     return SUCCESS;
 }
 
-static int RunTestPhase(CapacityTestContext *ctx, CapacityTestPhase phase) {
+static int RunExperimentPhase(CapacityExperimentContext *ctx, CapacityExperimentPhase phase) {
     char filename[MAX_PATH_LENGTH];
     CapacityDataPoint dataPoint;
     PhaseResults *phaseResults;
     int result;
     
-    // Check for cancellation
     if (ctx->state == CAPACITY_STATE_CANCELLED) {
         return ERR_CANCELLED;
     }
@@ -528,6 +512,8 @@ static int RunTestPhase(CapacityTestContext *ctx, CapacityTestPhase phase) {
                           ctx->params.dischargeCurrent : ctx->params.chargeCurrent;
     int capacityControl = (phase == CAPACITY_PHASE_DISCHARGE) ? 
                          CAPACITY_NUM_DISCHARGE_CAP : CAPACITY_NUM_CHARGE_CAP;
+    const char *csvFileName = (phase == CAPACITY_PHASE_DISCHARGE) ?
+                             CAPACITY_EXPERIMENT_DISCHARGE_FILE : CAPACITY_EXPERIMENT_CHARGE_FILE;
     
     // Get pointer to phase results
     phaseResults = (phase == CAPACITY_PHASE_DISCHARGE) ? 
@@ -542,10 +528,8 @@ static int RunTestPhase(CapacityTestContext *ctx, CapacityTestPhase phase) {
     ctx->capacityControl = capacityControl;
     
     // Open CSV file
-    SAFE_SPRINTF(filename, sizeof(filename), "%s%s%s", 
-                ctx->testDirectory, PATH_SEPARATOR, 
-                (phase == CAPACITY_PHASE_DISCHARGE) ? 
-                CAPACITY_TEST_DISCHARGE_FILE : CAPACITY_TEST_CHARGE_FILE);
+    snprintf(filename, sizeof(filename), "%s%s%s", 
+             ctx->experimentDirectory, PATH_SEPARATOR, csvFileName);
     
     ctx->csvFile = fopen(filename, "w");
     if (!ctx->csvFile) {
@@ -556,7 +540,7 @@ static int RunTestPhase(CapacityTestContext *ctx, CapacityTestPhase phase) {
     // Write CSV header
     fprintf(ctx->csvFile, "Time_s,Voltage_V,Current_A,Power_W\n");
     
-    // Set target voltage
+    // Set target voltage and current
     result = PSB_SetVoltageQueued(targetVoltage, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         LogError("Failed to set voltage: %s", PSB_GetErrorString(result));
@@ -564,7 +548,6 @@ static int RunTestPhase(CapacityTestContext *ctx, CapacityTestPhase phase) {
         return result;
     }
     
-    // Set target current
     if (phase == CAPACITY_PHASE_DISCHARGE) {
         result = PSB_SetSinkCurrentQueued(targetCurrent, DEVICE_PRIORITY_NORMAL);
     } else {
@@ -577,8 +560,7 @@ static int RunTestPhase(CapacityTestContext *ctx, CapacityTestPhase phase) {
     }
     
     // Enable PSB output
-    PSB_SetOutputEnableQueued(1, DEVICE_PRIORITY_NORMAL);
-	
+    result = PSB_SetOutputEnableQueued(1, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         LogError("Failed to enable output: %s", PSB_GetErrorString(result));
         fclose(ctx->csvFile);
@@ -598,7 +580,7 @@ static int RunTestPhase(CapacityTestContext *ctx, CapacityTestPhase phase) {
     }
     
     // Initialize timing and capacity
-    ctx->phaseStartTime = Timer();
+    ctx->phaseStartTime = GetTimestamp();
     ctx->lastLogTime = ctx->phaseStartTime;
     ctx->lastGraphUpdate = ctx->phaseStartTime;
     ctx->accumulatedCapacity_mAh = 0.0;
@@ -612,35 +594,32 @@ static int RunTestPhase(CapacityTestContext *ctx, CapacityTestPhase phase) {
     
     // Get initial status for start voltage
     PSB_Status status;
-	result = PSB_GetStatusQueued(&status, DEVICE_PRIORITY_NORMAL);
-	
+    result = PSB_GetStatusQueued(&status, DEVICE_PRIORITY_NORMAL);
     if (result == PSB_SUCCESS) {
         phaseResults->startVoltage = status.voltage;
     }
     
     LogMessage("%s phase started", phaseName);
     
-    // Main test loop
+    // Main experiment loop
     while (1) {
-        // Check for cancellation
         if (ctx->state == CAPACITY_STATE_CANCELLED) {
             LogMessage("%s phase cancelled by user", phaseName);
             break;
         }
         
-        double currentTime = Timer();
+        double currentTime = GetTimestamp();
         double elapsedTime = currentTime - ctx->phaseStartTime;
         
         // Check for timeout
-        if (elapsedTime > (CAPACITY_TEST_MAX_DURATION_H * 3600.0)) {
+        if (elapsedTime > (CAPACITY_EXPERIMENT_MAX_DURATION_H * 3600.0)) {
             LogWarning("%s phase timeout reached", phaseName);
             break;
         }
         
         PSB_Status status;
-		result = PSB_GetStatusQueued(&status, DEVICE_PRIORITY_NORMAL);
-		
-		if (result != PSB_SUCCESS) {
+        result = PSB_GetStatusQueued(&status, DEVICE_PRIORITY_NORMAL);
+        if (result != PSB_SUCCESS) {
             LogError("Failed to read status: %s", PSB_GetErrorString(result));
             break;
         }
@@ -665,7 +644,7 @@ static int RunTestPhase(CapacityTestContext *ctx, CapacityTestPhase phase) {
         }
         
         // Update graphs if needed
-        if ((currentTime - ctx->lastGraphUpdate) >= CAPACITY_TEST_GRAPH_UPDATE_RATE) {
+        if ((currentTime - ctx->lastGraphUpdate) >= CAPACITY_EXPERIMENT_GRAPH_UPDATE_RATE) {
             dataPoint.time = elapsedTime;
             dataPoint.voltage = status.voltage;
             dataPoint.current = status.current;
@@ -675,7 +654,6 @@ static int RunTestPhase(CapacityTestContext *ctx, CapacityTestPhase phase) {
             ctx->lastGraphUpdate = currentTime;
         }
         
-        // Process events and delay
         ProcessSystemEvents();
         Delay(0.1);
     }
@@ -686,7 +664,7 @@ static int RunTestPhase(CapacityTestContext *ctx, CapacityTestPhase phase) {
     // Store final results
     phaseResults->capacity_mAh = ctx->accumulatedCapacity_mAh;
     phaseResults->energy_Wh = ctx->accumulatedEnergy_Wh;
-    phaseResults->duration_s = Timer() - ctx->phaseStartTime;
+    phaseResults->duration_s = GetTimestamp() - ctx->phaseStartTime;
     
     // Calculate averages
     if (phaseResults->dataPoints > 0) {
@@ -698,14 +676,13 @@ static int RunTestPhase(CapacityTestContext *ctx, CapacityTestPhase phase) {
     fclose(ctx->csvFile);
     ctx->csvFile = NULL;
     
-    // Log final capacity
     LogMessage("%s phase completed - Capacity: %.2f mAh, Energy: %.2f Wh", 
               phaseName, phaseResults->capacity_mAh, phaseResults->energy_Wh);
     
     return (ctx->state == CAPACITY_STATE_CANCELLED) ? ERR_CANCELLED : SUCCESS;
 }
 
-static int LogDataPoint(CapacityTestContext *ctx, CapacityDataPoint *point) {
+static int LogDataPoint(CapacityExperimentContext *ctx, CapacityDataPoint *point) {
     // Write to CSV
     fprintf(ctx->csvFile, "%.3f,%.3f,%.3f,%.3f\n", 
             point->time, point->voltage, point->current, point->power);
@@ -732,7 +709,7 @@ static int LogDataPoint(CapacityTestContext *ctx, CapacityDataPoint *point) {
         // Update phase results
         PhaseResults *results = (ctx->state == CAPACITY_STATE_DISCHARGING) ? 
                               &ctx->dischargeResults : &ctx->chargeResults;
-        UpdatePhaseResults(ctx, results, point, capacityIncrement, energyIncrement);
+        UpdatePhaseResults(ctx, results, point);
     }
     
     // Store for next calculation
@@ -743,25 +720,22 @@ static int LogDataPoint(CapacityTestContext *ctx, CapacityDataPoint *point) {
     return SUCCESS;
 }
 
-static void UpdatePhaseResults(CapacityTestContext *ctx, PhaseResults *results, 
-                               CapacityDataPoint *point, double capacityIncrement, double energyIncrement) {
+static void UpdatePhaseResults(CapacityExperimentContext *ctx, PhaseResults *results, 
+                               CapacityDataPoint *point) {
     results->dataPoints++;
     results->sumCurrent += fabs(point->current);
     results->sumVoltage += point->voltage;
 }
 
-static void UpdateGraphs(CapacityTestContext *ctx, CapacityDataPoint *point) {
-    // Plot current point on graph 1
-    PlotPoint(ctx->mainPanelHandle, ctx->graph1Handle, 
-              point->time, fabs(point->current), 
-              VAL_SOLID_CIRCLE, VAL_RED);
+static void UpdateGraphs(CapacityExperimentContext *ctx, CapacityDataPoint *point) {
+    // Plot current and voltage points
+    PlotDataPoint(ctx->mainPanelHandle, ctx->graph1Handle, 
+                  point->time, fabs(point->current), VAL_SOLID_CIRCLE, VAL_RED);
     
-    // Plot voltage point on graph 2
-    PlotPoint(ctx->mainPanelHandle, ctx->graph2Handle, 
-              point->time, point->voltage, 
-              VAL_SOLID_CIRCLE, VAL_BLUE);
+    PlotDataPoint(ctx->mainPanelHandle, ctx->graph2Handle, 
+                  point->time, point->voltage, VAL_SOLID_CIRCLE, VAL_BLUE);
     
-    // Check if Y-axis needs rescaling
+    // Auto-scale if needed
     double yMin, yMax;
     GetAxisScalingMode(ctx->mainPanelHandle, ctx->graph1Handle, VAL_LEFT_YAXIS, 
                        NULL, &yMin, &yMax);
@@ -780,17 +754,12 @@ static void UpdateGraphs(CapacityTestContext *ctx, CapacityDataPoint *point) {
     }
 }
 
-static void ClearGraphs(CapacityTestContext *ctx) {
-    int graphs[] = {ctx->graph1Handle, ctx->graph2Handle};
-    ClearAllGraphs(ctx->mainPanelHandle, graphs, 2);
-}
-
-static int WriteResultsFile(CapacityTestContext *ctx) {
+static int WriteResultsFile(CapacityExperimentContext *ctx) {
     char filename[MAX_PATH_LENGTH];
     FILE *file;
     
-    SAFE_SPRINTF(filename, sizeof(filename), "%s%s%s", 
-                ctx->testDirectory, PATH_SEPARATOR, CAPACITY_TEST_RESULTS_FILE);
+    snprintf(filename, sizeof(filename), "%s%s%s", 
+             ctx->experimentDirectory, PATH_SEPARATOR, CAPACITY_EXPERIMENT_RESULTS_FILE);
     
     file = fopen(filename, "w");
     if (!file) {
@@ -798,29 +767,27 @@ static int WriteResultsFile(CapacityTestContext *ctx) {
         return ERR_BASE_FILE;
     }
     
-    // Get timestamp for test start
-    time_t startTime = (time_t)ctx->testStartTime;
-    char startTimeStr[64];
-    strftime(startTimeStr, sizeof(startTimeStr), "%Y-%m-%dT%H:%M:%S", localtime(&startTime));
+    // Get formatted timestamps
+    time_t startTime = (time_t)ctx->experimentStartTime;
+    time_t endTime = (time_t)ctx->experimentEndTime;
+    char startTimeStr[64], endTimeStr[64];
     
-    // Get timestamp for test end
-    time_t endTime = (time_t)ctx->testEndTime;
-    char endTimeStr[64];
-    strftime(endTimeStr, sizeof(endTimeStr), "%Y-%m-%dT%H:%M:%S", localtime(&endTime));
+    FormatTimestamp(startTime, startTimeStr, sizeof(startTimeStr));
+    FormatTimestamp(endTime, endTimeStr, sizeof(endTimeStr));
     
     // Write header
-    fprintf(file, "# Battery Capacity Test Results\n");
+    fprintf(file, "# Battery Capacity Experiment Results\n");
     fprintf(file, "# Generated by Battery Tester v%s\n\n", PROJECT_VERSION);
     
-    // Test Information
-    WriteINISection(file, "Test_Information");
-    WriteINIValue(file, "Test_Start_Time", "%s", startTimeStr);
-    WriteINIValue(file, "Test_End_Time", "%s", endTimeStr);
-    WriteINIDouble(file, "Total_Duration_s", ctx->testEndTime - ctx->testStartTime, 1);
+    // Experiment Information
+    WriteINISection(file, "Experiment_Information");
+    WriteINIValue(file, "Experiment_Start_Time", "%s", startTimeStr);
+    WriteINIValue(file, "Experiment_End_Time", "%s", endTimeStr);
+    WriteINIDouble(file, "Total_Duration_s", ctx->experimentEndTime - ctx->experimentStartTime, 1);
     fprintf(file, "\n");
     
-    // Test Parameters
-    WriteINISection(file, "Test_Parameters");
+    // Experiment Parameters
+    WriteINISection(file, "Experiment_Parameters");
     WriteINIDouble(file, "Charge_Voltage_V", ctx->params.chargeVoltage, 3);
     WriteINIDouble(file, "Discharge_Voltage_V", ctx->params.dischargeVoltage, 3);
     WriteINIDouble(file, "Charge_Current_A", ctx->params.chargeCurrent, 3);
@@ -862,7 +829,7 @@ static int WriteResultsFile(CapacityTestContext *ctx) {
     WriteINISection(file, "Calculated_Metrics");
     WriteINIDouble(file, "Coulombic_Efficiency_Percent", coulombicEff, 1);
     WriteINIDouble(file, "Round_Trip_Energy_Efficiency_Percent", energyEff, 1);
-    WriteINIDouble(file, "Capacity_Retention_Percent", coulombicEff, 1); // Same as coulombic for single cycle
+    WriteINIDouble(file, "Capacity_Retention_Percent", coulombicEff, 1);
     
     fclose(file);
     
@@ -870,8 +837,7 @@ static int WriteResultsFile(CapacityTestContext *ctx) {
     return SUCCESS;
 }
 
-static void RestoreUI(CapacityTestContext *ctx) {
-    // Re-enable controls
+static void RestoreUI(CapacityExperimentContext *ctx) {
     DimCapacityExperimentControls(ctx->mainPanelHandle, ctx->tabPanelHandle, 0, controls, numControls);
 }
 
@@ -879,21 +845,21 @@ static void RestoreUI(CapacityTestContext *ctx) {
  * Module Management Functions
  ******************************************************************************/
 
-void CapacityTest_Cleanup(void) {
-    if (CapacityTest_IsRunning()) {
-        CapacityTest_Abort();
+void CapacityExperiment_Cleanup(void) {
+    if (CapacityExperiment_IsRunning()) {
+        CapacityExperiment_Abort();
     }
 }
 
-int CapacityTest_Abort(void) {
-    if (CapacityTest_IsRunning()) {
-        g_testContext.state = CAPACITY_STATE_CANCELLED;
+int CapacityExperiment_Abort(void) {
+    if (CapacityExperiment_IsRunning()) {
+        g_experimentContext.state = CAPACITY_STATE_CANCELLED;
         
         // Wait for thread to complete
-        if (g_testThreadId != 0) {
-            CmtWaitForThreadPoolFunctionCompletion(g_threadPool, g_testThreadId,
+        if (g_experimentThreadId != 0) {
+            CmtWaitForThreadPoolFunctionCompletion(g_threadPool, g_experimentThreadId,
                                                  OPT_TP_PROCESS_EVENTS_WHILE_WAITING);
-            g_testThreadId = 0;
+            g_experimentThreadId = 0;
         }
     }
     return SUCCESS;

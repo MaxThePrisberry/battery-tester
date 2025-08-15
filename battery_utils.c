@@ -243,10 +243,10 @@ int Battery_GoToVoltage(VoltageTargetParams *params) {
                     // Update status message
                     if (params->panelHandle > 0 && params->statusControl > 0) {
                         char statusMsg[256];
-                        SAFE_SPRINTF(statusMsg, sizeof(statusMsg), 
-                                   "%s: %.3f V, %.3f A (%.2f mAh)", 
-                                   params->wasCharging ? "Charging" : "Discharging",
-                                   status.voltage, status.current, fabs(accumulatedCapacity_mAh));
+                        snprintf(statusMsg, sizeof(statusMsg), 
+                                 "%s: %.3f V, %.3f A (%.2f mAh)", 
+                                 params->wasCharging ? "Charging" : "Discharging",
+                                 status.voltage, status.current, fabs(accumulatedCapacity_mAh));
                         SetCtrlVal(params->panelHandle, params->statusControl, statusMsg);
                     }
                     
@@ -276,10 +276,10 @@ int Battery_GoToVoltage(VoltageTargetParams *params) {
     
     // Final status update
     char finalMsg[256];
-    SAFE_SPRINTF(finalMsg, sizeof(finalMsg), "%s complete: %.2f mAh, %.2f Wh in %.1f minutes", 
-               params->wasCharging ? "Charge" : "Discharge",
-               fabs(params->actualCapacity_mAh), fabs(params->actualEnergy_Wh), 
-               params->elapsedTime_s / 60.0);
+    snprintf(finalMsg, sizeof(finalMsg), "%s complete: %.2f mAh, %.2f Wh in %.1f minutes", 
+             params->wasCharging ? "Charge" : "Discharge",
+             fabs(params->actualCapacity_mAh), fabs(params->actualEnergy_Wh), 
+             params->elapsedTime_s / 60.0);
     
     if (params->statusCallback) {
         params->statusCallback(finalMsg);
@@ -442,9 +442,9 @@ int Battery_DischargeCapacity(DischargeParams *params) {
                     // Update status message
                     if (params->panelHandle > 0 && params->statusControl > 0) {
                         char statusMsg[256];
-                        SAFE_SPRINTF(statusMsg, sizeof(statusMsg), 
-                                   "Discharging: %.1f%% (%.2f mAh)", 
-                                   percentComplete, accumulatedCapacity_mAh);
+                        snprintf(statusMsg, sizeof(statusMsg), 
+                                 "Discharging: %.1f%% (%.2f mAh)", 
+                                 percentComplete, accumulatedCapacity_mAh);
                         SetCtrlVal(params->panelHandle, params->statusControl, statusMsg);
                     }
                     
@@ -472,8 +472,8 @@ int Battery_DischargeCapacity(DischargeParams *params) {
     
     // Final status update
     char finalMsg[256];
-    SAFE_SPRINTF(finalMsg, sizeof(finalMsg), "Discharge complete: %.2f mAh in %.1f minutes", 
-               params->actualDischarged_mAh, params->elapsedTime_s / 60.0);
+    snprintf(finalMsg, sizeof(finalMsg), "Discharge complete: %.2f mAh in %.1f minutes", 
+             params->actualDischarged_mAh, params->elapsedTime_s / 60.0);
     
     if (params->statusCallback) {
         params->statusCallback(finalMsg);

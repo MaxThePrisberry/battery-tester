@@ -134,7 +134,7 @@ static int BIO_AdapterConnect(void *deviceContext, void *connectionParams) {
     
     if (result == SUCCESS) {
         ctx->isConnected = true;
-        SAFE_STRCPY(ctx->lastAddress, params->address, sizeof(ctx->lastAddress));
+        strncpy(ctx->lastAddress, params->address, sizeof(ctx->lastAddress));
         
         const char* deviceTypeName = "Unknown";
         switch(deviceInfo.DeviceCode) {
@@ -906,7 +906,7 @@ BioQueueManager* BIO_QueueInit(const char *address) {
     connParams->base.userData = NULL;
     
     // Set connection-specific parameters
-    SAFE_STRCPY(connParams->address, address, sizeof(connParams->address));
+    strncpy(connParams->address, address, sizeof(connParams->address));
     connParams->timeout = TIMEOUT;
     
     // Create the generic device queue

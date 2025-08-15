@@ -46,24 +46,24 @@ typedef enum {
     CDC_STATE_COMPLETED,
     CDC_STATE_ERROR,
     CDC_STATE_CANCELLED
-} CDCTestState;
+} CDCExperimentState;
 
-// Test parameters from UI
+// Experiment parameters from UI
 typedef struct {
     double targetVoltage;       // Target voltage (charge or discharge)
     double targetCurrent;       // Target current (charge or discharge)
     double currentThreshold;    // Current threshold to stop
     unsigned int logInterval;   // Measurement/update interval in seconds
-} CDCTestParams;
+} CDCExperimentParams;
 
-// Test context
+// Experiment context
 typedef struct {
-    CDCTestState state;
+    CDCExperimentState state;
     CDCOperationMode mode;      // CHARGE or DISCHARGE
-    CDCTestParams params;
+    CDCExperimentParams params;
     
     // Timing
-    double testStartTime;
+    double experimentStartTime;
     double lastLogTime;
     double lastGraphUpdate;
     
@@ -82,7 +82,7 @@ typedef struct {
     // PSB handle
     PSB_Handle *psbHandle;
     
-} CDCTestContext;
+} CDCExperimentContext;
 
 /******************************************************************************
  * Public Function Prototypes
@@ -98,16 +98,16 @@ int CVICALLBACK CDCDischargeCallback(int panel, int control, int event,
                                     void *callbackData, int eventData1, 
                                     int eventData2);
 
-// Cleanup CDC test module
-void CDCTest_Cleanup(void);
+// Cleanup CDC experiment module
+void CDCExperiment_Cleanup(void);
 
 // Check if a CDC operation is running
-int CDCTest_IsRunning(void);
+int CDCExperiment_IsRunning(void);
 
 // Get current operation mode (returns CDC_MODE_CHARGE or CDC_MODE_DISCHARGE, or -1 if not running)
-int CDCTest_GetMode(void);
+int CDCExperiment_GetMode(void);
 
 // Abort a running CDC operation
-int CDCTest_Abort(void);
+int CDCExperiment_Abort(void);
 
 #endif // EXP_CDC_H

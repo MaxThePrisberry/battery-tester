@@ -19,44 +19,45 @@
  * Module Variables
  ******************************************************************************/
 
-// Test context and thread management
-static SOCEISTestContext g_testContext = {0};
-static CmtThreadFunctionID g_testThreadId = 0;
+// Experiment context and thread management
+static SOCEISExperimentContext g_experimentContext = {0};
+static CmtThreadFunctionID g_experimentThreadId = 0;
 
 static const int numControls = 6;
 static const int controls[numControls] = {SOCEIS_NUM_CURRENT_THRESHOLD,
                                           SOCEIS_NUM_INTERVAL,
                                           SOCEIS_CHECKBOX_DISCHARGE,
-								          SOCEIS_NUM_CAPACITY,
-										  SOCEIS_NUM_EIS_INTERVAL,
-										  SOCEIS_BTN_IMPORT_SETTINGS};
+                                          SOCEIS_NUM_CAPACITY,
+                                          SOCEIS_NUM_EIS_INTERVAL,
+                                          SOCEIS_BTN_IMPORT_SETTINGS};
 
 /******************************************************************************
  * Internal Function Prototypes
  ******************************************************************************/
 
 static int CVICALLBACK SOCEISExperimentThread(void *functionData);
-static int VerifyBatteryDischarged(SOCEISTestContext *ctx);
-static int ConfigureGraphs(SOCEISTestContext *ctx);
-static int CreateTestDirectory(SOCEISTestContext *ctx);
-static int CalculateTargetSOCs(SOCEISTestContext *ctx);
+static int VerifyBatteryDischarged(SOCEISExperimentContext *ctx);
+static int ConfigureGraphs(SOCEISExperimentContext *ctx);
+static int CreateExperimentDirectory(SOCEISExperimentContext *ctx);
+static int CalculateTargetSOCs(SOCEISExperimentContext *ctx);
 static int SetRelayState(int pin, int state);
-static int SwitchToBioLogic(SOCEISTestContext *ctx);
-static int SwitchToPSB(SOCEISTestContext *ctx);
-static int PerformEISMeasurement(SOCEISTestContext *ctx, double targetSOC);
-static int RunOCVMeasurement(SOCEISTestContext *ctx, EISMeasurement *measurement);
-static int RunGEISMeasurement(SOCEISTestContext *ctx, EISMeasurement *measurement);
+static int SwitchToBioLogic(SOCEISExperimentContext *ctx);
+static int SwitchToPSB(SOCEISExperimentContext *ctx);
+static int PerformEISMeasurement(SOCEISExperimentContext *ctx, double targetSOC);
+static int RunOCVMeasurement(SOCEISExperimentContext *ctx, EISMeasurement *measurement);
+static int RunGEISMeasurement(SOCEISExperimentContext *ctx, EISMeasurement *measurement);
 static int ProcessGEISData(BIO_TechniqueData *geisData, EISMeasurement *measurement);
-static int SaveMeasurementData(SOCEISTestContext *ctx, EISMeasurement *measurement);
-static int RunChargingPhase(SOCEISTestContext *ctx);
-static int UpdateSOCTracking(SOCEISTestContext *ctx, double voltage, double current);
-static void UpdateGraphs(SOCEISTestContext *ctx, double current, double time);
-static void UpdateOCVGraph(SOCEISTestContext *ctx, EISMeasurement *measurement);
-static void UpdateNyquistPlot(SOCEISTestContext *ctx, EISMeasurement *measurement);
-static int WriteResultsFile(SOCEISTestContext *ctx);
-static void RestoreUI(SOCEISTestContext *ctx);
-static void ClearGraphs(SOCEISTestContext *ctx);
-static int DischargeToFiftyPercent(SOCEISTestContext *ctx);
+static int SaveMeasurementData(SOCEISExperimentContext *ctx, EISMeasurement *measurement);
+static int RunChargingPhase(SOCEISExperimentContext *ctx);
+static int UpdateSOCTracking(SOCEISExperimentContext *ctx, double voltage, double current);
+static void UpdateGraphs(SOCEISExperimentContext *ctx, double current, double time);
+static void UpdateOCVGraph(SOCEISExperimentContext *ctx, EISMeasurement *measurement);
+static void UpdateNyquistPlot(SOCEISExperimentContext *ctx, EISMeasurement *measurement);
+static int WriteResultsFile(SOCEISExperimentContext *ctx);
+static void RestoreUI(SOCEISExperimentContext *ctx);
+static void ClearGraphs(SOCEISExperimentContext *ctx);
+static int DischargeToFiftyPercent(SOCEISExperimentContext *ctx);
+static int AddDynamicTargetSOC(SOCEISExperimentContext *ctx, double targetSOC);
 
 /******************************************************************************
  * Public Functions Implementation
@@ -69,11 +70,11 @@ int CVICALLBACK StartSOCEISExperimentCallback(int panel, int control, int event,
         return 0;
     }
     
-    // Check if SOCEIS test is already running
-    if (SOCEISTest_IsRunning()) {
+    // Check if SOCEIS experiment is already running
+    if (SOCEISExperiment_IsRunning()) {
         // This is a Stop request
-        LogMessage("User requested to stop SOCEIS test");
-        g_testContext.state = SOCEIS_STATE_CANCELLED;
+        LogMessage("User requested to stop SOCEIS experiment");
+        g_experimentContext.state = SOCEIS_STATE_CANCELLED;
         return 0;
     }
     
@@ -83,7 +84,7 @@ int CVICALLBACK StartSOCEISExperimentCallback(int panel, int control, int event,
         CmtReleaseLock(g_busyLock);
         MessagePopup("System Busy", 
                      "Another operation is in progress.\n"
-                     "Please wait for it to complete before starting the SOCEIS test.");
+                     "Please wait for it to complete before starting the SOCEIS experiment.");
         return 0;
     }
     g_systemBusy = 1;
@@ -98,7 +99,7 @@ int CVICALLBACK StartSOCEISExperimentCallback(int panel, int control, int event,
         
         MessagePopup("PSB Not Connected", 
                      "The PSB power supply is not connected.\n"
-                     "Please ensure it is connected before running the SOCEIS test.");
+                     "Please ensure it is connected before running the SOCEIS experiment.");
         return 0;
     }
     
@@ -110,7 +111,7 @@ int CVICALLBACK StartSOCEISExperimentCallback(int panel, int control, int event,
         
         MessagePopup("PSB Not Connected", 
                      "The PSB power supply is not connected.\n"
-                     "Please ensure it is connected before running the SOCEIS test.");
+                     "Please ensure it is connected before running the SOCEIS experiment.");
         return 0;
     }
     
@@ -123,7 +124,7 @@ int CVICALLBACK StartSOCEISExperimentCallback(int panel, int control, int event,
         
         MessagePopup("BioLogic Not Connected", 
                      "The BioLogic potentiostat is not connected.\n"
-                     "Please ensure it is connected before running the SOCEIS test.");
+                     "Please ensure it is connected before running the SOCEIS experiment.");
         return 0;
     }
     
@@ -135,7 +136,7 @@ int CVICALLBACK StartSOCEISExperimentCallback(int panel, int control, int event,
         
         MessagePopup("BioLogic Not Connected", 
                      "The BioLogic potentiostat is not connected.\n"
-                     "Please ensure it is connected before running the SOCEIS test.");
+                     "Please ensure it is connected before running the SOCEIS experiment.");
         return 0;
     }
     
@@ -148,65 +149,65 @@ int CVICALLBACK StartSOCEISExperimentCallback(int panel, int control, int event,
         
         MessagePopup("Teensy Not Connected", 
                      "The Teensy relay controller is not connected.\n"
-                     "Please ensure it is connected before running the SOCEIS test.");
+                     "Please ensure it is connected before running the SOCEIS experiment.");
         return 0;
     }
     
-    // Initialize test context
-    memset(&g_testContext, 0, sizeof(g_testContext));
-    g_testContext.state = SOCEIS_STATE_PREPARING;
-    g_testContext.mainPanelHandle = g_mainPanelHandle;
-    g_testContext.tabPanelHandle = panel;
-    g_testContext.buttonControl = control;
-    g_testContext.socControl = SOCEIS_NUM_SOC;
-    g_testContext.psbHandle = psbHandle;
-    g_testContext.biologicID = biologicID;
-    g_testContext.graph1Handle = PANEL_GRAPH_1;
-    g_testContext.graph2Handle = PANEL_GRAPH_2;
-    g_testContext.graphBiologicHandle = PANEL_GRAPH_BIOLOGIC;
+    // Initialize experiment context
+    memset(&g_experimentContext, 0, sizeof(g_experimentContext));
+    g_experimentContext.state = SOCEIS_STATE_PREPARING;
+    g_experimentContext.mainPanelHandle = g_mainPanelHandle;
+    g_experimentContext.tabPanelHandle = panel;
+    g_experimentContext.buttonControl = control;
+    g_experimentContext.socControl = SOCEIS_NUM_SOC;
+    g_experimentContext.psbHandle = psbHandle;
+    g_experimentContext.biologicID = biologicID;
+    g_experimentContext.graph1Handle = PANEL_GRAPH_1;
+    g_experimentContext.graph2Handle = PANEL_GRAPH_2;
+    g_experimentContext.graphBiologicHandle = PANEL_GRAPH_BIOLOGIC;
     
-    // Read test parameters from UI
-    GetCtrlVal(panel, SOCEIS_NUM_EIS_INTERVAL, &g_testContext.params.eisInterval);
-    GetCtrlVal(panel, SOCEIS_NUM_CAPACITY, &g_testContext.params.batteryCapacity_mAh);
-    GetCtrlVal(panel, SOCEIS_NUM_CURRENT_THRESHOLD, &g_testContext.params.currentThreshold);
-    GetCtrlVal(panel, SOCEIS_NUM_INTERVAL, &g_testContext.params.logInterval);
-    GetCtrlVal(panel, SOCEIS_CHECKBOX_DISCHARGE, &g_testContext.params.dischargeAfter);
+    // Read experiment parameters from UI
+    GetCtrlVal(panel, SOCEIS_NUM_EIS_INTERVAL, &g_experimentContext.params.eisInterval);
+    GetCtrlVal(panel, SOCEIS_NUM_CAPACITY, &g_experimentContext.params.batteryCapacity_mAh);
+    GetCtrlVal(panel, SOCEIS_NUM_CURRENT_THRESHOLD, &g_experimentContext.params.currentThreshold);
+    GetCtrlVal(panel, SOCEIS_NUM_INTERVAL, &g_experimentContext.params.logInterval);
+    GetCtrlVal(panel, SOCEIS_CHECKBOX_DISCHARGE, &g_experimentContext.params.dischargeAfter);
     
-    GetCtrlVal(g_mainPanelHandle, PANEL_NUM_SET_CHARGE_V, &g_testContext.params.chargeVoltage);
-    GetCtrlVal(g_mainPanelHandle, PANEL_NUM_SET_DISCHARGE_V, &g_testContext.params.dischargeVoltage);
-    GetCtrlVal(g_mainPanelHandle, PANEL_NUM_SET_CHARGE_I, &g_testContext.params.chargeCurrent);
-    GetCtrlVal(g_mainPanelHandle, PANEL_NUM_SET_DISCHARGE_I, &g_testContext.params.dischargeCurrent);
+    GetCtrlVal(g_mainPanelHandle, PANEL_NUM_SET_CHARGE_V, &g_experimentContext.params.chargeVoltage);
+    GetCtrlVal(g_mainPanelHandle, PANEL_NUM_SET_DISCHARGE_V, &g_experimentContext.params.dischargeVoltage);
+    GetCtrlVal(g_mainPanelHandle, PANEL_NUM_SET_CHARGE_I, &g_experimentContext.params.chargeCurrent);
+    GetCtrlVal(g_mainPanelHandle, PANEL_NUM_SET_DISCHARGE_I, &g_experimentContext.params.dischargeCurrent);
     
-	// Check if battery capacity is valid
-	if (g_testContext.params.batteryCapacity_mAh <= 0.0) {
-	    CmtGetLock(g_busyLock);
-	    g_systemBusy = 0;
-	    CmtReleaseLock(g_busyLock);
-	    
-	    MessagePopup("Invalid Battery Capacity", 
-	                 "Battery capacity must be greater than 0 mAh.\n\n"
-	                 "Please enter a valid battery capacity or use the\n"
-	                 "'Import Settings' button to load capacity from a\n"
-	                 "previous capacity test.");
-		
-		g_testContext.state = SOCEIS_STATE_CANCELLED;
-	    
-	    LogError("SOCEIS test aborted - battery capacity is 0");
-	    return 0;
-	}
-	
+    // Check if battery capacity is valid
+    if (g_experimentContext.params.batteryCapacity_mAh <= 0.0) {
+        CmtGetLock(g_busyLock);
+        g_systemBusy = 0;
+        CmtReleaseLock(g_busyLock);
+        
+        MessagePopup("Invalid Battery Capacity", 
+                     "Battery capacity must be greater than 0 mAh.\n\n"
+                     "Please enter a valid battery capacity or use the\n"
+                     "'Import Settings' button to load capacity from a\n"
+                     "previous capacity experiment.");
+        
+        g_experimentContext.state = SOCEIS_STATE_CANCELLED;
+        
+        LogError("SOCEIS experiment aborted - battery capacity is 0");
+        return 0;
+    }
+    
     // Change button text to "Stop"
     SetCtrlAttribute(panel, control, ATTR_LABEL_TEXT, "Stop");
     
     // Dim appropriate controls
     DimCapacityExperimentControls(g_mainPanelHandle, panel, 1, controls, numControls);
     
-    // Start test thread
+    // Start experiment thread
     int error = CmtScheduleThreadPoolFunction(g_threadPool, SOCEISExperimentThread, 
-                                            &g_testContext, &g_testThreadId);
+                                            &g_experimentContext, &g_experimentThreadId);
     if (error != 0) {
         // Failed to start thread
-        g_testContext.state = SOCEIS_STATE_ERROR;
+        g_experimentContext.state = SOCEIS_STATE_ERROR;
         SetCtrlAttribute(panel, control, ATTR_LABEL_TEXT, "Start");
         DimCapacityExperimentControls(g_mainPanelHandle, panel, 0, controls, numControls);
         
@@ -214,7 +215,7 @@ int CVICALLBACK StartSOCEISExperimentCallback(int panel, int control, int event,
         g_systemBusy = 0;
         CmtReleaseLock(g_busyLock);
         
-        MessagePopup("Error", "Failed to start SOCEIS test thread.");
+        MessagePopup("Error", "Failed to start SOCEIS experiment thread.");
         return 0;
     }
     
@@ -233,7 +234,7 @@ int CVICALLBACK ImportSOCEISSettingsCallback(int panel, int control, int event,
     
     // Show file dialog
     status = FileSelectPopup("", "results.txt", "*.txt",
-                            "Select Capacity Test Results File",
+                            "Select Capacity Experiment Results File",
                             VAL_LOAD_BUTTON, 0, 0, 1, 0, filename);
     
     if (status != 1) {
@@ -295,7 +296,8 @@ int CVICALLBACK ImportSOCEISSettingsCallback(int panel, int control, int event,
                     foundItems++;
                 }
             }
-        } else if (strcmp(currentSection, "Test_Parameters") == 0) {
+        } else if (strcmp(currentSection, "Experiment_Parameters") == 0 ||
+                   strcmp(currentSection, "Test_Parameters") == 0) {
             if (strcmp(key, "Charge_Voltage_V") == 0) {
                 double val;
                 if (sscanf(value, "%lf", &val) == 1) {
@@ -350,9 +352,9 @@ int CVICALLBACK ImportSOCEISSettingsCallback(int panel, int control, int event,
     // Show results
     if (foundItems > 0) {
         char message[MEDIUM_BUFFER_SIZE];
-        SAFE_SPRINTF(message, sizeof(message), 
-                    "Successfully imported %d values from:\n%s", 
-                    foundItems, filename);
+        snprintf(message, sizeof(message), 
+                 "Successfully imported %d values from:\n%s", 
+                 foundItems, filename);
         
         if (hasMissing) {
             strcat(message, "\n\n");
@@ -360,45 +362,45 @@ int CVICALLBACK ImportSOCEISSettingsCallback(int panel, int control, int event,
         }
         
         MessagePopup("Import Results", message);
-        LogMessage("Imported %d settings from capacity test results", foundItems);
+        LogMessage("Imported %d settings from capacity experiment results", foundItems);
     } else {
         MessagePopup("Import Failed", 
                      "No compatible values found in the selected file.\n"
-                     "Please select a valid capacity test results file.");
+                     "Please select a valid capacity experiment results file.");
     }
     
     return 0;
 }
 
-int SOCEISTest_IsRunning(void) {
-    return !(g_testContext.state == SOCEIS_STATE_IDLE ||
-             g_testContext.state == SOCEIS_STATE_COMPLETED ||
-             g_testContext.state == SOCEIS_STATE_ERROR ||
-             g_testContext.state == SOCEIS_STATE_CANCELLED);
+int SOCEISExperiment_IsRunning(void) {
+    return !(g_experimentContext.state == SOCEIS_STATE_IDLE ||
+             g_experimentContext.state == SOCEIS_STATE_COMPLETED ||
+             g_experimentContext.state == SOCEIS_STATE_ERROR ||
+             g_experimentContext.state == SOCEIS_STATE_CANCELLED);
 }
 
 /******************************************************************************
- * Test Thread Implementation
+ * Experiment Thread Implementation
  ******************************************************************************/
 
 static int SOCEISExperimentThread(void *functionData) {
-    SOCEISTestContext *ctx = (SOCEISTestContext*)functionData;
+    SOCEISExperimentContext *ctx = (SOCEISExperimentContext*)functionData;
     char message[LARGE_BUFFER_SIZE];
     int result = SUCCESS;
     
     LogMessage("=== Starting SOCEIS Experiment ===");
     
-    // Record test start time
-    ctx->testStartTime = Timer();
+    // Record experiment start time
+    ctx->experimentStartTime = Timer();
     
     // Check if cancelled before showing confirmation
     if (ctx->state == SOCEIS_STATE_CANCELLED) {
-        LogMessage("SOCEIS test cancelled before confirmation");
+        LogMessage("SOCEIS experiment cancelled before confirmation");
         goto cleanup;
     }
     
     // Show confirmation popup
-    SAFE_SPRINTF(message, sizeof(message),
+    snprintf(message, sizeof(message),
         "SOCEIS Experiment Parameters:\n\n"
         "Battery Capacity: %.2f mAh\n"
         "EIS Interval: %.1f%% SOC\n"
@@ -420,18 +422,18 @@ static int SOCEISExperimentThread(void *functionData) {
         ctx->params.logInterval,
         ctx->params.dischargeAfter ? "Yes" : "No");
     
-    int response = ConfirmPopup("Confirm Test Parameters", message);
+    int response = ConfirmPopup("Confirm Experiment Parameters", message);
     if (!response || ctx->state == SOCEIS_STATE_CANCELLED) {
-        LogMessage("SOCEIS test cancelled by user");
+        LogMessage("SOCEIS experiment cancelled by user");
         ctx->state = SOCEIS_STATE_CANCELLED;
         goto cleanup;
     }
     
-    // Create test directory
-    result = CreateTestDirectory(ctx);
+    // Create experiment directory
+    result = CreateExperimentDirectory(ctx);
     if (result != SUCCESS) {
-        LogError("Failed to create test directory");
-        MessagePopup("Error", "Failed to create test directory.\nPlease check permissions.");
+        LogError("Failed to create experiment directory");
+        MessagePopup("Error", "Failed to create experiment directory.\nPlease check permissions.");
         ctx->state = SOCEIS_STATE_ERROR;
         goto cleanup;
     }
@@ -491,8 +493,8 @@ static int SOCEISExperimentThread(void *functionData) {
         goto cleanup;
     }
     
-    // Record test end time
-    ctx->testEndTime = Timer();
+    // Record experiment end time
+    ctx->experimentEndTime = Timer();
     
     ctx->state = SOCEIS_STATE_COMPLETED;
     LogMessage("=== SOCEIS Experiment Completed ===");
@@ -517,42 +519,42 @@ cleanup:
     
     // Update status based on final state
     if (ctx->state == SOCEIS_STATE_COMPLETED) {
-        SetCtrlVal(ctx->mainPanelHandle, PANEL_STR_PSB_STATUS, "SOCEIS test completed");
+        SetCtrlVal(ctx->mainPanelHandle, PANEL_STR_PSB_STATUS, "SOCEIS experiment completed");
     } else if (ctx->state == SOCEIS_STATE_CANCELLED) {
-        SetCtrlVal(ctx->mainPanelHandle, PANEL_STR_PSB_STATUS, "SOCEIS test cancelled");
+        SetCtrlVal(ctx->mainPanelHandle, PANEL_STR_PSB_STATUS, "SOCEIS experiment cancelled");
     } else {
-        SetCtrlVal(ctx->mainPanelHandle, PANEL_STR_PSB_STATUS, "SOCEIS test failed");
+        SetCtrlVal(ctx->mainPanelHandle, PANEL_STR_PSB_STATUS, "SOCEIS experiment failed");
     }
     
     // Free allocated memory
     if (ctx->measurements) {
-	    // Use measurementCapacity instead of measurementCount to catch any partially completed measurements
-	    for (int i = 0; i < ctx->measurementCapacity; i++) {
-	        // Only free if the measurement was actually started
-	        if (i < ctx->measurementCount || 
-	            ctx->measurements[i].ocvData || 
-	            ctx->measurements[i].geisData ||
-	            ctx->measurements[i].frequencies) {
-	            
-	            if (ctx->measurements[i].ocvData) {
-	                BIO_FreeTechniqueData(ctx->measurements[i].ocvData);
-	            }
-	            if (ctx->measurements[i].geisData) {
-	                BIO_FreeTechniqueData(ctx->measurements[i].geisData);
-	            }
-	            if (ctx->measurements[i].frequencies) {
-	                free(ctx->measurements[i].frequencies);
-	            }
-	            if (ctx->measurements[i].zReal) {
-	                free(ctx->measurements[i].zReal);
-	            }
-	            if (ctx->measurements[i].zImag) {
-	                free(ctx->measurements[i].zImag);
-	            }
-	        }
-	    }
-	    free(ctx->measurements);
-	}
+        // Use measurementCapacity instead of measurementCount to catch any partially completed measurements
+        for (int i = 0; i < ctx->measurementCapacity; i++) {
+            // Only free if the measurement was actually started
+            if (i < ctx->measurementCount || 
+                ctx->measurements[i].ocvData || 
+                ctx->measurements[i].geisData ||
+                ctx->measurements[i].frequencies) {
+                
+                if (ctx->measurements[i].ocvData) {
+                    BIO_FreeTechniqueData(ctx->measurements[i].ocvData);
+                }
+                if (ctx->measurements[i].geisData) {
+                    BIO_FreeTechniqueData(ctx->measurements[i].geisData);
+                }
+                if (ctx->measurements[i].frequencies) {
+                    free(ctx->measurements[i].frequencies);
+                }
+                if (ctx->measurements[i].zReal) {
+                    free(ctx->measurements[i].zReal);
+                }
+                if (ctx->measurements[i].zImag) {
+                    free(ctx->measurements[i].zImag);
+                }
+            }
+        }
+        free(ctx->measurements);
+    }
     
     if (ctx->targetSOCs) {
         free(ctx->targetSOCs);
@@ -570,7 +572,7 @@ cleanup:
     CmtReleaseLock(g_busyLock);
     
     // Clear thread ID
-    g_testThreadId = 0;
+    g_experimentThreadId = 0;
     
     return 0;
 }
@@ -579,7 +581,7 @@ cleanup:
  * Helper Functions Implementation
  ******************************************************************************/
 
-static int CreateTestDirectory(SOCEISTestContext *ctx) {
+static int CreateExperimentDirectory(SOCEISExperimentContext *ctx) {
     char basePath[MAX_PATH_LENGTH];
     char dataPath[MAX_PATH_LENGTH];
     
@@ -590,8 +592,8 @@ static int CreateTestDirectory(SOCEISTestContext *ctx) {
     }
     
     // Create data directory
-    SAFE_SPRINTF(dataPath, sizeof(dataPath), "%s%s%s", 
-                basePath, PATH_SEPARATOR, SOCEIS_DATA_DIR);
+    snprintf(dataPath, sizeof(dataPath), "%s%s%s", 
+             basePath, PATH_SEPARATOR, SOCEIS_DATA_DIR);
     
     if (CreateDirectoryPath(dataPath) != SUCCESS) {
         LogError("Failed to create data directory: %s", dataPath);
@@ -599,18 +601,18 @@ static int CreateTestDirectory(SOCEISTestContext *ctx) {
     }
     
     // Create timestamp subdirectory
-    int result = CreateTimestampedDirectory(dataPath, "soceis", 
-                                          ctx->testDirectory, sizeof(ctx->testDirectory));
+    int result = CreateTimestampedDirectory(dataPath, "soceis_experiment", 
+                                          ctx->experimentDirectory, sizeof(ctx->experimentDirectory));
     if (result != SUCCESS) {
-        LogError("Failed to create test directory");
+        LogError("Failed to create experiment directory");
         return result;
     }
     
-    LogMessage("Created test directory: %s", ctx->testDirectory);
+    LogMessage("Created experiment directory: %s", ctx->experimentDirectory);
     return SUCCESS;
 }
 
-static int VerifyBatteryDischarged(SOCEISTestContext *ctx) {
+static int VerifyBatteryDischarged(SOCEISExperimentContext *ctx) {
     char message[LARGE_BUFFER_SIZE];
     
     LogMessage("Verifying battery discharge state...");
@@ -627,9 +629,9 @@ static int VerifyBatteryDischarged(SOCEISTestContext *ctx) {
     }
     
     // Get current battery voltage
-	PSB_Status status;
+    PSB_Status status;
     error = PSB_GetStatusQueued(&status, DEVICE_PRIORITY_NORMAL);
-	
+    
     if (error != PSB_SUCCESS) {
         LogError("Failed to read PSB status: %s", PSB_GetErrorString(error));
         return ERR_COMM_FAILED;
@@ -641,7 +643,7 @@ static int VerifyBatteryDischarged(SOCEISTestContext *ctx) {
                status.voltage, ctx->params.dischargeVoltage, voltageDiff);
     
     if (voltageDiff > SOCEIS_VOLTAGE_MARGIN) {
-        SAFE_SPRINTF(message, sizeof(message),
+        snprintf(message, sizeof(message),
             "Battery may not be fully discharged:\n\n"
             "Measured Voltage: %.3f V\n"
             "Expected Voltage: %.3f V\n"
@@ -673,29 +675,18 @@ static int VerifyBatteryDischarged(SOCEISTestContext *ctx) {
     return SUCCESS;
 }
 
-static int ConfigureGraphs(SOCEISTestContext *ctx) {
+static int ConfigureGraphs(SOCEISExperimentContext *ctx) {
     // Configure Graph 1 - Current vs Time
-    SetCtrlAttribute(ctx->mainPanelHandle, ctx->graph1Handle, ATTR_LABEL_TEXT, "Current vs Time");
-    SetCtrlAttribute(ctx->mainPanelHandle, ctx->graph1Handle, ATTR_XNAME, "Time (s)");
-    SetCtrlAttribute(ctx->mainPanelHandle, ctx->graph1Handle, ATTR_YNAME, "Current (A)");
-    
-    // Set Y-axis range for current
-    SetAxisScalingMode(ctx->mainPanelHandle, ctx->graph1Handle, VAL_LEFT_YAXIS, 
-                       VAL_MANUAL, 0.0, ctx->params.chargeCurrent * 1.1);
-    SetAxisScalingMode(ctx->mainPanelHandle, ctx->graph1Handle, VAL_BOTTOM_XAXIS, 
-                       VAL_AUTOSCALE, 0.0, 0.0);
+    ConfigureGraph(ctx->mainPanelHandle, ctx->graph1Handle, "Current vs Time", "Time (s)", "Current (A)",
+                   0.0, ctx->params.chargeCurrent * 1.1);
     
     // Configure Graph 2 - OCV vs SOC
-    SetCtrlAttribute(ctx->mainPanelHandle, ctx->graph2Handle, ATTR_LABEL_TEXT, "OCV vs SOC");
-    SetCtrlAttribute(ctx->mainPanelHandle, ctx->graph2Handle, ATTR_XNAME, "SOC (%)");
-    SetCtrlAttribute(ctx->mainPanelHandle, ctx->graph2Handle, ATTR_YNAME, "OCV (V)");
+    ConfigureGraph(ctx->mainPanelHandle, ctx->graph2Handle, "OCV vs SOC", "SOC (%)", "OCV (V)",
+                   ctx->params.dischargeVoltage * 0.9, ctx->params.chargeVoltage * 1.1);
     
-    // Set axis ranges - X-axis now goes to 150% to accommodate overcharge
+    // Set X-axis range for SOC graph to accommodate overcharge
     SetAxisScalingMode(ctx->mainPanelHandle, ctx->graph2Handle, VAL_BOTTOM_XAXIS, 
-                       VAL_MANUAL, 0.0, 150.0);  // Changed from 100.0 to 150.0
-    SetAxisScalingMode(ctx->mainPanelHandle, ctx->graph2Handle, VAL_LEFT_YAXIS, 
-                       VAL_MANUAL, ctx->params.dischargeVoltage * 0.9, 
-                       ctx->params.chargeVoltage * 1.1);
+                       VAL_MANUAL, 0.0, 150.0);
     
     // Configure Graph Biologic - Nyquist Plot
     SetCtrlAttribute(ctx->mainPanelHandle, ctx->graphBiologicHandle, ATTR_LABEL_TEXT, "Nyquist Plot");
@@ -714,7 +705,7 @@ static int ConfigureGraphs(SOCEISTestContext *ctx) {
     return SUCCESS;
 }
 
-static int CalculateTargetSOCs(SOCEISTestContext *ctx) {
+static int CalculateTargetSOCs(SOCEISExperimentContext *ctx) {
     // Initial allocation - start with expected targets up to 100%
     // We'll grow this dynamically if needed
     ctx->numTargetSOCs = 2;  // Start with 0% and 100%
@@ -764,7 +755,7 @@ static int CalculateTargetSOCs(SOCEISTestContext *ctx) {
     return SUCCESS;
 }
 
-static int AddDynamicTargetSOC(SOCEISTestContext *ctx, double targetSOC) {
+static int AddDynamicTargetSOC(SOCEISExperimentContext *ctx, double targetSOC) {
     // Check if we need to grow the arrays
     if (ctx->numTargetSOCs >= ctx->measurementCapacity) {
         // Grow by 10 more slots
@@ -814,7 +805,7 @@ static int SetRelayState(int pin, int state) {
     return TNY_SetPinQueued(pin, state, DEVICE_PRIORITY_NORMAL);
 }
 
-static int SwitchToBioLogic(SOCEISTestContext *ctx) {
+static int SwitchToBioLogic(SOCEISExperimentContext *ctx) {
     int result;
     
     LogMessage("Switching to BioLogic...");
@@ -848,20 +839,11 @@ static int SwitchToBioLogic(SOCEISTestContext *ctx) {
     // Wait for relay to settle
     Delay(SOCEIS_RELAY_SWITCH_DELAY_MS / 1000.0);
     
-    // Verify BioLogic connection
-    LogMessage("Verifying BioLogic connection...");
-    result = BIO_TestConnectionQueued(ctx->biologicID, DEVICE_PRIORITY_NORMAL);
-    if (result != SUCCESS) {
-        LogError("BioLogic connection test failed after relay switch: %s", BIO_GetErrorString(result));
-        LogError("This suggests the relay may not have switched properly or BioLogic communication failed");
-        return result;
-    }
-    
-    LogMessage("Successfully switched to BioLogic and verified connection");
+    LogMessage("Successfully switched to BioLogic");
     return SUCCESS;
 }
 
-static int SwitchToPSB(SOCEISTestContext *ctx) {
+static int SwitchToPSB(SOCEISExperimentContext *ctx) {
     int result;
     
     LogMessage("Switching to PSB...");
@@ -892,7 +874,7 @@ static int SwitchToPSB(SOCEISTestContext *ctx) {
     return SUCCESS;
 }
 
-static int PerformEISMeasurement(SOCEISTestContext *ctx, double targetSOC) {
+static int PerformEISMeasurement(SOCEISExperimentContext *ctx, double targetSOC) {
     int result;
     int retryCount = 0;
     
@@ -911,9 +893,9 @@ static int PerformEISMeasurement(SOCEISTestContext *ctx, double targetSOC) {
     EISMeasurement *measurement = &ctx->measurements[ctx->measurementCount];
     measurement->targetSOC = targetSOC;
     measurement->actualSOC = ctx->currentSOC;
-    measurement->timestamp = Timer() - ctx->testStartTime;
-	
-	// Initialize pointers to NULL for safe cleanup
+    measurement->timestamp = Timer() - ctx->experimentStartTime;
+    
+    // Initialize pointers to NULL for safe cleanup
     measurement->ocvData = NULL;
     measurement->geisData = NULL;
     measurement->frequencies = NULL;
@@ -923,8 +905,8 @@ static int PerformEISMeasurement(SOCEISTestContext *ctx, double targetSOC) {
     
     // Update UI
     char statusMsg[MEDIUM_BUFFER_SIZE];
-    SAFE_SPRINTF(statusMsg, sizeof(statusMsg), 
-                "Measuring EIS at %.1f%% SOC...", ctx->currentSOC);
+    snprintf(statusMsg, sizeof(statusMsg), 
+             "Measuring EIS at %.1f%% SOC...", ctx->currentSOC);
     SetCtrlVal(ctx->mainPanelHandle, PANEL_STR_PSB_STATUS, statusMsg);
     
     while (retryCount <= SOCEIS_MAX_EIS_RETRY) {
@@ -990,20 +972,13 @@ static int PerformEISMeasurement(SOCEISTestContext *ctx, double targetSOC) {
     return SUCCESS;
 }
 
-static int RunOCVMeasurement(SOCEISTestContext *ctx, EISMeasurement *measurement) {
+static int RunOCVMeasurement(SOCEISExperimentContext *ctx, EISMeasurement *measurement) {
     int result;
     
     LogDebug("Starting OCV measurement...");
     
     // Initialize the voltage to a known value
     measurement->ocvVoltage = 0.0;
-    
-    // Test connection first
-    result = BIO_TestConnectionQueued(ctx->biologicID, DEVICE_PRIORITY_NORMAL);
-    if (result != SUCCESS) {
-        LogError("BioLogic connection test failed before OCV: %s", BIO_GetErrorString(result));
-        return result;
-    }
     
     // Run OCV
     result = BIO_RunOCVQueued(ctx->biologicID, 0,  // channel 0
@@ -1015,7 +990,7 @@ static int RunOCVMeasurement(SOCEISTestContext *ctx, EISMeasurement *measurement
                             true,  // process data
                             &measurement->ocvData,
                             SOCEIS_OCV_TIMEOUT_MS,
-							DEVICE_PRIORITY_NORMAL,
+                            DEVICE_PRIORITY_NORMAL,
                             NULL, NULL);
     
     if (result != SUCCESS) {
@@ -1051,14 +1026,14 @@ static int RunOCVMeasurement(SOCEISTestContext *ctx, EISMeasurement *measurement
     return SUCCESS;
 }
 
-static int RunGEISMeasurement(SOCEISTestContext *ctx, EISMeasurement *measurement) {
+static int RunGEISMeasurement(SOCEISExperimentContext *ctx, EISMeasurement *measurement) {
     int result;
     
     LogDebug("Starting GEIS measurement...");
     
     // Run GEIS
     result = BIO_RunGEISQueued(ctx->biologicID, 0,  // channel 0
-                             SOCEIS_GEIS_VS_INITIAL,  // vs initial
+                             SOCEIS_GEIS_VS_INITIAL,
                              SOCEIS_GEIS_INITIAL_CURRENT,
                              SOCEIS_GEIS_DURATION_S,
                              SOCEIS_GEIS_RECORD_EVERY_DT,
@@ -1075,7 +1050,7 @@ static int RunGEISMeasurement(SOCEISTestContext *ctx, EISMeasurement *measuremen
                              true,  // process data
                              &measurement->geisData,
                              SOCEIS_GEIS_TIMEOUT_MS,
-							 DEVICE_PRIORITY_NORMAL,
+                             DEVICE_PRIORITY_NORMAL,
                              NULL, NULL);
     
     if (result != SUCCESS) {
@@ -1177,15 +1152,15 @@ static int ProcessGEISData(BIO_TechniqueData *geisData, EISMeasurement *measurem
     return SUCCESS;
 }
 
-static int SaveMeasurementData(SOCEISTestContext *ctx, EISMeasurement *measurement) {
+static int SaveMeasurementData(SOCEISExperimentContext *ctx, EISMeasurement *measurement) {
     char filename[MAX_PATH_LENGTH];
     FILE *file;
     
     // Create filename based on SOC
-    SAFE_SPRINTF(filename, sizeof(filename), "%s%s%s%02d.txt", 
-                ctx->testDirectory, PATH_SEPARATOR, 
-                SOCEIS_DETAILS_FILE_PREFIX, 
-                (int)(measurement->actualSOC + 0.5));
+    snprintf(filename, sizeof(filename), "%s%s%s%02d.txt", 
+             ctx->experimentDirectory, PATH_SEPARATOR, 
+             SOCEIS_DETAILS_FILE_PREFIX, 
+             (int)(measurement->actualSOC + 0.5));
     
     file = fopen(filename, "w");
     if (!file) {
@@ -1194,49 +1169,49 @@ static int SaveMeasurementData(SOCEISTestContext *ctx, EISMeasurement *measureme
     }
     
     // Write measurement information
-    fprintf(file, "[Measurement_Information]\n");
+    WriteINISection(file, "Measurement_Information");
     
     // Get timestamp
     time_t now = time(NULL);
     char timeStr[64];
-    strftime(timeStr, sizeof(timeStr), "%Y-%m-%dT%H:%M:%S", localtime(&now));
-    fprintf(file, "Timestamp=%s\n", timeStr);
+    FormatTimestamp(now, timeStr, sizeof(timeStr));
+    WriteINIValue(file, "Timestamp", "%s", timeStr);
     
-    fprintf(file, "Target_SOC_Percent=%.1f\n", measurement->targetSOC);
-    fprintf(file, "Actual_SOC_Percent=%.1f\n", measurement->actualSOC);
-    fprintf(file, "Elapsed_Time_s=%.1f\n", measurement->timestamp);
-    fprintf(file, "Battery_Voltage_V=%.3f\n", measurement->ocvVoltage);
+    WriteINIDouble(file, "Target_SOC_Percent", measurement->targetSOC, 1);
+    WriteINIDouble(file, "Actual_SOC_Percent", measurement->actualSOC, 1);
+    WriteINIDouble(file, "Elapsed_Time_s", measurement->timestamp, 1);
+    WriteINIDouble(file, "Battery_Voltage_V", measurement->ocvVoltage, 3);
     fprintf(file, "\n");
     
     // Write OCV parameters
-    fprintf(file, "[OCV_Parameters]\n");
-    fprintf(file, "Duration_s=%.1f\n", SOCEIS_OCV_DURATION_S);
-    fprintf(file, "Sample_Interval_s=%.1f\n", SOCEIS_OCV_SAMPLE_INTERVAL_S);
-    fprintf(file, "Record_Every_dE_mV=%.1f\n", SOCEIS_OCV_RECORD_EVERY_DE);
-    fprintf(file, "Record_Every_dT_s=%.1f\n", SOCEIS_OCV_RECORD_EVERY_DT);
+    WriteINISection(file, "OCV_Parameters");
+    WriteINIDouble(file, "Duration_s", SOCEIS_OCV_DURATION_S, 1);
+    WriteINIDouble(file, "Sample_Interval_s", SOCEIS_OCV_SAMPLE_INTERVAL_S, 1);
+    WriteINIDouble(file, "Record_Every_dE_mV", SOCEIS_OCV_RECORD_EVERY_DE, 1);
+    WriteINIDouble(file, "Record_Every_dT_s", SOCEIS_OCV_RECORD_EVERY_DT, 1);
     fprintf(file, "\n");
     
     // Write OCV results
-    fprintf(file, "[OCV_Results]\n");
-    fprintf(file, "Final_Voltage_V=%.3f\n", measurement->ocvVoltage);
+    WriteINISection(file, "OCV_Results");
+    WriteINIDouble(file, "Final_Voltage_V", measurement->ocvVoltage, 3);
     if (measurement->ocvData && measurement->ocvData->convertedData) {
-        fprintf(file, "Data_Points=%d\n", measurement->ocvData->convertedData->numPoints);
+        WriteINIValue(file, "Data_Points", "%d", measurement->ocvData->convertedData->numPoints);
     }
     fprintf(file, "\n");
     
     // Write GEIS parameters
-    fprintf(file, "[GEIS_Parameters]\n");
-    fprintf(file, "Initial_Current_A=%.3f\n", SOCEIS_GEIS_INITIAL_CURRENT);
-    fprintf(file, "Duration_s=%.1f\n", SOCEIS_GEIS_DURATION_S);
-    fprintf(file, "Initial_Freq_Hz=%.0f\n", SOCEIS_GEIS_INITIAL_FREQ);
-    fprintf(file, "Final_Freq_Hz=%.0f\n", SOCEIS_GEIS_FINAL_FREQ);
-    fprintf(file, "Amplitude_mA=%.0f\n", SOCEIS_GEIS_AMPLITUDE_I * 1000);
-    fprintf(file, "Frequency_Count=%d\n", SOCEIS_GEIS_FREQ_NUMBER);
+    WriteINISection(file, "GEIS_Parameters");
+    WriteINIDouble(file, "Initial_Current_A", SOCEIS_GEIS_INITIAL_CURRENT, 3);
+    WriteINIDouble(file, "Duration_s", SOCEIS_GEIS_DURATION_S, 1);
+    WriteINIDouble(file, "Initial_Freq_Hz", SOCEIS_GEIS_INITIAL_FREQ, 0);
+    WriteINIDouble(file, "Final_Freq_Hz", SOCEIS_GEIS_FINAL_FREQ, 0);
+    WriteINIDouble(file, "Amplitude_mA", SOCEIS_GEIS_AMPLITUDE_I * 1000, 0);
+    WriteINIValue(file, "Frequency_Count", "%d", SOCEIS_GEIS_FREQ_NUMBER);
     fprintf(file, "\n");
     
     // Write GEIS results
-    fprintf(file, "[GEIS_Results]\n");
-    fprintf(file, "Data_Points=%d\n", measurement->numPoints);
+    WriteINISection(file, "GEIS_Results");
+    WriteINIValue(file, "Data_Points", "%d", measurement->numPoints);
     fprintf(file, "\n");
     
     // Write impedance data table
@@ -1264,7 +1239,7 @@ static int SaveMeasurementData(SOCEISTestContext *ctx, EISMeasurement *measureme
     return SUCCESS;
 }
 
-static int RunChargingPhase(SOCEISTestContext *ctx) {
+static int RunChargingPhase(SOCEISExperimentContext *ctx) {
     char filename[MAX_PATH_LENGTH];
     int result;
     int nextTargetIndex = 1;  // Skip 0% as we already measured it
@@ -1273,8 +1248,8 @@ static int RunChargingPhase(SOCEISTestContext *ctx) {
     LogMessage("Starting charging phase...");
     
     // Create charge log file
-    SAFE_SPRINTF(filename, sizeof(filename), "%s%scharge.csv", 
-                ctx->testDirectory, PATH_SEPARATOR);
+    snprintf(filename, sizeof(filename), "%s%scharge.csv", 
+             ctx->experimentDirectory, PATH_SEPARATOR);
     
     ctx->currentLogFile = fopen(filename, "w");
     if (!ctx->currentLogFile) {
@@ -1322,8 +1297,8 @@ static int RunChargingPhase(SOCEISTestContext *ctx) {
         fclose(ctx->currentLogFile);
         return result;
     }
-	
-	result = PSB_SetPowerQueued(SOCEIS_MAX_POWER, DEVICE_PRIORITY_NORMAL);
+    
+    result = PSB_SetPowerQueued(SOCEIS_MAX_POWER, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         LogError("Failed to set power value: %s", PSB_GetErrorString(result));
         fclose(ctx->currentLogFile);
@@ -1556,7 +1531,7 @@ static int RunChargingPhase(SOCEISTestContext *ctx) {
     return (ctx->state == SOCEIS_STATE_CANCELLED) ? ERR_CANCELLED : SUCCESS;
 }
 
-static int UpdateSOCTracking(SOCEISTestContext *ctx, double voltage, double current) {
+static int UpdateSOCTracking(SOCEISExperimentContext *ctx, double voltage, double current) {
     double currentTime = Timer() - ctx->phaseStartTime;
     
     if (ctx->lastTime > 0) {
@@ -1585,14 +1560,13 @@ static int UpdateSOCTracking(SOCEISTestContext *ctx, double voltage, double curr
     return SUCCESS;
 }
 
-static void UpdateGraphs(SOCEISTestContext *ctx, double current, double time) {
+static void UpdateGraphs(SOCEISExperimentContext *ctx, double current, double time) {
     // Plot current point on graph 1
-    PlotPoint(ctx->mainPanelHandle, ctx->graph1Handle, 
-              time, fabs(current), 
-              VAL_SOLID_CIRCLE, VAL_RED);
+    PlotDataPoint(ctx->mainPanelHandle, ctx->graph1Handle, 
+                  time, fabs(current), VAL_SOLID_CIRCLE, VAL_RED);
 }
 
-static void UpdateOCVGraph(SOCEISTestContext *ctx, EISMeasurement *measurement) {
+static void UpdateOCVGraph(SOCEISExperimentContext *ctx, EISMeasurement *measurement) {
     // Plot OCV vs SOC point
     ctx->ocvPlotHandle = PlotPoint(ctx->mainPanelHandle, ctx->graph2Handle, 
                                    measurement->actualSOC, measurement->ocvVoltage, 
@@ -1620,7 +1594,7 @@ static void UpdateOCVGraph(SOCEISTestContext *ctx, EISMeasurement *measurement) 
     }
 }
 
-static void UpdateNyquistPlot(SOCEISTestContext *ctx, EISMeasurement *measurement) {
+static void UpdateNyquistPlot(SOCEISExperimentContext *ctx, EISMeasurement *measurement) {
     if (measurement->numPoints == 0) return;
     
     // Clear previous Nyquist plot
@@ -1642,18 +1616,18 @@ static void UpdateNyquistPlot(SOCEISTestContext *ctx, EISMeasurement *measuremen
     
     // Add title with SOC
     char title[MEDIUM_BUFFER_SIZE];
-    SAFE_SPRINTF(title, sizeof(title), "Nyquist Plot - SOC: %.1f%%", measurement->actualSOC);
+    snprintf(title, sizeof(title), "Nyquist Plot - SOC: %.1f%%", measurement->actualSOC);
     SetCtrlAttribute(ctx->mainPanelHandle, ctx->graphBiologicHandle, ATTR_LABEL_TEXT, title);
     
     free(negZImag);
 }
 
-static int WriteResultsFile(SOCEISTestContext *ctx) {
+static int WriteResultsFile(SOCEISExperimentContext *ctx) {
     char filename[MAX_PATH_LENGTH];
     FILE *file;
     
-    SAFE_SPRINTF(filename, sizeof(filename), "%s%s%s", 
-                ctx->testDirectory, PATH_SEPARATOR, SOCEIS_RESULTS_FILE);
+    snprintf(filename, sizeof(filename), "%s%s%s", 
+             ctx->experimentDirectory, PATH_SEPARATOR, SOCEIS_RESULTS_FILE);
     
     file = fopen(filename, "w");
     if (!file) {
@@ -1661,31 +1635,31 @@ static int WriteResultsFile(SOCEISTestContext *ctx) {
         return ERR_BASE_FILE;
     }
     
-    // Get timestamp for test start
-    time_t startTime = (time_t)ctx->testStartTime;
+    // Get timestamp for experiment start
+    time_t startTime = (time_t)ctx->experimentStartTime;
     char startTimeStr[64];
-    strftime(startTimeStr, sizeof(startTimeStr), "%Y-%m-%dT%H:%M:%S", localtime(&startTime));
+    FormatTimestamp(startTime, startTimeStr, sizeof(startTimeStr));
     
-    // Get timestamp for test end
-    time_t endTime = (time_t)ctx->testEndTime;
+    // Get timestamp for experiment end
+    time_t endTime = (time_t)ctx->experimentEndTime;
     char endTimeStr[64];
-    strftime(endTimeStr, sizeof(endTimeStr), "%Y-%m-%dT%H:%M:%S", localtime(&endTime));
+    FormatTimestamp(endTime, endTimeStr, sizeof(endTimeStr));
     
     // Write header
     fprintf(file, "# SOCEIS Experiment Summary\n");
     fprintf(file, "# Generated by Battery Tester v%s\n\n", PROJECT_VERSION);
     
-    // Test Information
-    WriteINISection(file, "Test_Information");
+    // Experiment Information
+    WriteINISection(file, "Experiment_Information");
     WriteINIValue(file, "Start_Time", "%s", startTimeStr);
     WriteINIValue(file, "End_Time", "%s", endTimeStr);
-    WriteINIDouble(file, "Total_Duration_h", (ctx->testEndTime - ctx->testStartTime) / 3600.0, 2);
+    WriteINIDouble(file, "Total_Duration_h", (ctx->experimentEndTime - ctx->experimentStartTime) / 3600.0, 2);
     WriteINIDouble(file, "Battery_Capacity_mAh", ctx->params.batteryCapacity_mAh, 1);
     WriteINIDouble(file, "EIS_Interval_Percent", ctx->params.eisInterval, 1);
     fprintf(file, "\n");
     
-    // Test Parameters
-    WriteINISection(file, "Test_Parameters");
+    // Experiment Parameters
+    WriteINISection(file, "Experiment_Parameters");
     WriteINIDouble(file, "Charge_Voltage_V", ctx->params.chargeVoltage, 3);
     WriteINIDouble(file, "Discharge_Voltage_V", ctx->params.dischargeVoltage, 3);
     WriteINIDouble(file, "Charge_Current_A", ctx->params.chargeCurrent, 3);
@@ -1739,17 +1713,17 @@ static int WriteResultsFile(SOCEISTestContext *ctx) {
     return SUCCESS;
 }
 
-static void RestoreUI(SOCEISTestContext *ctx) {
+static void RestoreUI(SOCEISExperimentContext *ctx) {
     // Re-enable controls
     DimCapacityExperimentControls(ctx->mainPanelHandle, ctx->tabPanelHandle, 0, controls, numControls);
 }
 
-static void ClearGraphs(SOCEISTestContext *ctx) {
+static void ClearGraphs(SOCEISExperimentContext *ctx) {
     int graphs[] = {ctx->graph1Handle, ctx->graph2Handle, ctx->graphBiologicHandle};
     ClearAllGraphs(ctx->mainPanelHandle, graphs, 3);
 }
 
-static int DischargeToFiftyPercent(SOCEISTestContext *ctx) {
+static int DischargeToFiftyPercent(SOCEISExperimentContext *ctx) {
     if (ctx->params.batteryCapacity_mAh <= 0) {
         LogWarning("Cannot discharge to 50%% - battery capacity unknown");
         return ERR_INVALID_PARAMETER;
@@ -1807,21 +1781,21 @@ static int DischargeToFiftyPercent(SOCEISTestContext *ctx) {
  * Module Management Functions
  ******************************************************************************/
 
-void SOCEISTest_Cleanup(void) {
-    if (SOCEISTest_IsRunning()) {
-        SOCEISTest_Abort();
+void SOCEISExperiment_Cleanup(void) {
+    if (SOCEISExperiment_IsRunning()) {
+        SOCEISExperiment_Abort();
     }
 }
 
-int SOCEISTest_Abort(void) {
-    if (SOCEISTest_IsRunning()) {
-        g_testContext.state = SOCEIS_STATE_CANCELLED;
+int SOCEISExperiment_Abort(void) {
+    if (SOCEISExperiment_IsRunning()) {
+        g_experimentContext.state = SOCEIS_STATE_CANCELLED;
         
         // Wait for thread to complete
-        if (g_testThreadId != 0) {
-            CmtWaitForThreadPoolFunctionCompletion(g_threadPool, g_testThreadId,
+        if (g_experimentThreadId != 0) {
+            CmtWaitForThreadPoolFunctionCompletion(g_threadPool, g_experimentThreadId,
                                                  OPT_TP_PROCESS_EVENTS_WHILE_WAITING);
-            g_testThreadId = 0;
+            g_experimentThreadId = 0;
         }
     }
     return SUCCESS;

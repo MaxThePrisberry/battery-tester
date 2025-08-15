@@ -191,16 +191,6 @@ extern int g_systemBusy;
 // Array size macro
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
 
-// String safety macros
-#define SAFE_STRCPY(dest, src, size) \
-    do { \
-        strncpy((dest), (src), (size) - 1); \
-        (dest)[(size) - 1] = '\0'; \
-    } while(0)
-
-#define SAFE_SPRINTF(buffer, size, ...) \
-    snprintf((buffer), (size), __VA_ARGS__)
-
 //==============================================================================
 // UI Update Notes
 //==============================================================================

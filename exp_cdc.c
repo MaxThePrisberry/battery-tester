@@ -16,9 +16,9 @@
  * Module Variables
  ******************************************************************************/
 
-// Test context and thread management
-static CDCTestContext g_testContext = {0};
-static CmtThreadFunctionID g_testThreadId = 0;
+// Experiment context and thread management
+static CDCExperimentContext g_experimentContext = {0};
+static CmtThreadFunctionID g_experimentThreadId = 0;
 
 // Control arrays for dimming
 static const int g_cdcControls[] = {
@@ -35,11 +35,10 @@ static const int g_numCdcControls = sizeof(g_cdcControls) / sizeof(g_cdcControls
 
 static int CDCExperimentThread(void *functionData);
 static int StartCDCOperation(int panel, int control, CDCOperationMode mode);
-static int VerifyBatteryState(CDCTestContext *ctx);
-static int RunOperation(CDCTestContext *ctx);
-static void UpdateGraph(CDCTestContext *ctx, double current, double time);
-static void ClearGraph(CDCTestContext *ctx);
-static void RestoreUI(CDCTestContext *ctx);
+static int VerifyBatteryState(CDCExperimentContext *ctx);
+static int RunOperation(CDCExperimentContext *ctx);
+static void UpdateGraph(CDCExperimentContext *ctx, double current, double time);
+static void RestoreUI(CDCExperimentContext *ctx);
 static const char* GetModeName(CDCOperationMode mode);
 
 /******************************************************************************
@@ -66,16 +65,16 @@ int CVICALLBACK CDCDischargeCallback(int panel, int control, int event,
     return StartCDCOperation(panel, control, CDC_MODE_DISCHARGE);
 }
 
-int CDCTest_IsRunning(void) {
-    return !(g_testContext.state == CDC_STATE_IDLE ||
-             g_testContext.state == CDC_STATE_COMPLETED ||
-             g_testContext.state == CDC_STATE_ERROR ||
-             g_testContext.state == CDC_STATE_CANCELLED);
+int CDCExperiment_IsRunning(void) {
+    return !(g_experimentContext.state == CDC_STATE_IDLE ||
+             g_experimentContext.state == CDC_STATE_COMPLETED ||
+             g_experimentContext.state == CDC_STATE_ERROR ||
+             g_experimentContext.state == CDC_STATE_CANCELLED);
 }
 
-int CDCTest_GetMode(void) {
-    if (CDCTest_IsRunning()) {
-        return g_testContext.mode;
+int CDCExperiment_GetMode(void) {
+    if (CDCExperiment_IsRunning()) {
+        return g_experimentContext.mode;
     }
     return -1;
 }
@@ -86,10 +85,10 @@ int CDCTest_GetMode(void) {
 
 static int StartCDCOperation(int panel, int control, CDCOperationMode mode) {
     // Check if CDC operation is already running
-    if (CDCTest_IsRunning()) {
+    if (CDCExperiment_IsRunning()) {
         // This is a Stop request
-        LogMessage("User requested to stop %s", GetModeName(g_testContext.mode));
-        g_testContext.state = CDC_STATE_CANCELLED;
+        LogMessage("User requested to stop %s", GetModeName(g_experimentContext.mode));
+        g_experimentContext.state = CDC_STATE_CANCELLED;
         return 0;
     }
     
@@ -154,27 +153,27 @@ static int StartCDCOperation(int panel, int control, CDCOperationMode mode) {
         return 0;
     }
     
-    // Initialize test context
-    memset(&g_testContext, 0, sizeof(g_testContext));
-    g_testContext.state = CDC_STATE_PREPARING;
-    g_testContext.mode = mode;
-    g_testContext.mainPanelHandle = g_mainPanelHandle;
-    g_testContext.tabPanelHandle = panel;
-    g_testContext.activeButtonControl = control;
-    g_testContext.psbHandle = psbHandle;
-    g_testContext.graphHandle = PANEL_GRAPH_1;
+    // Initialize experiment context
+    memset(&g_experimentContext, 0, sizeof(g_experimentContext));
+    g_experimentContext.state = CDC_STATE_PREPARING;
+    g_experimentContext.mode = mode;
+    g_experimentContext.mainPanelHandle = g_mainPanelHandle;
+    g_experimentContext.tabPanelHandle = panel;
+    g_experimentContext.activeButtonControl = control;
+    g_experimentContext.psbHandle = psbHandle;
+    g_experimentContext.graphHandle = PANEL_GRAPH_1;
     
-    // Read test parameters from UI based on mode
+    // Read experiment parameters from UI based on mode
     if (mode == CDC_MODE_CHARGE) {
-        GetCtrlVal(g_mainPanelHandle, PANEL_NUM_SET_CHARGE_V, &g_testContext.params.targetVoltage);
-        GetCtrlVal(g_mainPanelHandle, PANEL_NUM_SET_CHARGE_I, &g_testContext.params.targetCurrent);
+        GetCtrlVal(g_mainPanelHandle, PANEL_NUM_SET_CHARGE_V, &g_experimentContext.params.targetVoltage);
+        GetCtrlVal(g_mainPanelHandle, PANEL_NUM_SET_CHARGE_I, &g_experimentContext.params.targetCurrent);
     } else {
-        GetCtrlVal(g_mainPanelHandle, PANEL_NUM_SET_DISCHARGE_V, &g_testContext.params.targetVoltage);
-        GetCtrlVal(g_mainPanelHandle, PANEL_NUM_SET_DISCHARGE_I, &g_testContext.params.targetCurrent);
+        GetCtrlVal(g_mainPanelHandle, PANEL_NUM_SET_DISCHARGE_V, &g_experimentContext.params.targetVoltage);
+        GetCtrlVal(g_mainPanelHandle, PANEL_NUM_SET_DISCHARGE_I, &g_experimentContext.params.targetCurrent);
     }
     
-    GetCtrlVal(panel, CDC_NUM_CURRENT_THRESHOLD, &g_testContext.params.currentThreshold);
-    GetCtrlVal(panel, CDC_NUM_INTERVAL, &g_testContext.params.logInterval);
+    GetCtrlVal(panel, CDC_NUM_CURRENT_THRESHOLD, &g_experimentContext.params.currentThreshold);
+    GetCtrlVal(panel, CDC_NUM_INTERVAL, &g_experimentContext.params.logInterval);
     
     // Change button text to "Stop"
     SetCtrlAttribute(panel, control, ATTR_LABEL_TEXT, "Stop");
@@ -193,12 +192,12 @@ static int StartCDCOperation(int panel, int control, CDCOperationMode mode) {
     DimCapacityExperimentControls(g_mainPanelHandle, panel, 1, 
                                   controlsToDim, dimCount);
     
-    // Start test thread
+    // Start experiment thread
     int error = CmtScheduleThreadPoolFunction(g_threadPool, CDCExperimentThread, 
-                                            &g_testContext, &g_testThreadId);
+                                            &g_experimentContext, &g_experimentThreadId);
     if (error != 0) {
         // Failed to start thread
-        g_testContext.state = CDC_STATE_ERROR;
+        g_experimentContext.state = CDC_STATE_ERROR;
         SetCtrlAttribute(panel, control, ATTR_LABEL_TEXT, 
                         mode == CDC_MODE_CHARGE ? "Charge" : "Discharge");
         DimCapacityExperimentControls(g_mainPanelHandle, panel, 0, 
@@ -216,18 +215,18 @@ static int StartCDCOperation(int panel, int control, CDCOperationMode mode) {
 }
 
 /******************************************************************************
- * Test Thread Implementation
+ * Experiment Thread Implementation
  ******************************************************************************/
 
 static int CDCExperimentThread(void *functionData) {
-    CDCTestContext *ctx = (CDCTestContext*)functionData;
+    CDCExperimentContext *ctx = (CDCExperimentContext*)functionData;
     char message[LARGE_BUFFER_SIZE];
     int result = SUCCESS;
     
     LogMessage("=== Starting %s Operation ===", GetModeName(ctx->mode));
     
-    // Record test start time
-    ctx->testStartTime = Timer();
+    // Record experiment start time
+    ctx->experimentStartTime = GetTimestamp();
     
     // Check if cancelled before showing confirmation
     if (ctx->state == CDC_STATE_CANCELLED) {
@@ -236,7 +235,7 @@ static int CDCExperimentThread(void *functionData) {
     }
     
     // Show confirmation popup
-    SAFE_SPRINTF(message, sizeof(message),
+    snprintf(message, sizeof(message),
         "%s Operation Parameters:\n\n"
         "Target Voltage: %.2f V\n"
         "Target Current: %.2f A\n"
@@ -282,10 +281,10 @@ static int CDCExperimentThread(void *functionData) {
         goto cleanup;
     }
     
-    // Configure graph
+    // Configure graph using common utility
     ConfigureGraph(ctx->mainPanelHandle, ctx->graphHandle, 
-           "Current vs Time", "Time (s)", "Current (A)", 
-           0.0, ctx->params.targetCurrent * 1.1);
+                   "Current vs Time", "Time (s)", "Current (A)", 
+                   0.0, ctx->params.targetCurrent * 1.1);
 	
 	// Clear any existing plots
 	DeleteGraphPlot(ctx->mainPanelHandle, ctx->graphHandle, -1, VAL_DELAYED_DRAW);
@@ -334,7 +333,7 @@ cleanup:
     CmtReleaseLock(g_busyLock);
     
     // Clear thread ID
-    g_testThreadId = 0;
+    g_experimentThreadId = 0;
     
     return 0;
 }
@@ -343,7 +342,7 @@ cleanup:
  * Helper Functions Implementation
  ******************************************************************************/
 
-static int VerifyBatteryState(CDCTestContext *ctx) {
+static int VerifyBatteryState(CDCExperimentContext *ctx) {
     char message[LARGE_BUFFER_SIZE];
     
     LogMessage("Verifying battery state...");
@@ -371,7 +370,7 @@ static int VerifyBatteryState(CDCTestContext *ctx) {
     if (voltageDiff < CDC_VOLTAGE_TOLERANCE) {
         const char *stateStr = (ctx->mode == CDC_MODE_CHARGE) ? "charged" : "discharged";
         
-        SAFE_SPRINTF(message, sizeof(message),
+        snprintf(message, sizeof(message),
             "Battery appears to already be %s:\n\n"
             "Current Voltage: %.3f V\n"
             "Target Voltage: %.3f V\n"
@@ -400,7 +399,7 @@ static int VerifyBatteryState(CDCTestContext *ctx) {
     return SUCCESS;
 }
 
-static int RunOperation(CDCTestContext *ctx) {
+static int RunOperation(CDCExperimentContext *ctx) {
     int result;
     
     // Check for cancellation
@@ -411,17 +410,15 @@ static int RunOperation(CDCTestContext *ctx) {
     // Update state
     ctx->state = CDC_STATE_RUNNING;
     
-    // Configure test parameters
-    LogMessage("Configuring test parameters...");
+    // Configure experiment parameters
+    LogMessage("Configuring experiment parameters...");
     
-    // Get all voltage and current values from UI
-    double chargeVoltage, dischargeVoltage, chargeCurrent, dischargeCurrent;
-    GetCtrlVal(g_mainPanelHandle, PANEL_NUM_SET_CHARGE_V, &chargeVoltage);
-    GetCtrlVal(g_mainPanelHandle, PANEL_NUM_SET_DISCHARGE_V, &dischargeVoltage);
+    // Get charge and discharge current values from UI (both needed for PSB configuration)
+    double chargeCurrent, dischargeCurrent;
     GetCtrlVal(g_mainPanelHandle, PANEL_NUM_SET_CHARGE_I, &chargeCurrent);
     GetCtrlVal(g_mainPanelHandle, PANEL_NUM_SET_DISCHARGE_I, &dischargeCurrent);
     
-    // Set both source and sink current values
+    // Set both source and sink current values to allow backflow
     result = PSB_SetCurrentQueued(chargeCurrent, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         LogError("Failed to set source current: %s", PSB_GetErrorString(result));
@@ -436,7 +433,7 @@ static int RunOperation(CDCTestContext *ctx) {
     
     LogMessage("Current values set - Source: %.2fA, Sink: %.2fA", chargeCurrent, dischargeCurrent);
     
-    // Now set the actual target voltage
+    // Set the target voltage from context (already read in StartCDCOperation)
     result = PSB_SetVoltageQueued(ctx->params.targetVoltage, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         LogError("Failed to set target voltage: %s", PSB_GetErrorString(result));
@@ -457,8 +454,7 @@ static int RunOperation(CDCTestContext *ctx) {
     }
     
     // Enable PSB output
-    PSB_SetOutputEnableQueued(1, DEVICE_PRIORITY_NORMAL);
-	
+    result = PSB_SetOutputEnableQueued(1, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         LogError("Failed to enable output: %s", PSB_GetErrorString(result));
         return result;
@@ -475,7 +471,7 @@ static int RunOperation(CDCTestContext *ctx) {
     }
     
     // Initialize timing
-    double operationStartTime = Timer();
+    double operationStartTime = GetTimestamp();
     ctx->lastLogTime = operationStartTime;
     ctx->lastGraphUpdate = operationStartTime;
     ctx->dataPointCount = 0;
@@ -491,7 +487,7 @@ static int RunOperation(CDCTestContext *ctx) {
             break;
         }
         
-        double currentTime = Timer();
+        double currentTime = GetTimestamp();
         ctx->elapsedTime = currentTime - operationStartTime;
         
         // Check for timeout
@@ -556,11 +552,10 @@ static int RunOperation(CDCTestContext *ctx) {
     return (ctx->state == CDC_STATE_CANCELLED) ? ERR_CANCELLED : SUCCESS;
 }
 
-static void UpdateGraph(CDCTestContext *ctx, double current, double time) {
-    // Plot current point
-    PlotPoint(ctx->mainPanelHandle, ctx->graphHandle, 
-              time, fabs(current), 
-              VAL_SOLID_CIRCLE, VAL_RED);
+static void UpdateGraph(CDCExperimentContext *ctx, double current, double time) {
+    // Use common utility function for plotting
+    PlotDataPoint(ctx->mainPanelHandle, ctx->graphHandle, 
+                  time, fabs(current), VAL_SOLID_CIRCLE, VAL_RED);
     
     // Check if Y-axis needs rescaling
     double yMin, yMax;
@@ -573,12 +568,7 @@ static void UpdateGraph(CDCTestContext *ctx, double current, double time) {
     }
 }
 
-static void ClearGraph(CDCTestContext *ctx) {
-    int graphs[] = {ctx->graphHandle};
-    ClearAllGraphs(ctx->mainPanelHandle, graphs, 1);
-}
-
-static void RestoreUI(CDCTestContext *ctx) {
+static void RestoreUI(CDCExperimentContext *ctx) {
     // Re-enable all controls
     DimCapacityExperimentControls(ctx->mainPanelHandle, ctx->tabPanelHandle, 0, 
                                  (int*)g_cdcControls, g_numCdcControls);
@@ -592,21 +582,21 @@ static const char* GetModeName(CDCOperationMode mode) {
  * Module Management Functions
  ******************************************************************************/
 
-void CDCTest_Cleanup(void) {
-    if (CDCTest_IsRunning()) {
-        CDCTest_Abort();
+void CDCExperiment_Cleanup(void) {
+    if (CDCExperiment_IsRunning()) {
+        CDCExperiment_Abort();
     }
 }
 
-int CDCTest_Abort(void) {
-    if (CDCTest_IsRunning()) {
-        g_testContext.state = CDC_STATE_CANCELLED;
+int CDCExperiment_Abort(void) {
+    if (CDCExperiment_IsRunning()) {
+        g_experimentContext.state = CDC_STATE_CANCELLED;
         
         // Wait for thread to complete
-        if (g_testThreadId != 0) {
-            CmtWaitForThreadPoolFunctionCompletion(g_threadPool, g_testThreadId,
+        if (g_experimentThreadId != 0) {
+            CmtWaitForThreadPoolFunctionCompletion(g_threadPool, g_experimentThreadId,
                                                  OPT_TP_PROCESS_EVENTS_WHILE_WAITING);
-            g_testThreadId = 0;
+            g_experimentThreadId = 0;
         }
     }
     return SUCCESS;

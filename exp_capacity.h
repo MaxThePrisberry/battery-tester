@@ -1,7 +1,7 @@
 /******************************************************************************
  * exp_capacity.h
  * 
- * Battery Capacity Testing Experiment Module
+ * Battery Capacity Experiment Module
  * Tests battery capacity through controlled discharge and charge cycles
  ******************************************************************************/
 
@@ -16,27 +16,27 @@
  * Configuration Constants
  ******************************************************************************/
 
-// Power limit for capacity testing (Watts)
-#define CAPACITY_TEST_POWER_LIMIT_W     20.0
+// Power limit for capacity experiments (Watts)
+#define CAPACITY_EXPERIMENT_POWER_LIMIT_W     20.0
 
 // Voltage error margin for charged state verification (Volts)
-#define CAPACITY_TEST_VOLTAGE_MARGIN    0.1
+#define CAPACITY_EXPERIMENT_VOLTAGE_MARGIN    0.1
 
-// Graph update rate during testing (seconds)
-#define CAPACITY_TEST_GRAPH_UPDATE_RATE 3.0
+// Graph update rate during experiments (seconds)
+#define CAPACITY_EXPERIMENT_GRAPH_UPDATE_RATE 3.0
 
-// Maximum test duration for safety (hours)
-#define CAPACITY_TEST_MAX_DURATION_H    10.0
+// Maximum experiment duration for safety (hours)
+#define CAPACITY_EXPERIMENT_MAX_DURATION_H    10.0
 
 // Data directory name
-#define CAPACITY_TEST_DATA_DIR          "data"
+#define CAPACITY_EXPERIMENT_DATA_DIR          "data"
 
 // Results file name
-#define CAPACITY_TEST_RESULTS_FILE      "results.txt"
+#define CAPACITY_EXPERIMENT_RESULTS_FILE      "results.txt"
 
 // CSV file names
-#define CAPACITY_TEST_DISCHARGE_FILE    "discharge.csv"
-#define CAPACITY_TEST_CHARGE_FILE       "charge.csv"
+#define CAPACITY_EXPERIMENT_DISCHARGE_FILE    "discharge.csv"
+#define CAPACITY_EXPERIMENT_CHARGE_FILE       "charge.csv"
 
 /******************************************************************************
  * Type Definitions
@@ -51,13 +51,13 @@ typedef enum {
     CAPACITY_STATE_COMPLETED,
     CAPACITY_STATE_ERROR,
     CAPACITY_STATE_CANCELLED
-} CapacityTestState;
+} CapacityExperimentState;
 
-// Test phase
+// Experiment phase
 typedef enum {
     CAPACITY_PHASE_DISCHARGE = 0,
     CAPACITY_PHASE_CHARGE
-} CapacityTestPhase;
+} CapacityExperimentPhase;
 
 // Data point for logging
 typedef struct {
@@ -67,7 +67,7 @@ typedef struct {
     double power;       // Power in W
 } CapacityDataPoint;
 
-// Test parameters from UI
+// Experiment parameters from UI
 typedef struct {
     double chargeVoltage;       // Maximum voltage during charge
     double dischargeVoltage;    // Minimum voltage during discharge
@@ -75,7 +75,7 @@ typedef struct {
     double dischargeCurrent;    // Maximum discharge current
     double currentThreshold;    // Current threshold to stop
     unsigned int logInterval;   // Logging interval in seconds
-} CapacityTestParams;
+} CapacityExperimentParams;
 
 // Phase results for tracking
 typedef struct {
@@ -91,23 +91,23 @@ typedef struct {
     int dataPoints;             // Number of data points
 } PhaseResults;
 
-// Test context
+// Experiment context
 typedef struct {
-    CapacityTestState state;
-    CapacityTestParams params;
+    CapacityExperimentState state;
+    CapacityExperimentParams params;
     
     // Timing
-    double testStartTime;        // Overall test start
-    double testEndTime;          // Overall test end
-    double phaseStartTime;       // Current phase start
+    double experimentStartTime;   // Overall experiment start
+    double experimentEndTime;     // Overall experiment end
+    double phaseStartTime;        // Current phase start
     double lastLogTime;
     double lastGraphUpdate;
     
     // Data collection
     FILE *csvFile;
-    char testDirectory[MAX_PATH_LENGTH];  // Directory for this test run
-    double accumulatedCapacity_mAh;       // Current phase capacity
-    double accumulatedEnergy_Wh;          // Current phase energy
+    char experimentDirectory[MAX_PATH_LENGTH];  // Directory for this experiment run
+    double accumulatedCapacity_mAh;             // Current phase capacity
+    double accumulatedEnergy_Wh;                // Current phase energy
     double lastCurrent;
     double lastTime;
     int dataPointCount;
@@ -124,7 +124,7 @@ typedef struct {
     int capacityControl;
     int graph1Handle;        // Current vs Time
     int graph2Handle;        // Voltage vs Time    
-} CapacityTestContext;
+} CapacityExperimentContext;
 
 /******************************************************************************
  * Public Function Prototypes
@@ -135,13 +135,13 @@ int CVICALLBACK StartCapacityExperimentCallback(int panel, int control, int even
                                                void *callbackData, int eventData1, 
                                                int eventData2);
 
-// Cleanup capacity test module
-void CapacityTest_Cleanup(void);
+// Cleanup capacity experiment module
+void CapacityExperiment_Cleanup(void);
 
-// Check if a capacity test is running (returns 1 if running, 0 if not)
-int CapacityTest_IsRunning(void);
+// Check if a capacity experiment is running (returns 1 if running, 0 if not)
+int CapacityExperiment_IsRunning(void);
 
-// Abort a running capacity test
-int CapacityTest_Abort(void);
+// Abort a running capacity experiment
+int CapacityExperiment_Abort(void);
 
 #endif // EXP_CAPACITY_H

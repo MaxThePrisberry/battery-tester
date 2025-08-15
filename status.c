@@ -547,7 +547,7 @@ static void UpdateDeviceStatus(int deviceType, const char* message) {
             return;
     }
     
-    SAFE_STRCPY(data->strValue, message, sizeof(data->strValue));
+    strncpy(data->strValue, message, sizeof(data->strValue));
     
     PostDeferredCall(DeferredStatusUpdate, data);
 }

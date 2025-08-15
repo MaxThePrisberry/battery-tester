@@ -53,7 +53,7 @@
 #define SOCEIS_GEIS_TIMEOUT_MS        300000  // 5 minutes
 
 // Other Constants
-#define SOCEIS_VOLTAGE_MARGIN         0.1     // V - same as capacity test
+#define SOCEIS_VOLTAGE_MARGIN         0.1     // V - same as capacity experiment
 #define SOCEIS_DATA_DIR               "data"
 #define SOCEIS_RESULTS_FILE           "summary.txt"
 #define SOCEIS_DETAILS_FILE_PREFIX    "details_"
@@ -75,9 +75,9 @@ typedef enum {
     SOCEIS_STATE_COMPLETED,
     SOCEIS_STATE_ERROR,
     SOCEIS_STATE_CANCELLED
-} SOCEISTestState;
+} SOCEISExperimentState;
 
-// Test parameters
+// Experiment parameters
 typedef struct {
     double eisInterval;          // SOC percentage between measurements
     double batteryCapacity_mAh;  // Battery capacity
@@ -87,8 +87,8 @@ typedef struct {
     double dischargeVoltage;     // From NUM_SET_DISCHARGE_V
     double chargeCurrent;        // From NUM_SET_CHARGE_I
     double dischargeCurrent;     // From NUM_SET_DISCHARGE_I
-    int dischargeAfter;         // Discharge battery after test
-} SOCEISTestParams;
+    int dischargeAfter;         // Discharge battery after experiment
+} SOCEISExperimentParams;
 
 // EIS Measurement Data
 typedef struct {
@@ -105,14 +105,14 @@ typedef struct {
     int numPoints;              // Number of impedance points
 } EISMeasurement;
 
-// Test context
+// Experiment context
 typedef struct {
-    SOCEISTestState state;
-    SOCEISTestParams params;
+    SOCEISExperimentState state;
+    SOCEISExperimentParams params;
     
     // Timing
-    double testStartTime;
-    double testEndTime;
+    double experimentStartTime;
+    double experimentEndTime;
     double phaseStartTime;
     double lastLogTime;
     double lastGraphUpdate;
@@ -131,7 +131,7 @@ typedef struct {
     int numTargetSOCs;
     
     // Data collection
-    char testDirectory[MAX_PATH_LENGTH];
+    char experimentDirectory[MAX_PATH_LENGTH];
     FILE *currentLogFile;           // Current phase log file
     
     // UI handles
@@ -152,7 +152,7 @@ typedef struct {
     int ocvPlotHandle;
     int nyquistPlotHandle;
     
-} SOCEISTestContext;
+} SOCEISExperimentContext;
 
 /******************************************************************************
  * Public Function Prototypes
@@ -168,8 +168,8 @@ int CVICALLBACK ImportSOCEISSettingsCallback(int panel, int control, int event,
                                             int eventData2);
 
 // Module management
-void SOCEISTest_Cleanup(void);
-int SOCEISTest_IsRunning(void);
-int SOCEISTest_Abort(void);
+void SOCEISExperiment_Cleanup(void);
+int SOCEISExperiment_IsRunning(void);
+int SOCEISExperiment_Abort(void);
 
 #endif // EXP_SOCEIS_H
