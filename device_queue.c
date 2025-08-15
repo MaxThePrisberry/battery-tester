@@ -91,6 +91,7 @@ struct DeviceQueueManager {
     CmtTSQHandle highPriorityQueue;
     CmtTSQHandle normalPriorityQueue;
     CmtTSQHandle lowPriorityQueue;
+    CmtTSQHandle deferredCommandQueue;  // Commands deferred during transactions
     
     // Processing thread
     CmtThreadFunctionID processingThreadId;
@@ -151,6 +152,9 @@ static int AttemptReconnection(DeviceQueueManager *mgr);
 // Transaction management
 static DeviceTransaction* FindTransaction(DeviceQueueManager *mgr, DeviceTransactionHandle id);
 
+// Queue rebuilding for deferred commands
+static void RebuildQueueWithDeferredCommands(DeviceQueueManager *mgr, CmtTSQHandle targetQueue);
+
 // Cancellation helpers
 static int CancelCommandInQueue(CmtTSQHandle queue, DeviceCommandID cmdId, DeviceQueueManager *mgr);
 static int CancelByTypeInQueue(CmtTSQHandle queue, int commandType, DeviceQueueManager *mgr);
@@ -160,22 +164,6 @@ static int CancelCommandsWithTransactionId(CmtTSQHandle queue, DeviceTransaction
 
 // Validation
 static bool ValidateAdapter(const DeviceAdapter *adapter);
-
-/******************************************************************************
- * Design Notes:
- * 
- * This implementation uses reference counting for command lifetime management:
- * - Commands are created with refCount = 1
- * - When queued, refCount is incremented
- * - When dequeued/processed, refCount is decremented
- * - Command is freed when refCount reaches 0
- * 
- * Blocking commands use a stack-allocated BlockingContext that is owned by
- * the calling thread. This ensures clean ownership and prevents resource leaks.
- * 
- * The processing thread continues running during shutdown until all queues
- * are empty, ensuring no commands are leaked.
- ******************************************************************************/
 
 /******************************************************************************
  * Queue Manager Functions
@@ -223,6 +211,7 @@ DeviceQueueManager* DeviceQueue_Create(const DeviceAdapter *adapter,
     error |= CmtNewTSQ(DEVICE_QUEUE_HIGH_PRIORITY_SIZE, sizeof(QueuedCommand*), 0, &mgr->highPriorityQueue);
     error |= CmtNewTSQ(DEVICE_QUEUE_NORMAL_PRIORITY_SIZE, sizeof(QueuedCommand*), 0, &mgr->normalPriorityQueue);
     error |= CmtNewTSQ(DEVICE_QUEUE_LOW_PRIORITY_SIZE, sizeof(QueuedCommand*), 0, &mgr->lowPriorityQueue);
+    error |= CmtNewTSQ(DEVICE_QUEUE_DEFERRED_SIZE, sizeof(QueuedCommand*), 0, &mgr->deferredCommandQueue);
     
     if (error < 0) {
         LogError("DeviceQueue_Create: Failed to create queues");
@@ -294,14 +283,15 @@ void DeviceQueue_Destroy(DeviceQueueManager *mgr) {
     
     // At this point, all queues should be empty
     // Verify and log if not
-    int highCount = 0, normalCount = 0, lowCount = 0;
+    int highCount = 0, normalCount = 0, lowCount = 0, deferredCount = 0;
     CmtGetTSQAttribute(mgr->highPriorityQueue, ATTR_TSQ_ITEMS_IN_QUEUE, &highCount);
     CmtGetTSQAttribute(mgr->normalPriorityQueue, ATTR_TSQ_ITEMS_IN_QUEUE, &normalCount);
     CmtGetTSQAttribute(mgr->lowPriorityQueue, ATTR_TSQ_ITEMS_IN_QUEUE, &lowCount);
+    CmtGetTSQAttribute(mgr->deferredCommandQueue, ATTR_TSQ_ITEMS_IN_QUEUE, &deferredCount);
     
-    if (highCount + normalCount + lowCount > 0) {
-        LogWarningEx(mgr->logDevice, "Queues not empty after shutdown: high=%d, normal=%d, low=%d",
-                   highCount, normalCount, lowCount);
+    if (highCount + normalCount + lowCount + deferredCount > 0) {
+        LogWarningEx(mgr->logDevice, "Queues not empty after shutdown: high=%d, normal=%d, low=%d, deferred=%d",
+                   highCount, normalCount, lowCount, deferredCount);
     }
     
     // Disconnect device
@@ -336,6 +326,7 @@ void DeviceQueue_Destroy(DeviceQueueManager *mgr) {
     if (mgr->highPriorityQueue) CmtDiscardTSQ(mgr->highPriorityQueue);
     if (mgr->normalPriorityQueue) CmtDiscardTSQ(mgr->normalPriorityQueue);
     if (mgr->lowPriorityQueue) CmtDiscardTSQ(mgr->lowPriorityQueue);
+    if (mgr->deferredCommandQueue) CmtDiscardTSQ(mgr->deferredCommandQueue);
     
     // Dispose locks
     if (mgr->commandLock) CmtDiscardLock(mgr->commandLock);
@@ -368,6 +359,7 @@ void DeviceQueue_GetStats(DeviceQueueManager *mgr, DeviceQueueStats *stats) {
     CmtGetTSQAttribute(mgr->highPriorityQueue, ATTR_TSQ_ITEMS_IN_QUEUE, &stats->highPriorityQueued);
     CmtGetTSQAttribute(mgr->normalPriorityQueue, ATTR_TSQ_ITEMS_IN_QUEUE, &stats->normalPriorityQueued);
     CmtGetTSQAttribute(mgr->lowPriorityQueue, ATTR_TSQ_ITEMS_IN_QUEUE, &stats->lowPriorityQueued);
+    CmtGetTSQAttribute(mgr->deferredCommandQueue, ATTR_TSQ_ITEMS_IN_QUEUE, &stats->deferredQueued);
     
     CmtGetLock(mgr->statsLock);
     stats->totalProcessed = mgr->totalProcessed;
@@ -378,8 +370,8 @@ void DeviceQueue_GetStats(DeviceQueueManager *mgr, DeviceQueueStats *stats) {
     stats->isConnected = mgr->isConnected;
     stats->isProcessing = (mgr->processingThreadId != 0);
     
-    stats->activeTransactionId = 0;
-    stats->isInTransactionMode = 0;
+    stats->activeTransactionId = mgr->currentTransactionId;
+    stats->isInTransactionMode = (mgr->currentTransactionId != 0);
 }
 
 void DeviceQueue_SetLogDevice(DeviceQueueManager *mgr, LogDevice device) {
@@ -507,11 +499,11 @@ int DeviceQueue_CommandBlocking(DeviceQueueManager *mgr, int commandType,
             finalError = ctx.errorCode;
             break;
         }
-		
-		if (mgr->shutdownRequested) {
-	        finalError = ERR_CANCELLED;
-	        break;
-	    }
+        
+        if (mgr->shutdownRequested) {
+            finalError = ERR_CANCELLED;
+            break;
+        }
         
         if (timeoutMs == 0) {
             break;  // Immediate timeout
@@ -569,16 +561,6 @@ DeviceCommandID DeviceQueue_CommandAsync(DeviceQueueManager *mgr, int commandTyp
     return cmd->id;
 }
 
-bool DeviceQueue_HasCommandType(DeviceQueueManager *mgr, int commandType) {
-    if (!mgr) return false;
-    
-    // Simple implementation - just check if there are items in queues
-    // TODO: Implement proper scanning of queue for command type
-    int count = 0;
-    CmtGetTSQAttribute(mgr->normalPriorityQueue, ATTR_TSQ_ITEMS_IN_QUEUE, &count);
-    return count > 0;
-}
-
 int DeviceQueue_CancelAll(DeviceQueueManager *mgr) {
     if (!mgr) return ERR_INVALID_PARAMETER;
     
@@ -587,7 +569,7 @@ int DeviceQueue_CancelAll(DeviceQueueManager *mgr) {
     
     CmtGetLock(mgr->queueManipulationLock);
     
-    // Cancel all commands in high priority queue
+    // Cancel all commands in all queues
     while (CmtReadTSQData(mgr->highPriorityQueue, &cmd, 1, 0, 0) > 0) {
         if (cmd) {
             Command_Release(mgr, cmd);
@@ -595,7 +577,6 @@ int DeviceQueue_CancelAll(DeviceQueueManager *mgr) {
         }
     }
     
-    // Cancel all commands in normal priority queue
     while (CmtReadTSQData(mgr->normalPriorityQueue, &cmd, 1, 0, 0) > 0) {
         if (cmd) {
             Command_Release(mgr, cmd);
@@ -603,8 +584,14 @@ int DeviceQueue_CancelAll(DeviceQueueManager *mgr) {
         }
     }
     
-    // Cancel all commands in low priority queue
     while (CmtReadTSQData(mgr->lowPriorityQueue, &cmd, 1, 0, 0) > 0) {
+        if (cmd) {
+            Command_Release(mgr, cmd);
+            totalCancelled++;
+        }
+    }
+    
+    while (CmtReadTSQData(mgr->deferredCommandQueue, &cmd, 1, 0, 0) > 0) {
         if (cmd) {
             Command_Release(mgr, cmd);
             totalCancelled++;
@@ -631,6 +618,7 @@ int DeviceQueue_CancelCommand(DeviceQueueManager *mgr, DeviceCommandID cmdId) {
     totalCancelled += CancelCommandInQueue(mgr->highPriorityQueue, cmdId, mgr);
     totalCancelled += CancelCommandInQueue(mgr->normalPriorityQueue, cmdId, mgr);
     totalCancelled += CancelCommandInQueue(mgr->lowPriorityQueue, cmdId, mgr);
+    totalCancelled += CancelCommandInQueue(mgr->deferredCommandQueue, cmdId, mgr);
     
     CmtReleaseLock(mgr->queueManipulationLock);
     
@@ -692,6 +680,7 @@ int DeviceQueue_CancelByType(DeviceQueueManager *mgr, int commandType) {
     totalCancelled += CancelByTypeInQueue(mgr->highPriorityQueue, commandType, mgr);
     totalCancelled += CancelByTypeInQueue(mgr->normalPriorityQueue, commandType, mgr);
     totalCancelled += CancelByTypeInQueue(mgr->lowPriorityQueue, commandType, mgr);
+    totalCancelled += CancelByTypeInQueue(mgr->deferredCommandQueue, commandType, mgr);
     
     CmtReleaseLock(mgr->queueManipulationLock);
     
@@ -753,6 +742,7 @@ int DeviceQueue_CancelByAge(DeviceQueueManager *mgr, double ageSeconds) {
     totalCancelled += CancelByAgeInQueue(mgr->highPriorityQueue, currentTime, ageSeconds, mgr);
     totalCancelled += CancelByAgeInQueue(mgr->normalPriorityQueue, currentTime, ageSeconds, mgr);
     totalCancelled += CancelByAgeInQueue(mgr->lowPriorityQueue, currentTime, ageSeconds, mgr);
+    totalCancelled += CancelByAgeInQueue(mgr->deferredCommandQueue, currentTime, ageSeconds, mgr);
     
     CmtReleaseLock(mgr->queueManipulationLock);
     
@@ -826,6 +816,7 @@ int DeviceQueue_CancelTransaction(DeviceQueueManager *mgr, DeviceTransactionHand
         cancelled += CancelCommandsWithTransactionId(mgr->highPriorityQueue, txnId, mgr);
         cancelled += CancelCommandsWithTransactionId(mgr->normalPriorityQueue, txnId, mgr);
         cancelled += CancelCommandsWithTransactionId(mgr->lowPriorityQueue, txnId, mgr);
+        cancelled += CancelCommandsWithTransactionId(mgr->deferredCommandQueue, txnId, mgr);
         
         CmtReleaseLock(mgr->queueManipulationLock);
         
@@ -1090,20 +1081,17 @@ static int CVICALLBACK ProcessingThreadFunction(void *functionData) {
     int transactionCommandIndex = 0;
     int expectedTransactionCommands = 0;
     
-    // Command that was dequeued but belongs to different transaction
-    QueuedCommand *deferredCommand = NULL;
-    CmtTSQHandle deferredCommandQueue = 0;
-    
     while (1) {
         // Check if we should exit - but ONLY if all queues are empty
         if (mgr->shutdownRequested) {
-            int highCount = 0, normalCount = 0, lowCount = 0;
+            int highCount = 0, normalCount = 0, lowCount = 0, deferredCount = 0;
             
             CmtGetTSQAttribute(mgr->highPriorityQueue, ATTR_TSQ_ITEMS_IN_QUEUE, &highCount);
             CmtGetTSQAttribute(mgr->normalPriorityQueue, ATTR_TSQ_ITEMS_IN_QUEUE, &normalCount);
             CmtGetTSQAttribute(mgr->lowPriorityQueue, ATTR_TSQ_ITEMS_IN_QUEUE, &lowCount);
+            CmtGetTSQAttribute(mgr->deferredCommandQueue, ATTR_TSQ_ITEMS_IN_QUEUE, &deferredCount);
             
-            if (highCount == 0 && normalCount == 0 && lowCount == 0) {
+            if (highCount == 0 && normalCount == 0 && lowCount == 0 && deferredCount == 0) {
                 LogMessageEx(mgr->logDevice, "All queues empty, processing thread exiting");
                 break;
             }
@@ -1121,54 +1109,56 @@ static int CVICALLBACK ProcessingThreadFunction(void *functionData) {
         QueuedCommand *cmd = NULL;
         CmtTSQHandle cmdQueue = 0;
         
-        // Check if we have a deferred command from previous iteration
-        if (deferredCommand) {
-            cmd = deferredCommand;
-            cmdQueue = deferredCommandQueue;
-            deferredCommand = NULL;
-            deferredCommandQueue = 0;
-        } else {
-            // Get next command based on current state
-            if (mgr->currentTransactionId != 0 && mgr->currentTransactionQueue != 0) {
-                // In transaction mode - only read from current transaction queue
-                int itemsRead = CmtReadTSQData(mgr->currentTransactionQueue, &cmd, 1, 0, 0);
-                if (itemsRead > 0) {
-                    cmdQueue = mgr->currentTransactionQueue;
+        // Get next command based on current state
+        if (mgr->currentTransactionId != 0 && mgr->currentTransactionQueue != 0) {
+            // In transaction mode - only read from current transaction queue
+            int itemsRead = CmtReadTSQData(mgr->currentTransactionQueue, &cmd, 1, 0, 0);
+            if (itemsRead > 0) {
+                cmdQueue = mgr->currentTransactionQueue;
+                
+                // Check if this command is part of current transaction
+                if (cmd->transactionId != mgr->currentTransactionId) {
+                    // Different transaction or non-transaction command - defer it
+                    LogDebugEx(mgr->logDevice, "Deferring command %u (transaction %u) while processing transaction %u",
+                             cmd->id, cmd->transactionId, mgr->currentTransactionId);
                     
-                    // Check if this command is part of current transaction
-                    if (cmd->transactionId != mgr->currentTransactionId) {
-                        // Different transaction or non-transaction command
-                        // Defer it for next iteration
-                        deferredCommand = cmd;
-                        deferredCommandQueue = cmdQueue;
-                        cmd = NULL;
-                        
-                        // Complete current transaction
-                        mgr->currentTransactionId = 0;
-                        mgr->currentTransactionQueue = 0;
+                    // Add to deferred queue
+                    if (CmtWriteTSQData(mgr->deferredCommandQueue, &cmd, 1, 0, NULL) <= 0) {
+                        LogWarningEx(mgr->logDevice, "Deferred queue full - dropping command %u", cmd->id);
+                        Command_Release(mgr, cmd);
                     }
+                    cmd = NULL;
                 }
-            } else {
-                // Normal mode - check all queues in priority order
-                CmtGetLock(mgr->queueManipulationLock);
-                
-                int itemsRead = CmtReadTSQData(mgr->highPriorityQueue, &cmd, 1, 0, 0);
-                if (itemsRead > 0) {
-                    cmdQueue = mgr->highPriorityQueue;
-                } else {
-                    itemsRead = CmtReadTSQData(mgr->normalPriorityQueue, &cmd, 1, 0, 0);
-                    if (itemsRead > 0) {
-                        cmdQueue = mgr->normalPriorityQueue;
-                    } else {
-                        itemsRead = CmtReadTSQData(mgr->lowPriorityQueue, &cmd, 1, 0, 0);
-                        if (itemsRead > 0) {
-                            cmdQueue = mgr->lowPriorityQueue;
-                        }
-                    }
-                }
-                
-                CmtReleaseLock(mgr->queueManipulationLock);
             }
+            
+            // If no more transaction commands, complete the transaction
+            if (!cmd) {
+                mgr->currentTransactionId = 0;
+                mgr->currentTransactionQueue = 0;
+                
+                // Rebuild the transaction source queue with deferred commands
+                RebuildQueueWithDeferredCommands(mgr, cmdQueue);
+            }
+        } else {
+            // Normal mode - check all queues in priority order
+            CmtGetLock(mgr->queueManipulationLock);
+            
+            int itemsRead = CmtReadTSQData(mgr->highPriorityQueue, &cmd, 1, 0, 0);
+            if (itemsRead > 0) {
+                cmdQueue = mgr->highPriorityQueue;
+            } else {
+                itemsRead = CmtReadTSQData(mgr->normalPriorityQueue, &cmd, 1, 0, 0);
+                if (itemsRead > 0) {
+                    cmdQueue = mgr->normalPriorityQueue;
+                } else {
+                    itemsRead = CmtReadTSQData(mgr->lowPriorityQueue, &cmd, 1, 0, 0);
+                    if (itemsRead > 0) {
+                        cmdQueue = mgr->lowPriorityQueue;
+                    }
+                }
+            }
+            
+            CmtReleaseLock(mgr->queueManipulationLock);
         }
         
         // Process command if we have one
@@ -1395,6 +1385,67 @@ static int CVICALLBACK ProcessingThreadFunction(void *functionData) {
     
     LogMessageEx(mgr->logDevice, "%s queue processing thread stopped", mgr->adapter->deviceName);
     return 0;
+}
+
+/******************************************************************************
+ * Queue Rebuilding for Deferred Commands
+ ******************************************************************************/
+
+static void RebuildQueueWithDeferredCommands(DeviceQueueManager *mgr, CmtTSQHandle targetQueue) {
+    // Get count of deferred commands
+    int deferredCount = 0;
+    CmtGetTSQAttribute(mgr->deferredCommandQueue, ATTR_TSQ_ITEMS_IN_QUEUE, &deferredCount);
+    
+    if (deferredCount == 0) {
+        // No deferred commands, nothing to do
+        return;
+    }
+    
+    LogDebugEx(mgr->logDevice, "Rebuilding queue with %d deferred commands", deferredCount);
+    
+    // Get count of remaining commands in target queue
+    int remainingCount = 0;
+    CmtGetTSQAttribute(targetQueue, ATTR_TSQ_ITEMS_IN_QUEUE, &remainingCount);
+    
+    // Allocate arrays for commands
+    QueuedCommand **deferredCommands = calloc(deferredCount, sizeof(QueuedCommand*));
+    QueuedCommand **remainingCommands = NULL;
+    
+    if (remainingCount > 0) {
+        remainingCommands = calloc(remainingCount, sizeof(QueuedCommand*));
+    }
+    
+    if (!deferredCommands || (remainingCount > 0 && !remainingCommands)) {
+        LogError("Failed to allocate memory for queue rebuilding");
+        free(deferredCommands);
+        free(remainingCommands);
+        return;
+    }
+    
+    // Read all deferred commands
+    int actualDeferred = CmtReadTSQData(mgr->deferredCommandQueue, deferredCommands, deferredCount, 0, 0);
+    
+    // Read all remaining commands from target queue
+    int actualRemaining = 0;
+    if (remainingCount > 0) {
+        actualRemaining = CmtReadTSQData(targetQueue, remainingCommands, remainingCount, 0, 0);
+    }
+    
+    // Write back: deferred commands first, then remaining commands
+    if (actualDeferred > 0) {
+        CmtWriteTSQData(targetQueue, deferredCommands, actualDeferred, TSQ_INFINITE_TIMEOUT, NULL);
+    }
+    
+    if (actualRemaining > 0) {
+        CmtWriteTSQData(targetQueue, remainingCommands, actualRemaining, TSQ_INFINITE_TIMEOUT, NULL);
+    }
+    
+    LogDebugEx(mgr->logDevice, "Queue rebuilt: %d deferred + %d remaining commands", 
+             actualDeferred, actualRemaining);
+    
+    // Clean up
+    free(deferredCommands);
+    free(remainingCommands);
 }
 
 /******************************************************************************

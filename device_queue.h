@@ -18,9 +18,10 @@
  ******************************************************************************/
 
 // Queue depths
-#define DEVICE_QUEUE_HIGH_PRIORITY_SIZE    50
+#define DEVICE_QUEUE_HIGH_PRIORITY_SIZE    20
 #define DEVICE_QUEUE_NORMAL_PRIORITY_SIZE  20
-#define DEVICE_QUEUE_LOW_PRIORITY_SIZE     10
+#define DEVICE_QUEUE_LOW_PRIORITY_SIZE     20
+#define DEVICE_QUEUE_DEFERRED_SIZE         20
 
 // Default timeouts
 #define DEVICE_QUEUE_COMMAND_TIMEOUT_MS    30000
@@ -44,8 +45,8 @@ typedef uint32_t DeviceCommandID;
 // Priority levels
 typedef enum {
     DEVICE_PRIORITY_HIGH = 0,    // User-initiated commands
-    DEVICE_PRIORITY_NORMAL = 1,  // Status queries
-    DEVICE_PRIORITY_LOW = 2      // Background tasks
+    DEVICE_PRIORITY_NORMAL = 1,  // Experiment tasks
+    DEVICE_PRIORITY_LOW = 2      // Status queries
 } DevicePriority;
 
 // Transaction behavior flags
@@ -110,6 +111,7 @@ typedef struct {
     int highPriorityQueued;
     int normalPriorityQueued;
     int lowPriorityQueued;
+    int deferredQueued;
     int totalProcessed;
     int totalErrors;
     int reconnectAttempts;
@@ -127,7 +129,7 @@ typedef struct {
 DeviceQueueManager* DeviceQueue_Create(const DeviceAdapter *adapter, 
                                       void *deviceContext,
                                       void *connectionParams,
-									  CmtThreadPoolHandle threadPool);
+                                      CmtThreadPoolHandle threadPool);
 
 // Destroy the queue manager
 void DeviceQueue_Destroy(DeviceQueueManager *mgr);
@@ -160,9 +162,6 @@ int DeviceQueue_CancelCommand(DeviceQueueManager *mgr, DeviceCommandID cmdId);
 int DeviceQueue_CancelByType(DeviceQueueManager *mgr, int commandType);
 int DeviceQueue_CancelByAge(DeviceQueueManager *mgr, double seconds);
 int DeviceQueue_CancelAll(DeviceQueueManager *mgr);
-
-// Check if a command type is already queued
-bool DeviceQueue_HasCommandType(DeviceQueueManager *mgr, int commandType);
 
 /******************************************************************************
  * Transaction Functions
