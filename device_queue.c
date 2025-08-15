@@ -140,6 +140,9 @@ static QueuedCommand* Command_Create(DeviceQueueManager *mgr, int commandType, v
 static void Command_AddRef(QueuedCommand *cmd);
 static void Command_Release(DeviceQueueManager *mgr, QueuedCommand *cmd);
 
+// Command enqueuing helper
+static int EnqueueCommand(DeviceQueueManager *mgr, QueuedCommand *cmd, DevicePriority priority, int timeoutMs);
+
 // Processing thread
 static int CVICALLBACK ProcessingThreadFunction(void *functionData);
 static int ExecuteDeviceCommand(DeviceQueueManager *mgr, QueuedCommand *cmd, void *result);
@@ -419,6 +422,90 @@ static void DisconnectDevice(DeviceQueueManager *mgr) {
 }
 
 /******************************************************************************
+ * Command Enqueuing Helper
+ ******************************************************************************/
+
+static int EnqueueCommand(DeviceQueueManager *mgr, QueuedCommand *cmd, DevicePriority priority, int timeoutMs) {
+    if (!mgr || !cmd || mgr->shutdownRequested) {
+        return mgr && mgr->shutdownRequested ? ERR_CANCELLED : ERR_INVALID_PARAMETER;
+    }
+    
+    // Select queue based on priority
+    CmtTSQHandle queue;
+    const char *queueName;
+    switch (priority) {
+        case DEVICE_PRIORITY_HIGH:   queue = mgr->highPriorityQueue; queueName = "high"; break;
+        case DEVICE_PRIORITY_NORMAL: queue = mgr->normalPriorityQueue; queueName = "normal"; break;
+        case DEVICE_PRIORITY_LOW:    queue = mgr->lowPriorityQueue; queueName = "low"; break;
+        default:                     queue = mgr->normalPriorityQueue; queueName = "normal"; break;
+    }
+    
+    double startTime = Timer();
+    double totalTimeout = (timeoutMs > 0) ? (timeoutMs / 1000.0) : -1.0;
+    
+    for (int attempt = 0; attempt <= DEVICE_QUEUE_MAX_RETRIES; attempt++) {
+        // Check timeout and shutdown
+        if (mgr->shutdownRequested) return ERR_CANCELLED;
+        if (totalTimeout > 0 && (Timer() - startTime) >= totalTimeout) return ERR_TIMEOUT;
+        
+        // Calculate attempt timeout
+        int attemptTimeout = TSQ_INFINITE_TIMEOUT;
+        if (timeoutMs >= 0) {
+            if (totalTimeout > 0) {
+                double remaining = totalTimeout - (Timer() - startTime);
+                attemptTimeout = (remaining > 0) ? MIN((int)(remaining * 1000), DEVICE_QUEUE_MAX_ATTEMPT_TIMEOUT_MS) : 0;
+                if (attemptTimeout <= 0) return ERR_TIMEOUT;
+            } else {
+                attemptTimeout = timeoutMs;
+            }
+        }
+        
+        // Attempt enqueue with lock coordination
+        CmtGetLock(mgr->queueManipulationLock);
+        if (mgr->shutdownRequested) {
+            CmtReleaseLock(mgr->queueManipulationLock);
+            return ERR_CANCELLED;
+        }
+        
+        int itemsWritten = CmtWriteTSQData(queue, &cmd, 1, attemptTimeout, NULL);
+        CmtReleaseLock(mgr->queueManipulationLock);
+        
+        if (itemsWritten == 1) {
+            if (attempt > 0) {
+                LogDebugEx(mgr->logDevice, "Enqueued command %u to %s queue after %d retries", 
+                         cmd->id, queueName, attempt);
+            }
+            return SUCCESS;
+        }
+        
+        // Handle failure
+        int errorCode = (itemsWritten == 0) ? ERR_TIMEOUT : ERR_QUEUE_FULL;
+        if (attempt >= DEVICE_QUEUE_MAX_RETRIES) {
+            LogErrorEx(mgr->logDevice, "Failed to enqueue command type %s after %d attempts", 
+                     mgr->adapter->getCommandTypeName(cmd->commandType), attempt + 1);
+            return errorCode;
+        }
+        
+        // Calculate backoff delay with jitter
+        int delayMs = DEVICE_QUEUE_BASE_RETRY_DELAY_MS << attempt;
+        delayMs = MIN(delayMs, DEVICE_QUEUE_MAX_RETRY_DELAY_MS);
+        delayMs += (rand() % (delayMs / 2 + 1)) - (delayMs / 4);  // ±25% jitter
+        delayMs = MAX(delayMs, 1);
+        
+        // Check if we have time for delay
+        if (totalTimeout > 0 && (Timer() - startTime + delayMs/1000.0) >= totalTimeout) {
+            return ERR_TIMEOUT;
+        }
+        
+        LogDebugEx(mgr->logDevice, "Retrying command %u in %dms (attempt %d/%d)", 
+                 cmd->id, delayMs, attempt + 1, DEVICE_QUEUE_MAX_RETRIES + 1);
+        Delay(delayMs / 1000.0);
+    }
+    
+    return ERR_OPERATION_FAILED;
+}
+
+/******************************************************************************
  * Command Queueing Functions
  ******************************************************************************/
 
@@ -459,34 +546,16 @@ int DeviceQueue_CommandBlocking(DeviceQueueManager *mgr, int commandType,
     // Add reference for the queue
     Command_AddRef(cmd);
     
-    // Select queue based on priority
-    CmtTSQHandle queue;
-    switch (priority) {
-        case DEVICE_PRIORITY_HIGH:   queue = mgr->highPriorityQueue; break;
-        case DEVICE_PRIORITY_NORMAL: queue = mgr->normalPriorityQueue; break;
-        case DEVICE_PRIORITY_LOW:    queue = mgr->lowPriorityQueue; break;
-        default: queue = mgr->normalPriorityQueue; break;
-    }
-    
-    // Enqueue command
-    int itemsWritten = 0;
-    if (timeoutMs >= 0) {
-        itemsWritten = CmtWriteTSQData(queue, &cmd, 1, timeoutMs, NULL);
-    } else {
-        itemsWritten = CmtWriteTSQData(queue, &cmd, 1, TSQ_INFINITE_TIMEOUT, NULL);
-    }
-    
-    if (itemsWritten <= 0) {
-        LogErrorEx(mgr->logDevice, "Failed to enqueue command type %s", 
-                 mgr->adapter->getCommandTypeName(commandType));
-        
+    // Enqueue command with retry logic
+    int enqueueResult = EnqueueCommand(mgr, cmd, priority, timeoutMs);
+    if (enqueueResult != SUCCESS) {
         // Clean up
         Command_Release(mgr, cmd);  // Release queue's reference
         CmtDiscardLock(ctx.completionEvent);
         mgr->adapter->freeCommandResult(commandType, ctx.result);
         Command_Release(mgr, cmd);  // Release our reference
         
-        return (itemsWritten == 0) ? ERR_TIMEOUT : ERR_QUEUE_FULL;
+        return enqueueResult;
     }
     
     // Wait for completion
@@ -541,19 +610,9 @@ DeviceCommandID DeviceQueue_CommandAsync(DeviceQueueManager *mgr, int commandTyp
     cmd->callback = callback;
     cmd->userData = userData;
     
-    // Select queue based on priority
-    CmtTSQHandle queue;
-    switch (priority) {
-        case DEVICE_PRIORITY_HIGH:   queue = mgr->highPriorityQueue; break;
-        case DEVICE_PRIORITY_NORMAL: queue = mgr->normalPriorityQueue; break;
-        case DEVICE_PRIORITY_LOW:    queue = mgr->lowPriorityQueue; break;
-        default: queue = mgr->normalPriorityQueue; break;
-    }
-    
-    // Enqueue command
-    if (CmtWriteTSQData(queue, &cmd, 1, TSQ_INFINITE_TIMEOUT, NULL) <= 0) {
-        LogErrorEx(mgr->logDevice, "Failed to enqueue async command type %s", 
-                 mgr->adapter->getCommandTypeName(commandType));
+    // Enqueue command with retry logic
+    int enqueueResult = EnqueueCommand(mgr, cmd, priority, -1);  // -1 = infinite timeout
+    if (enqueueResult != SUCCESS) {
         Command_Release(mgr, cmd);
         return 0;
     }
