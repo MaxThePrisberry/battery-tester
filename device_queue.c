@@ -280,8 +280,6 @@ void DeviceQueue_Destroy(DeviceQueueManager *mgr) {
         
         CmtWaitForThreadPoolFunctionCompletion(mgr->threadPool, mgr->processingThreadId,
                                              OPT_TP_PROCESS_EVENTS_WHILE_WAITING);
-        
-        LogMessageEx(mgr->logDevice, "%s queue processing thread stopped", mgr->adapter->deviceName);
     }
     
     // At this point, all queues should be empty

@@ -962,10 +962,6 @@ static BioCommandID BIO_QueueCommandAsync(BioQueueManager *mgr, BioCommandType t
     return DeviceQueue_CommandAsync(mgr, type, params, priority, callback, userData);
 }
 
-bool BIO_QueueHasCommandType(BioQueueManager *mgr, BioCommandType type) {
-    return DeviceQueue_HasCommandType(mgr, type);
-}
-
 int BIO_QueueCancelAll(BioQueueManager *mgr) {
     return DeviceQueue_CancelAll(mgr);
 }

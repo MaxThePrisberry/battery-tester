@@ -342,10 +342,6 @@ static CommandID TNY_QueueCommandAsync(TNYQueueManager *mgr, TNYCommandType type
     return DeviceQueue_CommandAsync(mgr, type, params, priority, callback, userData);
 }
 
-bool TNY_QueueHasCommandType(TNYQueueManager *mgr, TNYCommandType type) {
-    return DeviceQueue_HasCommandType(mgr, type);
-}
-
 int TNY_QueueCancelAll(TNYQueueManager *mgr) {
     return DeviceQueue_CancelAll(mgr);
 }

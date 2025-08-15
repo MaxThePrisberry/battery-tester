@@ -735,10 +735,6 @@ static CommandID DTB_QueueCommandAsync(DTBQueueManager *mgr, DTBCommandType type
     return DeviceQueue_CommandAsync(mgr, type, params, priority, callback, userData);
 }
 
-bool DTB_QueueHasCommandType(DTBQueueManager *mgr, DTBCommandType type) {
-    return DeviceQueue_HasCommandType(mgr, type);
-}
-
 int DTB_QueueCancelAll(DTBQueueManager *mgr) {
     return DeviceQueue_CancelAll(mgr);
 }

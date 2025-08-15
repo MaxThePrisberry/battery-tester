@@ -437,10 +437,6 @@ static CommandID PSB_QueueCommandAsync(PSBQueueManager *mgr, PSBCommandType type
     return DeviceQueue_CommandAsync(mgr, type, params, priority, callback, userData);
 }
 
-bool PSB_QueueHasCommandType(PSBQueueManager *mgr, PSBCommandType type) {
-    return DeviceQueue_HasCommandType(mgr, type);
-}
-
 int PSB_QueueCancelAll(PSBQueueManager *mgr) {
     return DeviceQueue_CancelAll(mgr);
 }
