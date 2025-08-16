@@ -313,6 +313,12 @@ void DimControlArray(int panel, int arrayID, int dim) {
             SetCtrlAttribute(panel, PANEL_BTN_TEST_PSB, ATTR_DIMMED, dim);
             SetCtrlAttribute(panel, PANEL_BTN_TEST_BIOLOGIC, ATTR_DIMMED, dim);
             break;
+		
+		case DTB_CONTROL_ARR:
+			// DTB controls
+			SetCtrlAttribute(panel, PANEL_NUM_DTB_1_SETPOINT, ATTR_DIMMED, dim);
+			SetCtrlAttribute(panel, PANEL_BTN_DTB_1_RUN_STOP, ATTR_DIMMED, dim);
+			break;
             
         default:
             LogWarning("DimControlArray: Unknown control array ID: %d", arrayID);
@@ -320,10 +326,11 @@ void DimControlArray(int panel, int arrayID, int dim) {
     }
 }
 
-void DimCapacityExperimentControls(int mainPanel, int tabPanel, int dim, int *controls, int numControls) {
+void DimExperimentControls(int mainPanel, int tabPanel, int dim, int *controls, int numControls) {
     // Dim control arrays on main panel
     DimControlArray(mainPanel, BATTERY_CONSTANTS_ARR, dim);
     DimControlArray(mainPanel, MANUAL_CONTROL_ARR, dim);
+	DimControlArray(mainPanel, DTB_CONTROL_ARR, dim);
     
     // Lock/unlock tab control - dim all tabs except the current one
     int numTabs;

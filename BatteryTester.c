@@ -12,6 +12,7 @@
 #include "dtb4848_queue.h"
 #include "teensy_queue.h"
 #include "cdaq_utils.h"
+#include "exp_baseline.h"
 #include "exp_cdc.h"
 #include "exp_capacity.h"
 #include "exp_soceis.h"
@@ -46,6 +47,8 @@ TNYQueueManager *g_tnyQueueMgr = NULL;
 int main (int argc, char *argv[]) {    
     if (InitCVIRTE (0, argv, 0) == 0)
         return -1;    /* out of memory */
+	
+	SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED);
     
     // Create thread pool first
     CmtNewThreadPool(DEFAULT_THREAD_POOL_SIZE, &g_threadPool);
@@ -298,6 +301,16 @@ int CVICALLBACK PanelCallback(int panel, int event, void *callbackData,
 			    ProcessSystemEvents();
 			    Delay(0.5);
 			}
+			
+			// Check if Baseline test is running and abort it
+			if (BaselineExperiment_IsRunning()) {
+			    LogMessage("Aborting running Baseline test...");
+			    BaselineExperiment_Abort();
+			    
+			    // Give it a moment to clean up properly
+			    ProcessSystemEvents();
+			    Delay(0.5);
+			}
             
             // Stop status monitoring first
             LogMessage("Stopping status monitoring...");
@@ -356,16 +369,20 @@ int CVICALLBACK PanelCallback(int panel, int event, void *callbackData,
 			Delay(0.2);
 			
 			// Clean up CDC test module
-			LogMessage("Cleaning up CDC test module...");
+			LogMessage("Cleaning up CDC experiment module...");
 			CDCExperiment_Cleanup();
             
             // Clean up capacity test module
-            LogMessage("Cleaning up capacity test module...");
+            LogMessage("Cleaning up capacity experiment module...");
             CapacityExperiment_Cleanup();
 			
 			// Clean up SOCEIS test module
-			LogMessage("Cleaning up SOCEIS test module...");
+			LogMessage("Cleaning up SOCEIS experiment module...");
 			SOCEISExperiment_Cleanup();
+			
+			// Clean up Baseline test module
+			LogMessage("Cleaning up Baseline experiment module...");
+			BaselineExperiment_Cleanup();
             
 			LogMessage("Cleaning up controls module...");
 			Controls_Cleanup();
@@ -405,6 +422,8 @@ int CVICALLBACK PanelCallback(int panel, int event, void *callbackData,
             
             // Quit the user interface
             QuitUserInterface(0);
+			
+			SetThreadExecutionState(ES_CONTINUOUS);
             break;
     }
     return 0;

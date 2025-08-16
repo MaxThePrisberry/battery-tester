@@ -87,8 +87,8 @@ static int SendModbusCommand(PSB_Handle *handle, unsigned char *txBuffer, int tx
         return PSB_ERROR_COMM;
     }
     
-    // Wait for response - INCREASED from 50ms to 150ms
-    Delay(0.15);  // 150ms delay for device processing
+    // Wait for response
+    Delay(0.05);
     
     // Read response with timeout
     int totalBytesRead = 0;

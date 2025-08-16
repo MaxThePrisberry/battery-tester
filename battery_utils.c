@@ -137,6 +137,15 @@ int Battery_GoToVoltage(VoltageTargetParams *params) {
         LogError("Failed to set current: %s", PSB_GetErrorString(result));
         return result;
     }
+	
+	result = PSB_SetPowerQueued(PSB_BATTERY_POWER_MAX, DEVICE_PRIORITY_NORMAL);
+    if (result != PSB_SUCCESS) {
+        LogWarning("Failed to set power: %s", PSB_GetErrorString(result));
+    }
+	result = PSB_SetSinkPowerQueued(PSB_BATTERY_POWER_MAX, DEVICE_PRIORITY_NORMAL);
+    if (result != PSB_SUCCESS) {
+        LogWarning("Failed to set sink power: %s", PSB_GetErrorString(result));
+    }
     
     // Enable output
     PSB_SetOutputEnableQueued(1, DEVICE_PRIORITY_NORMAL);
@@ -160,6 +169,8 @@ int Battery_GoToVoltage(VoltageTargetParams *params) {
     double lastTime = 0.0;
     int firstReading = 1;
     
+	LogMessage(params->wasCharging ? "Charging..." : "Discharging...");
+	
     // Update status
     if (params->statusCallback) {
         params->statusCallback(params->wasCharging ? "Charging..." : "Discharging...");
@@ -189,6 +200,24 @@ int Battery_GoToVoltage(VoltageTargetParams *params) {
                 params->result = BATTERY_OP_ERROR;
                 break;
             }
+			
+			// Check for cancellation
+			if (*(params->cancelFlag)) {
+			    LogMessage("Battery_GoToVoltage operation cancelled by user");
+			    params->result = BATTERY_OP_ABORTED;
+			    break;
+			}
+			
+			// Update graphs if provided
+			if (params->graph1Handle > 0 && params->panelHandle > 0) {
+			    PlotDataPoint(params->panelHandle, params->graph1Handle, 
+			                  elapsedTime, fabs(status.current), VAL_SOLID_CIRCLE, VAL_RED);
+			}
+
+			if (params->graph2Handle > 0 && params->panelHandle > 0) {
+			    PlotDataPoint(params->panelHandle, params->graph2Handle, 
+			                  elapsedTime, status.voltage, VAL_SOLID_CIRCLE, VAL_BLUE);
+			}
             
             // Store final voltage
             params->finalVoltage_V = status.voltage;
@@ -234,21 +263,11 @@ int Battery_GoToVoltage(VoltageTargetParams *params) {
                     params->progressCallback(status.voltage, status.current, accumulatedCapacity_mAh);
                 }
                 
-                // Log progress periodically (every 5 seconds)
+                // Log progress periodically if debug is activated (every 5 seconds)
                 if ((currentTime - lastLogTime) >= 5.0) {
-                    LogMessage("%s progress: V=%.3f, I=%.3f A, Capacity=%.2f mAh", 
+                    LogDebug("%s progress: V=%.3f, I=%.3f A, Capacity=%.2f mAh", 
                               params->wasCharging ? "Charge" : "Discharge",
                               status.voltage, status.current, fabs(accumulatedCapacity_mAh));
-                    
-                    // Update status message
-                    if (params->panelHandle > 0 && params->statusControl > 0) {
-                        char statusMsg[256];
-                        snprintf(statusMsg, sizeof(statusMsg), 
-                                 "%s: %.3f V, %.3f A (%.2f mAh)", 
-                                 params->wasCharging ? "Charging" : "Discharging",
-                                 status.voltage, status.current, fabs(accumulatedCapacity_mAh));
-                        SetCtrlVal(params->panelHandle, params->statusControl, statusMsg);
-                    }
                     
                     lastLogTime = currentTime;
                 }

@@ -154,7 +154,7 @@ void Controls_UpdateFromDeviceStates(void) {
                 }
                 
                 if (setpointChanged) {
-                    SetCtrlVal(g_controls.panelHandle, PANEL_NUM_DTB_SETPOINT, status.setPoint);
+                    SetCtrlVal(g_controls.panelHandle, PANEL_NUM_DTB_1_SETPOINT, status.setPoint);
                 }
                 
                 // Always update internal tracking
@@ -340,7 +340,7 @@ int CVICALLBACK DTBRunStopCallback(int panel, int control, int event,
                 // Currently stopped - start it
                 // First get the setpoint value
                 double setpoint;
-                GetCtrlVal(panel, PANEL_NUM_DTB_SETPOINT, &setpoint);
+                GetCtrlVal(panel, PANEL_NUM_DTB_1_SETPOINT, &setpoint);
                 
                 g_controls.dtbRunStateChangePending = 1;
                 g_controls.pendingDTBRunState = 1;
@@ -476,7 +476,7 @@ static void UpdateDTBButtonState(int isRunning) {
     // Update button text
     ControlUpdateData* textData = malloc(sizeof(ControlUpdateData));
     if (textData) {
-        textData->control = PANEL_BTN_DTB_RUN_STOP;
+        textData->control = PANEL_BTN_DTB_1_RUN_STOP;
         strcpy(textData->strValue, isRunning ? "Stop" : "Run");
         PostDeferredCall(DeferredButtonTextUpdate, textData);
     }
@@ -484,7 +484,7 @@ static void UpdateDTBButtonState(int isRunning) {
     // Update setpoint control dimming
     ControlUpdateData* dimData = malloc(sizeof(ControlUpdateData));
     if (dimData) {
-        dimData->control = PANEL_NUM_DTB_SETPOINT;
+        dimData->control = PANEL_NUM_DTB_1_SETPOINT;
         dimData->intValue = isRunning ? 1 : 0; // 1 = dim, 0 = enable
         PostDeferredCall(DeferredControlUpdate, dimData);
     }
@@ -506,7 +506,7 @@ static void UpdateRemoteToggleState(int remoteMode) {
 static void CVICALLBACK DeferredControlUpdate(void* data) {
     ControlUpdateData* updateData = (ControlUpdateData*)data;
     if (updateData && g_controls.panelHandle > 0) {
-        if (updateData->control == PANEL_NUM_DTB_SETPOINT) {
+        if (updateData->control == PANEL_NUM_DTB_1_SETPOINT) {
             // For setpoint, intValue is dimming state
             SetCtrlAttribute(g_controls.panelHandle, updateData->control, 
                            ATTR_DIMMED, updateData->intValue);

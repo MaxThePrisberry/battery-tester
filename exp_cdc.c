@@ -189,7 +189,7 @@ static int StartCDCOperation(int panel, int control, CDCOperationMode mode) {
         }
     }
     
-    DimCapacityExperimentControls(g_mainPanelHandle, panel, 1, 
+    DimExperimentControls(g_mainPanelHandle, panel, 1, 
                                   controlsToDim, dimCount);
     
     // Start experiment thread
@@ -200,7 +200,7 @@ static int StartCDCOperation(int panel, int control, CDCOperationMode mode) {
         g_experimentContext.state = CDC_STATE_ERROR;
         SetCtrlAttribute(panel, control, ATTR_LABEL_TEXT, 
                         mode == CDC_MODE_CHARGE ? "Charge" : "Discharge");
-        DimCapacityExperimentControls(g_mainPanelHandle, panel, 0, 
+        DimExperimentControls(g_mainPanelHandle, panel, 0, 
                                      (int*)g_cdcControls, g_numCdcControls);
         
         CmtGetLock(g_busyLock);
@@ -570,7 +570,7 @@ static void UpdateGraph(CDCExperimentContext *ctx, double current, double time) 
 
 static void RestoreUI(CDCExperimentContext *ctx) {
     // Re-enable all controls
-    DimCapacityExperimentControls(ctx->mainPanelHandle, ctx->tabPanelHandle, 0, 
+    DimExperimentControls(ctx->mainPanelHandle, ctx->tabPanelHandle, 0, 
                                  (int*)g_cdcControls, g_numCdcControls);
 }
 

@@ -42,6 +42,13 @@ typedef struct {
     int statusControl;
     int progressControl;
     
+    // Graph controls (optional)
+    int graph1Handle;              // Graph for current vs time
+    int graph2Handle;              // Graph for voltage vs time
+    
+    // Cancellation support
+    volatile int *cancelFlag;    // Set to 1 when cancellation requested
+    
     // Output results
     double actualCapacity_mAh;     // Actual capacity transferred (+ for charge, - for discharge)
     double actualEnergy_Wh;        // Actual energy transferred (+ for charge, - for discharge)

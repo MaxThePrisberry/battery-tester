@@ -49,6 +49,11 @@
 #define DTB_NUM_DEVICES         1       // Number of DTB devices to initialize
 
 #define TNY_COM_PORT            6       // Teensy COM port
+#define TNY_PSB_PIN          0          // Teensy pin for PSB relay
+#define TNY_BIOLOGIC_PIN     1          // Teensy pin for BioLogic relay
+#define TNY_SWITCH_DELAY_MS  100        // Delay after relay switching
+#define TNY_STATE_CONNECTED  1          // HIGH = connected
+#define TNY_STATE_DISCONNECTED 0        // LOW = disconnected
 
 //==============================================================================
 // Project Configuration
@@ -377,7 +382,7 @@ int CreateTimestampedDirectory(const char *baseDir, const char *prefix,
 void DimControlArray(int panel, int arrayID, int dim);
 
 /**
- * Dim/enable controls for capacity experiment
+ * Dim/enable controls for any experiment
  * This function handles:
  * - Control arrays (BATTERY_CONSTANTS_ARR, MANUAL_CONTROL_ARR)
  * - Tab control locking
@@ -389,7 +394,7 @@ void DimControlArray(int panel, int arrayID, int dim);
  * @param controls - array of tab-specific controls
  * @param numControls - number of tab-specific controls
  */
-void DimCapacityExperimentControls(int mainPanel, int tabPanel, int dim, int *controls, int numControls);
+void DimExperimentControls(int mainPanel, int tabPanel, int dim, int *controls, int numControls);
 
 //==============================================================================
 // Common Constants
@@ -408,6 +413,33 @@ void DimCapacityExperimentControls(int mainPanel, int tabPanel, int dim, int *co
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
+
+// EIS Measurement Parameters (same as SOCEIS)
+#define OCV_DURATION_S         10.0   // OCV measurement duration
+#define OCV_SAMPLE_INTERVAL_S  0.1    // OCV sampling interval
+#define OCV_RECORD_EVERY_DE    1.0    // mV threshold
+#define OCV_RECORD_EVERY_DT    1.0    // seconds threshold
+#define OCV_E_RANGE            KBIO_ERANGE_AUTO  // Auto range
+#define OCV_TIMEOUT_MS         60000   // 1 minute
+
+// GEIS parameters
+#define GEIS_VS_INITIAL        true   // vs initial
+#define GEIS_INITIAL_CURRENT   0.0
+#define GEIS_DURATION_S        1.0    // Step duration 
+#define GEIS_RECORD_EVERY_DT   0.0    // 0.000 seconds
+#define GEIS_RECORD_EVERY_DE   0.01    // 0.000 V
+#define GEIS_INITIAL_FREQ      10000.0  // 10.000 kHz
+#define GEIS_FINAL_FREQ        0.1      // 100.000 mHz = 0.1 Hz
+#define GEIS_SWEEP_LINEAR      false    // Logarithmic
+#define GEIS_AMPLITUDE_I       0.5      // 500mA
+#define GEIS_FREQ_NUMBER       31       // 5 decades * 6 points per decade + 1 final
+#define GEIS_AVERAGE_N         2        // Average N = 2
+#define GEIS_CORRECTION        false    // No drift correction
+#define GEIS_WAIT_FOR_STEADY   0.1      // 0.10 period before each frequency
+#define GEIS_I_RANGE           KBIO_IRANGE_1A  // 1A range
+#define GEIS_TIMEOUT_MS        300000  // 5 minutes
+
+#define PSB_BATTERY_POWER_MAX  30      // 30W
 
 //==============================================================================
 // Platform-specific definitions

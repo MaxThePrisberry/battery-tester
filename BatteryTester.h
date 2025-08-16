@@ -15,7 +15,7 @@
 
 #define  PANEL                            1       /* callback function: PanelCallback */
 #define  PANEL_BTN_CMD_PROMPT_SEND        2       /* control type: command, callback function: CmdPromptSendCallback */
-#define  PANEL_BTN_DTB_RUN_STOP           3       /* control type: command, callback function: DTBRunStopCallback */
+#define  PANEL_BTN_DTB_1_RUN_STOP         3       /* control type: command, callback function: DTBRunStopCallback */
 #define  PANEL_LED_REMOTE_MODE            4       /* control type: LED, callback function: (none) */
 #define  PANEL_NUM_SET_CHARGE_V           5       /* control type: numeric, callback function: (none) */
 #define  PANEL_NUM_SET_DISCHARGE_V        6       /* control type: numeric, callback function: (none) */
@@ -47,13 +47,13 @@
 #define  PANEL_GRAPH_1                    32      /* control type: graph, callback function: (none) */
 #define  PANEL_GRAPH_BIOLOGIC             33      /* control type: graph, callback function: (none) */
 #define  PANEL_BAT_CONSTS_LABEL           34      /* control type: textMsg, callback function: (none) */
-#define  PANEL_LED_DTB_STATUS             35      /* control type: LED, callback function: (none) */
+#define  PANEL_LED_DTB_1_STATUS           35      /* control type: LED, callback function: (none) */
 #define  PANEL_SPLITTER                   36      /* control type: splitter, callback function: (none) */
 #define  PANEL_SPLITTER_3                 37      /* control type: splitter, callback function: (none) */
 #define  PANEL_SPLITTER_2                 38      /* control type: splitter, callback function: (none) */
-#define  PANEL_STR_DTB_STATUS             39      /* control type: string, callback function: (none) */
-#define  PANEL_NUM_DTB_SETPOINT           40      /* control type: numeric, callback function: (none) */
-#define  PANEL_NUM_DTB_TEMPERATURE        41      /* control type: scale, callback function: (none) */
+#define  PANEL_STR_DTB_1_STATUS           39      /* control type: string, callback function: (none) */
+#define  PANEL_NUM_DTB_1_SETPOINT         40      /* control type: numeric, callback function: (none) */
+#define  PANEL_NUM_DTB_1_TEMPERATURE      41      /* control type: scale, callback function: (none) */
 #define  PANEL_TOGGLE_TEENSY              42      /* control type: binary, callback function: TestTeensyCallback */
 #define  PANEL_STR_CMD_PROMPT_INPUT       43      /* control type: string, callback function: CmdPromptInputCallback */
 #define  PANEL_NUM_TC1                    44      /* control type: numeric, callback function: (none) */
@@ -62,6 +62,15 @@
 #define  PANEL_DEC_BIO_GRAPH              47      /* control type: deco, callback function: (none) */
 #define  PANEL_DEC_CMDPROMPT              48      /* control type: deco, callback function: (none) */
 #define  PANEL_DEC_TCS                    49      /* control type: deco, callback function: (none) */
+
+     /* tab page panel controls */
+#define  BASELINE_NUM_EIS_INTERVAL        2       /* control type: numeric, callback function: (none) */
+#define  BASELINE_NUM_CURRENT_THRESHOLD   3       /* control type: numeric, callback function: (none) */
+#define  BASELINE_NUM_TEMPERATURE         4       /* control type: numeric, callback function: (none) */
+#define  BASELINE_NUM_INTERVAL            5       /* control type: numeric, callback function: (none) */
+#define  BASELINE_BTN_BASELINE            6       /* control type: command, callback function: StartBaselineExperimentCallback */
+#define  BASELINE_NUM_OUTPUT              7       /* control type: numeric, callback function: (none) */
+#define  BASELINE_STR_BASELINE_STATUS     8       /* control type: string, callback function: (none) */
 
      /* tab page panel controls */
 #define  CAPACITY_BTN_EXP_CAPACITY        2       /* control type: command, callback function: StartCapacityExperimentCallback */
@@ -91,9 +100,10 @@
      /* Control Arrays: */
 
 #define  BATTERY_CONSTANTS_ARR            1
-#define  GRAPHS_ARR                       2
-#define  MANUAL_CONTROL_ARR               3
-#define  STATUS_ARR                       4
+#define  DTB_CONTROL_ARR                  2
+#define  GRAPHS_ARR                       3
+#define  MANUAL_CONTROL_ARR               4
+#define  STATUS_ARR                       5
 
      /* Menu Bars, Menus, and Menu Items: */
 
@@ -112,6 +122,7 @@ int  CVICALLBACK DTBRunStopCallback(int panel, int control, int event, void *cal
 int  CVICALLBACK ImportSOCEISSettingsCallback(int panel, int control, int event, void *callbackData, int eventData1, int eventData2);
 int  CVICALLBACK PanelCallback(int panel, int event, void *callbackData, int eventData1, int eventData2);
 int  CVICALLBACK RemoteModeToggle(int panel, int control, int event, void *callbackData, int eventData1, int eventData2);
+int  CVICALLBACK StartBaselineExperimentCallback(int panel, int control, int event, void *callbackData, int eventData1, int eventData2);
 int  CVICALLBACK StartCapacityExperimentCallback(int panel, int control, int event, void *callbackData, int eventData1, int eventData2);
 int  CVICALLBACK StartSOCEISExperimentCallback(int panel, int control, int event, void *callbackData, int eventData1, int eventData2);
 int  CVICALLBACK TestBiologicCallback(int panel, int control, int event, void *callbackData, int eventData1, int eventData2);

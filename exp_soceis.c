@@ -200,7 +200,7 @@ int CVICALLBACK StartSOCEISExperimentCallback(int panel, int control, int event,
     SetCtrlAttribute(panel, control, ATTR_LABEL_TEXT, "Stop");
     
     // Dim appropriate controls
-    DimCapacityExperimentControls(g_mainPanelHandle, panel, 1, controls, numControls);
+    DimExperimentControls(g_mainPanelHandle, panel, 1, controls, numControls);
     
     // Start experiment thread
     int error = CmtScheduleThreadPoolFunction(g_threadPool, SOCEISExperimentThread, 
@@ -209,7 +209,7 @@ int CVICALLBACK StartSOCEISExperimentCallback(int panel, int control, int event,
         // Failed to start thread
         g_experimentContext.state = SOCEIS_STATE_ERROR;
         SetCtrlAttribute(panel, control, ATTR_LABEL_TEXT, "Start");
-        DimCapacityExperimentControls(g_mainPanelHandle, panel, 0, controls, numControls);
+        DimExperimentControls(g_mainPanelHandle, panel, 0, controls, numControls);
         
         CmtGetLock(g_busyLock);
         g_systemBusy = 0;
@@ -1715,7 +1715,7 @@ static int WriteResultsFile(SOCEISExperimentContext *ctx) {
 
 static void RestoreUI(SOCEISExperimentContext *ctx) {
     // Re-enable controls
-    DimCapacityExperimentControls(ctx->mainPanelHandle, ctx->tabPanelHandle, 0, controls, numControls);
+    DimExperimentControls(ctx->mainPanelHandle, ctx->tabPanelHandle, 0, controls, numControls);
 }
 
 static void ClearGraphs(SOCEISExperimentContext *ctx) {

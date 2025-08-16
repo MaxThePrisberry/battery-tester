@@ -147,7 +147,7 @@ int CVICALLBACK StartCapacityExperimentCallback(int panel, int control, int even
     
     // Update UI
     SetCtrlAttribute(panel, control, ATTR_LABEL_TEXT, "Stop");
-    DimCapacityExperimentControls(g_mainPanelHandle, panel, 1, controls, numControls);
+    DimExperimentControls(g_mainPanelHandle, panel, 1, controls, numControls);
     
     // Start experiment thread
     int error = CmtScheduleThreadPoolFunction(g_threadPool, CapacityExperimentThread, 
@@ -155,7 +155,7 @@ int CVICALLBACK StartCapacityExperimentCallback(int panel, int control, int even
     if (error != 0) {
         g_experimentContext.state = CAPACITY_STATE_ERROR;
         SetCtrlAttribute(panel, control, ATTR_LABEL_TEXT, "Start");
-        DimCapacityExperimentControls(g_mainPanelHandle, panel, 0, controls, numControls);
+        DimExperimentControls(g_mainPanelHandle, panel, 0, controls, numControls);
         
         CmtGetLock(g_busyLock);
         g_systemBusy = 0;
@@ -838,7 +838,7 @@ static int WriteResultsFile(CapacityExperimentContext *ctx) {
 }
 
 static void RestoreUI(CapacityExperimentContext *ctx) {
-    DimCapacityExperimentControls(ctx->mainPanelHandle, ctx->tabPanelHandle, 0, controls, numControls);
+    DimExperimentControls(ctx->mainPanelHandle, ctx->tabPanelHandle, 0, controls, numControls);
 }
 
 /******************************************************************************

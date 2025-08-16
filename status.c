@@ -674,7 +674,7 @@ static void UpdateDeviceLED(DeviceType deviceType, ConnectionState state) {
             data->control = PANEL_LED_BIOLOGIC_STATUS;
             break;
         case DEVICE_DTB:
-            data->control = PANEL_LED_DTB_STATUS;
+            data->control = PANEL_LED_DTB_1_STATUS;
             break;
         default:
             free(data);
@@ -712,7 +712,7 @@ static void UpdateDeviceStatus(DeviceType deviceType, const char* message) {
             data->control = PANEL_STR_BIOLOGIC_STATUS;
             break;
         case DEVICE_DTB:
-            data->control = PANEL_STR_DTB_STATUS;
+            data->control = PANEL_STR_DTB_1_STATUS;
             break;
         default:
             free(data);
@@ -755,7 +755,7 @@ static void UpdateDTBValues(DTB_Status* status) {
     // Update current temperature
     UIUpdateData* tempData = malloc(sizeof(UIUpdateData));
     if (tempData) {
-        tempData->control = PANEL_NUM_DTB_TEMPERATURE;
+        tempData->control = PANEL_NUM_DTB_1_TEMPERATURE;
         tempData->dblValue = status->processValue;
         PostDeferredCall(DeferredNumericUpdate, tempData);
     }
