@@ -11,6 +11,7 @@
 #include "psb10000_queue.h"
 #include "dtb4848_queue.h"
 #include "teensy_queue.h"
+#include "cdaq_utils.h"
 #include "exp_cdc.h"
 #include "exp_capacity.h"
 #include "exp_soceis.h"
@@ -65,6 +66,17 @@ int main (int argc, char *argv[]) {
 	// Initialize controls module
 	Controls_Initialize(g_mainPanelHandle);
     
+	// Initialize cDAQ module if enabled
+	if (ENABLE_CDAQ) {
+	    LogMessage("Initializing cDAQ module...");
+	    int result = CDAQ_Initialize();
+	    if (result == SUCCESS) {
+	        LogMessage("cDAQ module initialized successfully");
+	    } else {
+	        LogError("Failed to initialize cDAQ module: %s", GetErrorString(result));
+	    }
+	}
+	
     // Initialize PSB queue manager with specific port
 	if (ENABLE_PSB) {
 	    LogMessage("Initializing PSB queue manager on COM%d...", PSB_COM_PORT);
@@ -296,6 +308,12 @@ int CVICALLBACK PanelCallback(int panel, int event, void *callbackData,
             // delay to ensure everything is settled
             ProcessSystemEvents();
             Delay(0.2);
+			
+			// Clean up cDAQ module
+			if (ENABLE_CDAQ) {
+			    LogMessage("Cleaning up cDAQ module...");
+			    CDAQ_Cleanup();
+			}
             
             // Shutdown PSB queue manager
 			if (g_psbQueueMgr) {

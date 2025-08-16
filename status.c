@@ -18,9 +18,8 @@
 #include "dtb4848_queue.h"
 #include "logging.h"
 #include "controls.h"
-#include <utility.h>
+#include "cdaq_utils.h"
 #include <toolbox.h>
-#include <NIDAQmx.h>
 
 /******************************************************************************
  * Module State and Configuration
@@ -58,9 +57,6 @@ static struct {
     // Remote mode change tracking (PSB specific)
     volatile int remoteModeChangePending;
     volatile int pendingRemoteModeValue;
-    
-    // DAQmx task handle
-    TaskHandle tcTaskHandle;
 } g_status = {0};
 
 /******************************************************************************
@@ -177,21 +173,6 @@ int Status_Initialize(int panelHandle) {
     // Initialize device states
     Status_InitializeDeviceStates();
     
-    // Initialize DAQmx task for thermocouple if enabled
-    if (ENABLE_CDAQ) {
-        int32 result = DAQmxCreateTask("", &g_status.tcTaskHandle);
-        if (result == 0) {
-            result = DAQmxCreateAIThrmcplChan(g_status.tcTaskHandle, "cDAQ1Mod2/ai0", "", 
-                                             0.0, 400.0, DAQmx_Val_DegC, DAQmx_Val_K_Type_TC, 
-                                             DAQmx_Val_BuiltIn, 25.0, NULL);
-            if (result != 0) {
-                LogWarning("Failed to configure DAQmx thermocouple channel: %d", result);
-            }
-        } else {
-            LogWarning("Failed to create DAQmx task: %d", result);
-        }
-    }
-    
     // Set initial UI states to idle (yellow)
     for (int i = 0; i < DEVICE_COUNT; i++) {
         if (g_status.devices[i].enabled) {
@@ -213,14 +194,6 @@ int Status_Start(void) {
     }
     
     LogMessage("Starting device status monitoring...");
-    
-    // Start DAQmx task if enabled
-    if (ENABLE_CDAQ && g_status.tcTaskHandle != 0) {
-        int32 result = DAQmxStartTask(g_status.tcTaskHandle);
-        if (result != 0) {
-            LogWarning("Failed to start DAQmx task: %d", result);
-        }
-    }
     
     // Start timer thread
     int error = CmtScheduleThreadPoolFunction(g_threadPool, Status_TimerThread, 
@@ -261,11 +234,6 @@ int Status_Stop(void) {
         g_status.timerThreadId = 0;
     }
     
-    // Stop DAQmx task if enabled
-    if (ENABLE_CDAQ && g_status.tcTaskHandle != 0) {
-        DAQmxStopTask(g_status.tcTaskHandle);
-    }
-    
     Status_SetState(STATUS_STATE_STOPPED);
     LogMessage("Status monitoring stopped");
     return SUCCESS;
@@ -277,12 +245,6 @@ void Status_Cleanup(void) {
     StatusModuleState currentState = Status_GetState();
     if (currentState == STATUS_STATE_UNINITIALIZED) {
         return;
-    }
-    
-    // Clean up DAQmx task
-    if (ENABLE_CDAQ && g_status.tcTaskHandle != 0) {
-        DAQmxClearTask(g_status.tcTaskHandle);
-        g_status.tcTaskHandle = 0;
     }
     
     // Set final state
@@ -379,20 +341,28 @@ static int CVICALLBACK Status_TimerThread(void *functionData) {
             Status_ProcessDeviceUpdates();
         }
         
-        // Update thermocouple reading (synchronous)
-        if (ENABLE_CDAQ && g_status.tcTaskHandle != 0 && Status_ShouldProcessUpdates()) {
-            float64 data[1];
-            int32 result = DAQmxReadAnalogF64(g_status.tcTaskHandle, 1, 10.0, 
-                                             DAQmx_Val_GroupByChannel, data, 1, NULL, NULL);
-            if (result == 0) {
-                UIUpdateData* tcData = malloc(sizeof(UIUpdateData));
-                if (tcData) {
-                    tcData->control = PANEL_NUM_TC0;
-                    tcData->dblValue = data[0];
-                    PostDeferredCall(DeferredNumericUpdate, tcData);
-                }
-            }
-        }
+        // Update thermocouple readings using cDAQ module
+		if (ENABLE_CDAQ && Status_ShouldProcessUpdates()) {
+		    // Read TC0 and TC1 from slot 2 for UI display
+		    double temp;
+		    if (CDAQ_ReadTC(2, 0, &temp) == SUCCESS) {
+		        UIUpdateData* tcData = malloc(sizeof(UIUpdateData));
+		        if (tcData) {
+		            tcData->control = PANEL_NUM_TC0;
+		            tcData->dblValue = temp;
+		            PostDeferredCall(DeferredNumericUpdate, tcData);
+		        }
+		    }
+		    
+		    if (CDAQ_ReadTC(2, 1, &temp) == SUCCESS) {
+		        UIUpdateData* tcData = malloc(sizeof(UIUpdateData));
+		        if (tcData) {
+		            tcData->control = PANEL_NUM_TC1;
+		            tcData->dblValue = temp;
+		            PostDeferredCall(DeferredNumericUpdate, tcData);
+		        }
+		    }
+		}
         
         // Sleep for timer interval
         Delay(0.01);  // 10ms

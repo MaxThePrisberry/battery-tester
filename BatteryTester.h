@@ -56,11 +56,12 @@
 #define  PANEL_NUM_DTB_TEMPERATURE        41      /* control type: scale, callback function: (none) */
 #define  PANEL_TOGGLE_TEENSY              42      /* control type: binary, callback function: TestTeensyCallback */
 #define  PANEL_STR_CMD_PROMPT_INPUT       43      /* control type: string, callback function: CmdPromptInputCallback */
-#define  PANEL_NUM_TC0                    44      /* control type: numeric, callback function: (none) */
-#define  PANEL_DEC_TMPCTRL                45      /* control type: deco, callback function: (none) */
-#define  PANEL_DEC_BIO_GRAPH              46      /* control type: deco, callback function: (none) */
-#define  PANEL_DEC_CMDPROMPT              47      /* control type: deco, callback function: (none) */
-#define  PANEL_DEC_TCS                    48      /* control type: deco, callback function: (none) */
+#define  PANEL_NUM_TC1                    44      /* control type: numeric, callback function: (none) */
+#define  PANEL_NUM_TC0                    45      /* control type: numeric, callback function: (none) */
+#define  PANEL_DEC_TMPCTRL                46      /* control type: deco, callback function: (none) */
+#define  PANEL_DEC_BIO_GRAPH              47      /* control type: deco, callback function: (none) */
+#define  PANEL_DEC_CMDPROMPT              48      /* control type: deco, callback function: (none) */
+#define  PANEL_DEC_TCS                    49      /* control type: deco, callback function: (none) */
 
      /* tab page panel controls */
 #define  CAPACITY_BTN_EXP_CAPACITY        2       /* control type: command, callback function: StartCapacityExperimentCallback */
