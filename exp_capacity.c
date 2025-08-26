@@ -324,10 +324,11 @@ static int CapacityExperimentThread(void *functionData) {
             SetCtrlVal(ctx->mainPanelHandle, ctx->statusControl, "Returning battery to 50% capacity...");
             
             // Configure charge parameters to reach 50% of full capacity
-            ChargeParams charge50 = {
+            CapacityTransferParams charge50 = {
+                .mode = BATTERY_MODE_CHARGE,
                 .targetCapacity_mAh = chargeCapacity_mAh * 0.5,
-                .chargeCurrent_A = ctx->params.chargeCurrent,
-                .chargeVoltage_V = ctx->params.chargeVoltage,
+                .current_A = ctx->params.chargeCurrent,
+                .voltage_V = ctx->params.chargeVoltage,
                 .currentThreshold_A = ctx->params.currentThreshold,
                 .timeoutSeconds = 3600.0,
                 .updateIntervalMs = 1000,
@@ -335,15 +336,16 @@ static int CapacityExperimentThread(void *functionData) {
                 .statusControl = ctx->statusControl,
                 .progressControl = 0,
                 .progressCallback = NULL,
-                .statusCallback = NULL
+                .statusCallback = NULL,
+                .cancelFlag = NULL
             };
             
             // Perform the charge
-            int chargeResult = Battery_ChargeCapacity(&charge50);
+            int chargeResult = Battery_TransferCapacity(&charge50);
             
             if (chargeResult == SUCCESS && charge50.result == BATTERY_OP_SUCCESS) {
                 LogMessage("Successfully returned battery to 50%% capacity");
-                LogMessage("  Charged: %.2f mAh", charge50.actualCharged_mAh);
+                LogMessage("  Charged: %.2f mAh", charge50.actualTransferred_mAh);
                 LogMessage("  Time taken: %.1f minutes", charge50.elapsedTime_s / 60.0);
                 LogMessage("  Final voltage: %.3f V", charge50.finalVoltage_V);
                 
@@ -565,6 +567,17 @@ static int RunExperimentPhase(CapacityExperimentContext *ctx, CapacityExperiment
         LogError("Failed to set current: %s", PSB_GetErrorString(result));
         fclose(ctx->csvFile);
         return result;
+    }
+    
+    // Set power limits to avoid CP mode
+    result = PSB_SetPowerQueued(PSB_BATTERY_POWER_MAX, DEVICE_PRIORITY_NORMAL);
+    if (result != PSB_SUCCESS) {
+        LogWarning("Failed to set power: %s", PSB_GetErrorString(result));
+    }
+    
+    result = PSB_SetSinkPowerQueued(PSB_BATTERY_POWER_MAX, DEVICE_PRIORITY_NORMAL);
+    if (result != PSB_SUCCESS) {
+        LogWarning("Failed to set sink power: %s", PSB_GetErrorString(result));
     }
     
     // Connect PSB to battery using Teensy relay

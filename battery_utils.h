@@ -13,6 +13,14 @@
 #include "psb10000_queue.h"
 
 /******************************************************************************
+ * Configuration Constants
+ ******************************************************************************/
+
+// Transfer modes for capacity operations
+#define BATTERY_MODE_DISCHARGE    0    // Discharge mode: removes capacity from battery
+#define BATTERY_MODE_CHARGE       1    // Charge mode: adds capacity to battery
+
+/******************************************************************************
  * Type Definitions
  ******************************************************************************/
 
@@ -59,18 +67,19 @@ typedef struct {
     int wasCharging;               // 1 if charged, 0 if discharged
 } VoltageTargetParams;
 
-// Parameters for discharging a specific capacity
+// Parameters for capacity transfer operations (charge or discharge)
 typedef struct {
     // Input parameters
-    double targetCapacity_mAh;     // How much to discharge
-    double dischargeCurrent_A;     // Discharge current to use
-    double dischargeVoltage_V;     // Voltage limit during discharge
+    int mode;                      // BATTERY_MODE_CHARGE or BATTERY_MODE_DISCHARGE
+    double targetCapacity_mAh;     // How much to charge/discharge
+    double current_A;              // Current to use (charge or discharge current)
+    double voltage_V;              // Voltage limit/target (charge or discharge voltage)
     double currentThreshold_A;     // Stop if current drops below this
     double timeoutSeconds;         // Maximum time to run
     int updateIntervalMs;          // How often to update/check (minimum 100ms)
     
     // UI update callbacks (optional)
-    void (*progressCallback)(double percentComplete, double mAhDischarged);
+    void (*progressCallback)(double percentComplete, double mAhTransferred);
     void (*statusCallback)(const char* message);
     
     // Control handles for UI updates (optional)
@@ -78,12 +87,15 @@ typedef struct {
     int statusControl;
     int progressControl;
     
+    // Cancellation support
+    volatile int *cancelFlag;      // Set to 1 when cancellation requested
+    
     // Output results
-    double actualDischarged_mAh;   // Actual amount discharged
+    double actualTransferred_mAh;  // Actual amount transferred
     double finalVoltage_V;         // Final battery voltage
     double elapsedTime_s;          // Time taken
     BatteryOpResult result;        // Completion reason
-} DischargeParams;
+} CapacityTransferParams;
 
 /******************************************************************************
  * Public Functions
@@ -139,12 +151,22 @@ double Battery_CalculateEnergyIncrement(double voltage1_V, double current1_A,
 int Battery_GoToVoltage(VoltageTargetParams *params);
 
 /**
- * Discharge a specific amount of capacity from the battery
+ * Transfer a specific amount of capacity to/from the battery
  * This is a blocking function that uses coulomb counting
  * 
- * @param params - Discharge parameters and results
+ * For DISCHARGE mode:
+ *   - current_A should be the discharge current
+ *   - voltage_V should be the discharge voltage limit
+ *   - Stops when target capacity discharged OR current drops below threshold
+ * 
+ * For CHARGE mode:
+ *   - current_A should be the charge current  
+ *   - voltage_V should be the charge voltage limit
+ *   - Stops when target capacity charged OR current drops below threshold
+ * 
+ * @param params - Capacity transfer parameters and results
  * @return SUCCESS or error code
  */
-int Battery_DischargeCapacity(DischargeParams *params);
+int Battery_TransferCapacity(CapacityTransferParams *params);
 
 #endif // BATTERY_UTILS_H

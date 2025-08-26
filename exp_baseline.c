@@ -981,10 +981,11 @@ static int RunPhase4_Discharge50Percent(BaselineExperimentContext *ctx) {
     }
     
     // Configure discharge parameters
-    DischargeParams discharge50 = {
+    CapacityTransferParams discharge50 = {
+        .mode = BATTERY_MODE_DISCHARGE,
         .targetCapacity_mAh = ctx->measuredChargeCapacity_mAh * 0.5,
-        .dischargeCurrent_A = ctx->params.dischargeCurrent,
-        .dischargeVoltage_V = ctx->params.dischargeVoltage,
+        .current_A = ctx->params.dischargeCurrent,
+        .voltage_V = ctx->params.dischargeVoltage,
         .currentThreshold_A = ctx->params.currentThreshold,
         .timeoutSeconds = 3600.0,
         .updateIntervalMs = ctx->params.logInterval * 1000,
@@ -992,20 +993,21 @@ static int RunPhase4_Discharge50Percent(BaselineExperimentContext *ctx) {
         .statusControl = PANEL_STR_PSB_STATUS,
         .progressControl = 0,
         .progressCallback = NULL,
-        .statusCallback = NULL
+        .statusCallback = NULL,
+        .cancelFlag = NULL
     };
     
     // Perform the discharge
-    int dischargeResult = Battery_DischargeCapacity(&discharge50);
+    int dischargeResult = Battery_TransferCapacity(&discharge50);
     
     if (dischargeResult == SUCCESS && discharge50.result == BATTERY_OP_SUCCESS) {
         LogMessage("Successfully discharged battery to 50%% capacity");
-        LogMessage("  Discharged: %.2f mAh", discharge50.actualDischarged_mAh);
+        LogMessage("  Discharged: %.2f mAh", discharge50.actualTransferred_mAh);
         LogMessage("  Time taken: %.1f minutes", discharge50.elapsedTime_s / 60.0);
         LogMessage("  Final voltage: %.3f V", discharge50.finalVoltage_V);
         
         // Calculate final SOC
-        double finalSOC = 50.0 - ((discharge50.actualDischarged_mAh - discharge50.targetCapacity_mAh) / 
+        double finalSOC = 50.0 - ((discharge50.actualTransferred_mAh - discharge50.targetCapacity_mAh) / 
                                  ctx->measuredChargeCapacity_mAh) * 100.0;
         SetCtrlVal(ctx->tabPanelHandle, ctx->outputControl, finalSOC);
         

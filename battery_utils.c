@@ -13,7 +13,7 @@
  * Module Constants
  ******************************************************************************/
 #define MIN_UPDATE_INTERVAL_MS    100    // Minimum update interval
-#define DISCHARGE_STABILIZE_TIME  2.0    // Time to wait after enabling output
+#define STABILIZE_TIME            2.0    // Time to wait after enabling output
 
 /******************************************************************************
  * Public Function Implementations
@@ -156,7 +156,7 @@ int Battery_GoToVoltage(VoltageTargetParams *params) {
     
     // Wait for output to stabilize
     LogMessage("Waiting for output to stabilize...");
-    Delay(DISCHARGE_STABILIZE_TIME);
+    Delay(STABILIZE_TIME);
     
     // Initialize timing and coulomb counting
     double startTime = Timer();
@@ -202,7 +202,7 @@ int Battery_GoToVoltage(VoltageTargetParams *params) {
             }
 			
 			// Check for cancellation
-			if (*(params->cancelFlag)) {
+			if (params->cancelFlag && *(params->cancelFlag)) {
 			    LogMessage("Battery_GoToVoltage operation cancelled by user");
 			    params->result = BATTERY_OP_ABORTED;
 			    break;
@@ -312,15 +312,21 @@ int Battery_GoToVoltage(VoltageTargetParams *params) {
     return (params->result == BATTERY_OP_SUCCESS) ? SUCCESS : ERR_OPERATION_FAILED;
 }
 
-int Battery_DischargeCapacity(DischargeParams *params) {
+int Battery_TransferCapacity(CapacityTransferParams *params) {
     if (!params) return ERR_INVALID_PARAMETER;
     
     // Validate input parameters
     if (params->targetCapacity_mAh <= 0 || 
-        params->dischargeCurrent_A <= 0 ||
-        params->dischargeVoltage_V < 0 ||
+        params->current_A <= 0 ||
+        params->voltage_V < 0 ||
         params->timeoutSeconds <= 0) {
-        LogError("Battery_DischargeCapacity: Invalid parameters");
+        LogError("Battery_TransferCapacity: Invalid parameters");
+        return ERR_INVALID_PARAMETER;
+    }
+    
+    // Validate mode
+    if (params->mode != BATTERY_MODE_CHARGE && params->mode != BATTERY_MODE_DISCHARGE) {
+        LogError("Battery_TransferCapacity: Invalid mode %d", params->mode);
         return ERR_INVALID_PARAMETER;
     }
     
@@ -330,42 +336,58 @@ int Battery_DischargeCapacity(DischargeParams *params) {
     }
     
     // Initialize results
-    params->actualDischarged_mAh = 0.0;
+    params->actualTransferred_mAh = 0.0;
     params->elapsedTime_s = 0.0;
     params->finalVoltage_V = 0.0;
     params->result = BATTERY_OP_ERROR;
     
     int result;
+    const char *modeStr = (params->mode == BATTERY_MODE_CHARGE) ? "charge" : "discharge";
     
-    LogMessage("Starting discharge of %.2f mAh at %.2f A", 
-               params->targetCapacity_mAh, params->dischargeCurrent_A);
+    LogMessage("Starting %s of %.2f mAh at %.2f A", 
+               modeStr, params->targetCapacity_mAh, params->current_A);
     
     // Update status
+    char statusMsg[256];
+    snprintf(statusMsg, sizeof(statusMsg), "Configuring %s parameters...", modeStr);
     if (params->statusCallback) {
-        params->statusCallback("Configuring discharge parameters...");
+        params->statusCallback(statusMsg);
     }
     if (params->panelHandle > 0 && params->statusControl > 0) {
-        SetCtrlVal(params->panelHandle, params->statusControl, 
-                   "Configuring discharge parameters...");
+        SetCtrlVal(params->panelHandle, params->statusControl, statusMsg);
     }
     
-    // Set discharge voltage
-    result = PSB_SetVoltageQueued(params->dischargeVoltage_V, DEVICE_PRIORITY_NORMAL);
+    // Set voltage (as limit/target)
+    result = PSB_SetVoltageQueued(params->voltage_V, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
-        LogError("Failed to set discharge voltage: %s", PSB_GetErrorString(result));
+        LogError("Failed to set voltage: %s", PSB_GetErrorString(result));
         return result;
     }
     
-    // Set sink current
-    result = PSB_SetSinkCurrentQueued(params->dischargeCurrent_A, DEVICE_PRIORITY_NORMAL);
+    // Set current based on mode
+    if (params->mode == BATTERY_MODE_CHARGE) {
+        result = PSB_SetCurrentQueued(params->current_A, DEVICE_PRIORITY_NORMAL);
+    } else {
+        result = PSB_SetSinkCurrentQueued(params->current_A, DEVICE_PRIORITY_NORMAL);
+    }
     if (result != PSB_SUCCESS) {
-        LogError("Failed to set sink current: %s", PSB_GetErrorString(result));
+        LogError("Failed to set current: %s", PSB_GetErrorString(result));
         return result;
+    }
+    
+    // Set power limits (like GoToVoltage does)
+    result = PSB_SetPowerQueued(PSB_BATTERY_POWER_MAX, DEVICE_PRIORITY_NORMAL);
+    if (result != PSB_SUCCESS) {
+        LogWarning("Failed to set power: %s", PSB_GetErrorString(result));
+    }
+    
+    result = PSB_SetSinkPowerQueued(PSB_BATTERY_POWER_MAX, DEVICE_PRIORITY_NORMAL);
+    if (result != PSB_SUCCESS) {
+        LogWarning("Failed to set sink power: %s", PSB_GetErrorString(result));
     }
     
     // Enable output
-    PSB_SetOutputEnableQueued(1, DEVICE_PRIORITY_NORMAL);
-	
+    result = PSB_SetOutputEnableQueued(1, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         LogError("Failed to enable output: %s", PSB_GetErrorString(result));
         return result;
@@ -373,7 +395,7 @@ int Battery_DischargeCapacity(DischargeParams *params) {
     
     // Wait for output to stabilize
     LogMessage("Waiting for output to stabilize...");
-    Delay(DISCHARGE_STABILIZE_TIME);
+    Delay(STABILIZE_TIME);
     
     // Initialize timing and coulomb counting
     double startTime = Timer();
@@ -385,18 +407,20 @@ int Battery_DischargeCapacity(DischargeParams *params) {
     int firstReading = 1;
     
     // Update status
+    snprintf(statusMsg, sizeof(statusMsg), "%s...", 
+             (params->mode == BATTERY_MODE_CHARGE) ? "Charging" : "Discharging");
     if (params->statusCallback) {
-        params->statusCallback("Discharging...");
+        params->statusCallback(statusMsg);
     }
     
-    // Main discharge loop
+    // Main transfer loop
     while (1) {
         double currentTime = Timer();
         double elapsedTime = currentTime - startTime;
         
         // Check timeout
         if (elapsedTime > params->timeoutSeconds) {
-            LogWarning("Discharge timeout reached after %.1f seconds", elapsedTime);
+            LogWarning("%s timeout reached after %.1f seconds", modeStr, elapsedTime);
             params->result = BATTERY_OP_TIMEOUT;
             break;
         }
@@ -409,8 +433,15 @@ int Battery_DischargeCapacity(DischargeParams *params) {
             PSB_Status status;
             result = PSB_GetStatusQueued(&status, DEVICE_PRIORITY_NORMAL);
             if (result != PSB_SUCCESS) {
-                LogError("Failed to read status during discharge: %s", PSB_GetErrorString(result));
+                LogError("Failed to read status during %s: %s", modeStr, PSB_GetErrorString(result));
                 params->result = BATTERY_OP_ERROR;
+                break;
+            }
+            
+            // Check for cancellation
+            if (params->cancelFlag && *(params->cancelFlag)) {
+                LogMessage("Battery %s operation cancelled by user", modeStr);
+                params->result = BATTERY_OP_ABORTED;
                 break;
             }
             
@@ -419,8 +450,8 @@ int Battery_DischargeCapacity(DischargeParams *params) {
             
             // Check current threshold
             if (fabs(status.current) < params->currentThreshold_A) {
-                LogMessage("Discharge stopped - current below threshold (%.3f A < %.3f A)",
-                          fabs(status.current), params->currentThreshold_A);
+                LogMessage("%s stopped - current below threshold (%.3f A < %.3f A)",
+                          modeStr, fabs(status.current), params->currentThreshold_A);
                 params->result = BATTERY_OP_CURRENT_THRESHOLD;
                 break;
             }
@@ -455,14 +486,14 @@ int Battery_DischargeCapacity(DischargeParams *params) {
                 
                 // Log progress periodically (every 5 seconds)
                 if ((currentTime - lastLogTime) >= 5.0) {
-                    LogMessage("Discharge progress: %.1f%% (%.2f / %.2f mAh)", 
-                              percentComplete, accumulatedCapacity_mAh, params->targetCapacity_mAh);
+                    LogMessage("%s progress: %.1f%% (%.2f / %.2f mAh)", 
+                              modeStr, percentComplete, accumulatedCapacity_mAh, params->targetCapacity_mAh);
                     
                     // Update status message
                     if (params->panelHandle > 0 && params->statusControl > 0) {
-                        char statusMsg[256];
                         snprintf(statusMsg, sizeof(statusMsg), 
-                                 "Discharging: %.1f%% (%.2f mAh)", 
+                                 "%s: %.1f%% (%.2f mAh)", 
+                                 (params->mode == BATTERY_MODE_CHARGE) ? "Charging" : "Discharging",
                                  percentComplete, accumulatedCapacity_mAh);
                         SetCtrlVal(params->panelHandle, params->statusControl, statusMsg);
                     }
@@ -483,7 +514,7 @@ int Battery_DischargeCapacity(DischargeParams *params) {
     }
     
     // Store final results
-    params->actualDischarged_mAh = accumulatedCapacity_mAh;
+    params->actualTransferred_mAh = accumulatedCapacity_mAh;
     params->elapsedTime_s = Timer() - startTime;
     
     // Disable output
@@ -491,8 +522,9 @@ int Battery_DischargeCapacity(DischargeParams *params) {
     
     // Final status update
     char finalMsg[256];
-    snprintf(finalMsg, sizeof(finalMsg), "Discharge complete: %.2f mAh in %.1f minutes", 
-             params->actualDischarged_mAh, params->elapsedTime_s / 60.0);
+    snprintf(finalMsg, sizeof(finalMsg), "%s complete: %.2f mAh in %.1f minutes", 
+             (params->mode == BATTERY_MODE_CHARGE) ? "Charge" : "Discharge",
+             params->actualTransferred_mAh, params->elapsedTime_s / 60.0);
     
     if (params->statusCallback) {
         params->statusCallback(finalMsg);
