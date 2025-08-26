@@ -7,6 +7,7 @@
 #include "common.h"
 #include "exp_capacity.h"
 #include "BatteryTester.h"
+#include "teensy_queue.h"
 #include "logging.h"
 #include "status.h"
 #include "battery_utils.h"
@@ -36,7 +37,7 @@ static const int controls[3] = {
  ******************************************************************************/
 
 static int CapacityExperimentThread(void *functionData);
-static int VerifyBatteryCharged(CapacityExperimentContext *ctx);
+static int VerifyBatteryDischarged(CapacityExperimentContext *ctx);
 static int ConfigureGraphs(CapacityExperimentContext *ctx);
 static int RunExperimentPhase(CapacityExperimentContext *ctx, CapacityExperimentPhase phase);
 static int LogDataPoint(CapacityExperimentContext *ctx, CapacityDataPoint *point);
@@ -205,7 +206,8 @@ static int CapacityExperimentThread(void *functionData) {
         "Discharge Current: %.2f A\n"
         "Current Threshold: %.3f A\n"
         "Log Interval: %d seconds\n\n"
-        "Please confirm these parameters are correct.",
+        "Please confirm these parameters are correct.\n"
+        "NOTE: This experiment expects a fully discharged battery.",
         ctx->params.chargeVoltage,
         ctx->params.dischargeVoltage,
         ctx->params.chargeCurrent,
@@ -245,8 +247,8 @@ static int CapacityExperimentThread(void *functionData) {
         goto cleanup;
     }
     
-    // Verify battery is charged
-    result = VerifyBatteryCharged(ctx);
+    // Verify battery is discharged
+    result = VerifyBatteryDischarged(ctx);
     if (result != SUCCESS || ctx->state == CAPACITY_STATE_CANCELLED) {
         if (ctx->state != CAPACITY_STATE_CANCELLED) {
             ctx->state = CAPACITY_STATE_CANCELLED;
@@ -257,32 +259,7 @@ static int CapacityExperimentThread(void *functionData) {
     // Configure graphs
     ConfigureGraphs(ctx);
     
-    // Run discharge phase
-    LogMessage("Starting discharge phase...");
-    SetCtrlVal(ctx->mainPanelHandle, ctx->statusControl, "Discharging battery...");
-    
-    result = RunExperimentPhase(ctx, CAPACITY_PHASE_DISCHARGE);
-    if (result != SUCCESS || ctx->state == CAPACITY_STATE_CANCELLED) {
-        if (ctx->state != CAPACITY_STATE_CANCELLED) {
-            ctx->state = CAPACITY_STATE_ERROR;
-        }
-        goto cleanup;
-    }
-    
-    // Clear graphs between phases
-    int graphs[] = {ctx->graph1Handle, ctx->graph2Handle};
-    ClearAllGraphs(ctx->mainPanelHandle, graphs, 2);
-    
-    // Short delay between phases
-    LogMessage("Switching from discharge to charge phase...");
-    for (int i = 0; i < 20; i++) {
-        if (ctx->state == CAPACITY_STATE_CANCELLED) {
-            goto cleanup;
-        }
-        Delay(0.1);
-    }
-    
-    // Run charge phase
+    // Run charge phase first
     LogMessage("Starting charge phase...");
     SetCtrlVal(ctx->mainPanelHandle, ctx->statusControl, "Charging battery...");
     
@@ -296,6 +273,31 @@ static int CapacityExperimentThread(void *functionData) {
     
     // Store charge capacity for potential 50% return
     chargeCapacity_mAh = ctx->chargeResults.capacity_mAh;
+    
+    // Clear graphs between phases
+    int graphs[] = {ctx->graph1Handle, ctx->graph2Handle};
+    ClearAllGraphs(ctx->mainPanelHandle, graphs, 2);
+    
+    // Short delay between phases
+    LogMessage("Switching from charge to discharge phase...");
+    for (int i = 0; i < 20; i++) {
+        if (ctx->state == CAPACITY_STATE_CANCELLED) {
+            goto cleanup;
+        }
+        Delay(0.1);
+    }
+    
+    // Run discharge phase
+    LogMessage("Starting discharge phase...");
+    SetCtrlVal(ctx->mainPanelHandle, ctx->statusControl, "Discharging battery...");
+    
+    result = RunExperimentPhase(ctx, CAPACITY_PHASE_DISCHARGE);
+    if (result != SUCCESS || ctx->state == CAPACITY_STATE_CANCELLED) {
+        if (ctx->state != CAPACITY_STATE_CANCELLED) {
+            ctx->state = CAPACITY_STATE_ERROR;
+        }
+        goto cleanup;
+    }
     
     // Record experiment end time
     ctx->experimentEndTime = GetTimestamp();
@@ -317,15 +319,15 @@ static int CapacityExperimentThread(void *functionData) {
         if (return50 && chargeCapacity_mAh > 0) {
             LogMessage("=== Returning battery to 50%% capacity ===");
             LogMessage("Charge capacity measured: %.2f mAh", chargeCapacity_mAh);
-            LogMessage("Target discharge: %.2f mAh", chargeCapacity_mAh * 0.5);
+            LogMessage("Target charge: %.2f mAh", chargeCapacity_mAh * 0.5);
             
             SetCtrlVal(ctx->mainPanelHandle, ctx->statusControl, "Returning battery to 50% capacity...");
             
-            // Configure discharge parameters
-            DischargeParams discharge50 = {
+            // Configure charge parameters to reach 50% of full capacity
+            ChargeParams charge50 = {
                 .targetCapacity_mAh = chargeCapacity_mAh * 0.5,
-                .dischargeCurrent_A = ctx->params.dischargeCurrent,
-                .dischargeVoltage_V = ctx->params.dischargeVoltage,
+                .chargeCurrent_A = ctx->params.chargeCurrent,
+                .chargeVoltage_V = ctx->params.chargeVoltage,
                 .currentThreshold_A = ctx->params.currentThreshold,
                 .timeoutSeconds = 3600.0,
                 .updateIntervalMs = 1000,
@@ -336,14 +338,14 @@ static int CapacityExperimentThread(void *functionData) {
                 .statusCallback = NULL
             };
             
-            // Perform the discharge
-            int dischargeResult = Battery_DischargeCapacity(&discharge50);
+            // Perform the charge
+            int chargeResult = Battery_ChargeCapacity(&charge50);
             
-            if (dischargeResult == SUCCESS && discharge50.result == BATTERY_OP_SUCCESS) {
+            if (chargeResult == SUCCESS && charge50.result == BATTERY_OP_SUCCESS) {
                 LogMessage("Successfully returned battery to 50%% capacity");
-                LogMessage("  Discharged: %.2f mAh", discharge50.actualDischarged_mAh);
-                LogMessage("  Time taken: %.1f minutes", discharge50.elapsedTime_s / 60.0);
-                LogMessage("  Final voltage: %.3f V", discharge50.finalVoltage_V);
+                LogMessage("  Charged: %.2f mAh", charge50.actualCharged_mAh);
+                LogMessage("  Time taken: %.1f minutes", charge50.elapsedTime_s / 60.0);
+                LogMessage("  Final voltage: %.3f V", charge50.finalVoltage_V);
                 
                 SetCtrlVal(ctx->mainPanelHandle, ctx->statusControl, 
                           "Capacity experiment completed - battery at 50% capacity");
@@ -358,6 +360,12 @@ static int CapacityExperimentThread(void *functionData) {
 cleanup:
     // Turn off PSB output
     PSB_SetOutputEnableQueued(0, DEVICE_PRIORITY_NORMAL);
+    
+    // Disconnect PSB from battery using Teensy relay
+    result = TNY_SetPinQueued(TNY_PSB_PIN, TNY_STATE_DISCONNECTED, DEVICE_PRIORITY_NORMAL);
+    if (result != SUCCESS) {
+        LogError("Failed to disconnect PSB via relay: %s", PSB_GetErrorString(result));
+    }
     
     // Update status based on final state
     const char *statusMsg;
@@ -423,10 +431,10 @@ static int CreateExperimentDirectory(CapacityExperimentContext *ctx) {
     return SUCCESS;
 }
 
-static int VerifyBatteryCharged(CapacityExperimentContext *ctx) {
+static int VerifyBatteryDischarged(CapacityExperimentContext *ctx) {
     char message[LARGE_BUFFER_SIZE];
     
-    LogMessage("Verifying battery charge state...");
+    LogMessage("Verifying battery is fully discharged...");
     
     if (ctx->state == CAPACITY_STATE_CANCELLED) {
         return ERR_CANCELLED;
@@ -441,21 +449,21 @@ static int VerifyBatteryCharged(CapacityExperimentContext *ctx) {
         return ERR_COMM_FAILED;
     }
     
-    double voltageDiff = fabs(status.voltage - ctx->params.chargeVoltage);
+    double voltageDiff = fabs(status.voltage - ctx->params.dischargeVoltage);
     
-    LogMessage("Battery voltage: %.3f V, Expected: %.3f V, Difference: %.3f V", 
-               status.voltage, ctx->params.chargeVoltage, voltageDiff);
+    LogMessage("Battery voltage: %.3f V, Expected (discharged): %.3f V, Difference: %.3f V", 
+               status.voltage, ctx->params.dischargeVoltage, voltageDiff);
     
     if (voltageDiff > CAPACITY_EXPERIMENT_VOLTAGE_MARGIN) {
         snprintf(message, sizeof(message),
-            "Battery may not be fully charged:\n\n"
+            "Battery may not be fully discharged:\n\n"
             "Measured Voltage: %.3f V\n"
             "Expected Voltage: %.3f V\n"
             "Difference: %.3f V\n"
             "Error Margin: %.3f V\n\n"
             "Do you want to continue anyway?",
             status.voltage,
-            ctx->params.chargeVoltage,
+            ctx->params.dischargeVoltage,
             voltageDiff,
             CAPACITY_EXPERIMENT_VOLTAGE_MARGIN);
         
@@ -463,14 +471,14 @@ static int VerifyBatteryCharged(CapacityExperimentContext *ctx) {
             return ERR_CANCELLED;
         }
         
-        int response = ConfirmPopup("Battery Not Fully Charged", message);
+        int response = ConfirmPopup("Battery Not Fully Discharged", message);
         if (!response || ctx->state == CAPACITY_STATE_CANCELLED) {
-            LogMessage("User cancelled due to battery not being fully charged");
+            LogMessage("User cancelled due to battery not being fully discharged");
             return ERR_CANCELLED;
         }
     }
     
-    LogMessage("Battery charge state verified");
+    LogMessage("Battery discharge state verified");
     return SUCCESS;
 }
 
@@ -505,26 +513,26 @@ static int RunExperimentPhase(CapacityExperimentContext *ctx, CapacityExperiment
     }
     
     // Determine phase parameters
-    const char *phaseName = (phase == CAPACITY_PHASE_DISCHARGE) ? "discharge" : "charge";
-    double targetVoltage = (phase == CAPACITY_PHASE_DISCHARGE) ? 
-                          ctx->params.dischargeVoltage : ctx->params.chargeVoltage;
-    double targetCurrent = (phase == CAPACITY_PHASE_DISCHARGE) ? 
-                          ctx->params.dischargeCurrent : ctx->params.chargeCurrent;
-    int capacityControl = (phase == CAPACITY_PHASE_DISCHARGE) ? 
-                         CAPACITY_NUM_DISCHARGE_CAP : CAPACITY_NUM_CHARGE_CAP;
-    const char *csvFileName = (phase == CAPACITY_PHASE_DISCHARGE) ?
-                             CAPACITY_EXPERIMENT_DISCHARGE_FILE : CAPACITY_EXPERIMENT_CHARGE_FILE;
+    const char *phaseName = (phase == CAPACITY_PHASE_CHARGE) ? "charge" : "discharge";
+    double targetVoltage = (phase == CAPACITY_PHASE_CHARGE) ? 
+                          ctx->params.chargeVoltage : ctx->params.dischargeVoltage;
+    double targetCurrent = (phase == CAPACITY_PHASE_CHARGE) ? 
+                          ctx->params.chargeCurrent : ctx->params.dischargeCurrent;
+    int capacityControl = (phase == CAPACITY_PHASE_CHARGE) ? 
+                         CAPACITY_NUM_CHARGE_CAP : CAPACITY_NUM_DISCHARGE_CAP;
+    const char *csvFileName = (phase == CAPACITY_PHASE_CHARGE) ?
+                             CAPACITY_EXPERIMENT_CHARGE_FILE : CAPACITY_EXPERIMENT_DISCHARGE_FILE;
     
-    // Get pointer to phase results
-    phaseResults = (phase == CAPACITY_PHASE_DISCHARGE) ? 
-                   &ctx->dischargeResults : &ctx->chargeResults;
+    // Get pointer to appropriate phase results - charge data goes to chargeResults, discharge to dischargeResults
+    phaseResults = (phase == CAPACITY_PHASE_CHARGE) ? 
+                   &ctx->chargeResults : &ctx->dischargeResults;
     
     // Initialize phase results
     memset(phaseResults, 0, sizeof(PhaseResults));
     
     // Update state
-    ctx->state = (phase == CAPACITY_PHASE_DISCHARGE) ? 
-                CAPACITY_STATE_DISCHARGING : CAPACITY_STATE_CHARGING;
+    ctx->state = (phase == CAPACITY_PHASE_CHARGE) ? 
+                CAPACITY_STATE_CHARGING : CAPACITY_STATE_DISCHARGING;
     ctx->capacityControl = capacityControl;
     
     // Open CSV file
@@ -559,11 +567,21 @@ static int RunExperimentPhase(CapacityExperimentContext *ctx, CapacityExperiment
         return result;
     }
     
+    // Connect PSB to battery using Teensy relay
+    result = TNY_SetPinQueued(TNY_PSB_PIN, TNY_STATE_CONNECTED, DEVICE_PRIORITY_NORMAL);
+    if (result != SUCCESS) {
+        LogError("Failed to connect PSB via relay: %s", PSB_GetErrorString(result));
+        fclose(ctx->csvFile);
+        return result;
+    }
+    
     // Enable PSB output
     result = PSB_SetOutputEnableQueued(1, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         LogError("Failed to enable output: %s", PSB_GetErrorString(result));
         fclose(ctx->csvFile);
+        // Disconnect relay on failure
+        TNY_SetPinQueued(TNY_PSB_PIN, TNY_STATE_DISCONNECTED, DEVICE_PRIORITY_NORMAL);
         return result;
     }
     
@@ -661,6 +679,13 @@ static int RunExperimentPhase(CapacityExperimentContext *ctx, CapacityExperiment
     // Disable output
     PSB_SetOutputEnableQueued(0, DEVICE_PRIORITY_NORMAL);
     
+    // Disconnect PSB from battery using Teensy relay
+    result = TNY_SetPinQueued(TNY_PSB_PIN, TNY_STATE_DISCONNECTED, DEVICE_PRIORITY_NORMAL);
+    if (result != SUCCESS) {
+        LogError("Failed to disconnect PSB via relay: %s", PSB_GetErrorString(result));
+        // Continue anyway as this is cleanup
+    }
+    
     // Store final results
     phaseResults->capacity_mAh = ctx->accumulatedCapacity_mAh;
     phaseResults->energy_Wh = ctx->accumulatedEnergy_Wh;
@@ -706,9 +731,9 @@ static int LogDataPoint(CapacityExperimentContext *ctx, CapacityDataPoint *point
         // Update capacity display
         SetCtrlVal(ctx->tabPanelHandle, ctx->capacityControl, ctx->accumulatedCapacity_mAh);
         
-        // Update phase results
-        PhaseResults *results = (ctx->state == CAPACITY_STATE_DISCHARGING) ? 
-                              &ctx->dischargeResults : &ctx->chargeResults;
+        // Update phase results - make sure to update the correct phase results
+        PhaseResults *results = (ctx->state == CAPACITY_STATE_CHARGING) ? 
+                              &ctx->chargeResults : &ctx->dischargeResults;
         UpdatePhaseResults(ctx, results, point);
     }
     
@@ -784,6 +809,7 @@ static int WriteResultsFile(CapacityExperimentContext *ctx) {
     WriteINIValue(file, "Experiment_Start_Time", "%s", startTimeStr);
     WriteINIValue(file, "Experiment_End_Time", "%s", endTimeStr);
     WriteINIDouble(file, "Total_Duration_s", ctx->experimentEndTime - ctx->experimentStartTime, 1);
+    WriteINIValue(file, "Experiment_Order", "Charge_First_Then_Discharge");
     fprintf(file, "\n");
     
     // Experiment Parameters
@@ -796,19 +822,7 @@ static int WriteResultsFile(CapacityExperimentContext *ctx) {
     WriteINIValue(file, "Log_Interval_s", "%u", ctx->params.logInterval);
     fprintf(file, "\n");
     
-    // Discharge Results
-    WriteINISection(file, "Discharge_Results");
-    WriteINIDouble(file, "Discharge_Capacity_mAh", ctx->dischargeResults.capacity_mAh, 2);
-    WriteINIDouble(file, "Discharge_Duration_s", ctx->dischargeResults.duration_s, 1);
-    WriteINIDouble(file, "Discharge_Start_Voltage_V", ctx->dischargeResults.startVoltage, 3);
-    WriteINIDouble(file, "Discharge_End_Voltage_V", ctx->dischargeResults.endVoltage, 3);
-    WriteINIDouble(file, "Discharge_Average_Current_A", ctx->dischargeResults.avgCurrent, 3);
-    WriteINIDouble(file, "Discharge_Average_Voltage_V", ctx->dischargeResults.avgVoltage, 3);
-    WriteINIDouble(file, "Discharge_Energy_Wh", ctx->dischargeResults.energy_Wh, 3);
-    WriteINIValue(file, "Discharge_Data_Points", "%d", ctx->dischargeResults.dataPoints);
-    fprintf(file, "\n");
-    
-    // Charge Results
+    // Charge Results (ran first)
     WriteINISection(file, "Charge_Results");
     WriteINIDouble(file, "Charge_Capacity_mAh", ctx->chargeResults.capacity_mAh, 2);
     WriteINIDouble(file, "Charge_Duration_s", ctx->chargeResults.duration_s, 1);
@@ -818,6 +832,18 @@ static int WriteResultsFile(CapacityExperimentContext *ctx) {
     WriteINIDouble(file, "Charge_Average_Voltage_V", ctx->chargeResults.avgVoltage, 3);
     WriteINIDouble(file, "Charge_Energy_Wh", ctx->chargeResults.energy_Wh, 3);
     WriteINIValue(file, "Charge_Data_Points", "%d", ctx->chargeResults.dataPoints);
+    fprintf(file, "\n");
+    
+    // Discharge Results (ran second)
+    WriteINISection(file, "Discharge_Results");
+    WriteINIDouble(file, "Discharge_Capacity_mAh", ctx->dischargeResults.capacity_mAh, 2);
+    WriteINIDouble(file, "Discharge_Duration_s", ctx->dischargeResults.duration_s, 1);
+    WriteINIDouble(file, "Discharge_Start_Voltage_V", ctx->dischargeResults.startVoltage, 3);
+    WriteINIDouble(file, "Discharge_End_Voltage_V", ctx->dischargeResults.endVoltage, 3);
+    WriteINIDouble(file, "Discharge_Average_Current_A", ctx->dischargeResults.avgCurrent, 3);
+    WriteINIDouble(file, "Discharge_Average_Voltage_V", ctx->dischargeResults.avgVoltage, 3);
+    WriteINIDouble(file, "Discharge_Energy_Wh", ctx->dischargeResults.energy_Wh, 3);
+    WriteINIValue(file, "Discharge_Data_Points", "%d", ctx->dischargeResults.dataPoints);
     fprintf(file, "\n");
     
     // Calculated Metrics
