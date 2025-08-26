@@ -311,6 +311,11 @@ int CVICALLBACK PanelCallback(int panel, int event, void *callbackData,
 			    ProcessSystemEvents();
 			    Delay(0.5);
 			}
+			
+			// Disconnect all physical relay lines
+			const int pins[2] = {TNY_PSB_PIN, TNY_BIOLOGIC_PIN};
+			const int vals[2] = {TNY_STATE_DISCONNECTED, TNY_STATE_DISCONNECTED};
+			TNY_SetMultiplePinsQueued(pins, vals, 2, DEVICE_PRIORITY_HIGH);
             
             // Stop status monitoring first
             LogMessage("Stopping status monitoring...");
