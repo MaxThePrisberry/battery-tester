@@ -7,6 +7,7 @@
 #include "common.h"
 #include "exp_cdc.h"
 #include "BatteryTester.h"
+#include "teensy_queue.h"
 #include "logging.h"
 #include "status.h"
 #include <ansi_c.h>
@@ -308,6 +309,13 @@ static int CDCExperimentThread(void *functionData) {
 cleanup:
 	// Turn off PSB output
     PSB_SetOutputEnableQueued(0, DEVICE_PRIORITY_NORMAL);
+	
+	// Disconnect PSB to battery using Teensy relay
+	result = TNY_SetPinQueued(TNY_PSB_PIN, TNY_STATE_DISCONNECTED, DEVICE_PRIORITY_NORMAL);
+    if (result != SUCCESS) {
+        LogError("Failed to disconnect PSB via relay: %s", PSB_GetErrorString(result));
+        return result;
+    }
     
     // Update status based on final state
     if (ctx->state == CDC_STATE_COMPLETED) {
@@ -452,7 +460,14 @@ static int RunOperation(CDCExperimentContext *ctx) {
     if (result != PSB_SUCCESS) {
         LogWarning("Failed to set sink power: %s", PSB_GetErrorString(result));
     }
-    
+	
+	// Connect PSB to battery using Teensy relay
+	result = TNY_SetPinQueued(TNY_PSB_PIN, TNY_STATE_CONNECTED, DEVICE_PRIORITY_NORMAL);
+    if (result != SUCCESS) {
+        LogError("Failed to connect PSB via relay: %s", PSB_GetErrorString(result));
+        return result;
+    }
+	
     // Enable PSB output
     result = PSB_SetOutputEnableQueued(1, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
@@ -544,6 +559,13 @@ static int RunOperation(CDCExperimentContext *ctx) {
     
     // Disable output
     PSB_SetOutputEnableQueued(0, DEVICE_PRIORITY_NORMAL);
+	
+	// Disconnect PSB to battery using Teensy relay
+	result = TNY_SetPinQueued(TNY_PSB_PIN, TNY_STATE_DISCONNECTED, DEVICE_PRIORITY_NORMAL);
+    if (result != SUCCESS) {
+        LogError("Failed to disconnect PSB via relay: %s", PSB_GetErrorString(result));
+        return result;
+    }
     
     // Log summary
     LogMessage("%s completed - Duration: %.1f minutes, Peak current: %.3f A", 
