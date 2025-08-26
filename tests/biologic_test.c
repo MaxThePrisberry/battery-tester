@@ -454,7 +454,8 @@ int Test_BIO_OCV(BioQueueManager *bioQueueMgr, char *errorMsg, int errorMsgSize)
         0,                      // Use default timeout
 		DEVICE_PRIORITY_NORMAL,
         Test_BIO_TechniqueProgress,  // Progress callback
-        g_biologicTestSuiteContext   // Pass test context
+        g_biologicTestSuiteContext,  // Pass test context
+		&(g_biologicTestSuiteContext->cancelRequested) // Pass cancellation flag
     );
     
     if (result == BIO_ERR_PARTIAL_DATA) {
@@ -555,7 +556,8 @@ int Test_BIO_PEIS(BioQueueManager *bioQueueMgr, char *errorMsg, int errorMsgSize
         0,                             // Use default timeout
 		DEVICE_PRIORITY_NORMAL,
         Test_BIO_TechniqueProgress,    // Progress callback
-        g_biologicTestSuiteContext     // Pass test context
+        g_biologicTestSuiteContext,    // Pass test context
+		&(g_biologicTestSuiteContext->cancelRequested) // Pass cancellation flag
     );
     
     if (result == BIO_ERR_PARTIAL_DATA) {
@@ -662,7 +664,8 @@ int Test_BIO_GEIS(BioQueueManager *bioQueueMgr, char *errorMsg, int errorMsgSize
         0,                            // Use default timeout
 		DEVICE_PRIORITY_NORMAL,
         Test_BIO_TechniqueProgress,   // Progress callback
-        g_biologicTestSuiteContext    // Pass test context
+        g_biologicTestSuiteContext,    // Pass test context
+		&(g_biologicTestSuiteContext->cancelRequested) // Pass cancellation flag
     );
     
     if (result == BIO_ERR_PARTIAL_DATA) {

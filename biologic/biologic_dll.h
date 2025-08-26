@@ -104,6 +104,9 @@ typedef struct {
     double lastUpdateTime;
     int updateCount;
     
+    // Cancellation support
+    volatile int *cancelled;
+    
     // Configuration
     BIO_TechniqueConfig config;
     

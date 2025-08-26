@@ -724,7 +724,6 @@ static int SaveExperimentSettings(BaselineExperimentContext *ctx) {
 
 static int RunPhase1_DischargeAndTemp(BaselineExperimentContext *ctx) {
     int result;
-    BaselineDataPoint dataPoint;
     
     ctx->state = BASELINE_STATE_PHASE1_DISCHARGE;
     InitializePhaseResults(&ctx->phase1Results, BASELINE_PHASE_1);
@@ -1848,7 +1847,7 @@ static int RunOCVMeasurement(BaselineExperimentContext *ctx, BaselineEISMeasurem
                                 &measurement->ocvData,
                                 OCV_TIMEOUT_MS,
                                 DEVICE_PRIORITY_NORMAL,
-                                NULL, NULL);
+                                NULL, NULL, &(ctx->cancelRequested));
     
     if (result != SUCCESS) {
         LogError("OCV measurement failed: %s", BIO_GetErrorString(result));
@@ -1897,7 +1896,7 @@ static int RunGEISMeasurement(BaselineExperimentContext *ctx, BaselineEISMeasure
                                  &measurement->geisData,
                                  GEIS_TIMEOUT_MS,
                                  DEVICE_PRIORITY_NORMAL,
-                                 NULL, NULL);
+                                 NULL, NULL, &(ctx->cancelRequested));
     
     if (result != SUCCESS) {
         LogError("GEIS measurement failed: %s", BIO_GetErrorString(result));

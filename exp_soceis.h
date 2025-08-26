@@ -109,6 +109,9 @@ typedef struct {
 typedef struct {
     SOCEISExperimentState state;
     SOCEISExperimentParams params;
+	
+	// Cancellation flag
+	volatile int cancelRequested;
     
     // Timing
     double experimentStartTime;

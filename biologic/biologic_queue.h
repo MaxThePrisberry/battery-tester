@@ -85,13 +85,14 @@ typedef enum {
     BIO_CMD_TYPE_COUNT
 } BioCommandType;
 
-// Base command structure (priority removed - now explicit parameter)
+// Base command structure
 typedef struct {
     BioCommandType type;
     uint8_t channel;
     int timeout_ms;
     BioTechniqueProgressCallback progressCallback;
     void *userData;
+    volatile int *cancelled;  // Pointer to caller's cancellation flag
 } BioCommandParams;
 
 // Connection command
@@ -283,12 +284,13 @@ int BIO_RunOCVQueued(int ID, uint8_t channel,
                     double record_every_dE,
                     double record_every_dT,
                     int e_range,
-					bool processData,
+                    bool processData,
                     BIO_TechniqueData **result,
                     int timeout_ms,
                     DevicePriority priority,
                     BioTechniqueProgressCallback progressCallback,
-                    void *userData);
+                    void *userData,
+                    volatile int *cancelled);
 
 // PEIS measurement (blocking)
 int BIO_RunPEISQueued(int ID, uint8_t channel,
@@ -305,12 +307,13 @@ int BIO_RunPEISQueued(int ID, uint8_t channel,
                      int average_n_times,
                      bool correction,
                      double wait_for_steady,
-					 bool processData,
+                     bool processData,
                      BIO_TechniqueData **result,
                      int timeout_ms,
                      DevicePriority priority,
                      BioTechniqueProgressCallback progressCallback,
-                     void *userData);
+                     void *userData,
+                     volatile int *cancelled);
 
 // GEIS measurement (blocking)
 int BIO_RunGEISQueued(int ID, uint8_t channel,
@@ -328,12 +331,13 @@ int BIO_RunGEISQueued(int ID, uint8_t channel,
                      bool correction,
                      double wait_for_steady,
                      int i_range,
-					 bool processData,
+                     bool processData,
                      BIO_TechniqueData **result,
                      int timeout_ms,
                      DevicePriority priority,
                      BioTechniqueProgressCallback progressCallback,
-                     void *userData);
+                     void *userData,
+                     volatile int *cancelled);
 
 /******************************************************************************
  * High-Level Technique Functions (Async)
@@ -349,10 +353,11 @@ BioCommandID BIO_RunOCVAsync(int ID, uint8_t channel,
                             double record_every_dE,
                             double record_every_dT,
                             int e_range,
-							bool processData,
+                            bool processData,
                             DevicePriority priority,
                             BioCommandCallback callback,
-                            void *userData);
+                            void *userData,
+                            volatile int *cancelled);
 
 // PEIS measurement (async)
 BioCommandID BIO_RunPEISAsync(int ID, uint8_t channel,
@@ -369,10 +374,11 @@ BioCommandID BIO_RunPEISAsync(int ID, uint8_t channel,
                              int average_n_times,
                              bool correction,
                              double wait_for_steady,
-							 bool processData,
+                             bool processData,
                              DevicePriority priority,
                              BioCommandCallback callback,
-                             void *userData);
+                             void *userData,
+                             volatile int *cancelled);
 
 // GEIS measurement (async)
 BioCommandID BIO_RunGEISAsync(int ID, uint8_t channel,
@@ -390,10 +396,11 @@ BioCommandID BIO_RunGEISAsync(int ID, uint8_t channel,
                              bool correction,
                              double wait_for_steady,
                              int i_range,
-							 bool processData,
+                             bool processData,
                              DevicePriority priority,
                              BioCommandCallback callback,
-                             void *userData);
+                             void *userData,
+                             volatile int *cancelled);
 
 /******************************************************************************
  * Connection and Configuration Functions

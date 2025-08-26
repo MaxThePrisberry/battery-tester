@@ -1279,6 +1279,14 @@ void BIO_FreeTechniqueContext(BIO_TechniqueContext *context) {
 // Update technique state machine
 int BIO_UpdateTechnique(BIO_TechniqueContext *context) {
     if (!context) return BIO_DEV_INVALIDPARAMETERS;
+	
+	// Check for cancellation first
+    if (context->cancelled && *context->cancelled) {
+        LogDebugEx(LOG_DEVICE_BIO, "Technique cancelled, stopping channel %d", context->channel);
+        BIO_StopChannel(context->deviceID, context->channel);
+        context->state = BIO_TECH_STATE_CANCELLED;
+        return SUCCESS;
+    }
     
     int result;
     TCurrentValues_t currentValues;

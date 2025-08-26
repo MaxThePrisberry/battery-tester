@@ -289,6 +289,9 @@ static int BIO_AdapterExecuteCommand(void *deviceContext, int commandType, void 
             
             if (cmdResult->errorCode != SUCCESS) break;
             
+            // Set cancellation flag pointer from params
+            techContext->cancelled = cmd->base.cancelled;
+            
             // Set up progress callback if provided
             if (cmd->base.progressCallback) {
                 techContext->progressCallback = cmd->base.progressCallback;
@@ -325,6 +328,13 @@ static int BIO_AdapterExecuteCommand(void *deviceContext, int commandType, void 
                     cmdResult->errorCode = SUCCESS;
                 } else {
                     cmdResult->errorCode = BIO_ERR_NO_DATA_RETRIEVED;
+                }
+            } else if (techContext->state == BIO_TECH_STATE_CANCELLED) {
+                if (BIO_GetTechniqueRawData(techContext, &rawData) == SUCCESS && rawData) {
+                    partialData = true;
+                    cmdResult->errorCode = BIO_ERR_PARTIAL_DATA;
+                } else {
+                    cmdResult->errorCode = ERR_CANCELLED;
                 }
             }
             
@@ -388,6 +398,9 @@ static int BIO_AdapterExecuteCommand(void *deviceContext, int commandType, void 
             
             if (cmdResult->errorCode != SUCCESS) break;
             
+            // Set cancellation flag pointer from params
+            techContext->cancelled = cmd->base.cancelled;
+            
             // Set up progress callback if provided
             if (cmd->base.progressCallback) {
                 techContext->progressCallback = cmd->base.progressCallback;
@@ -424,6 +437,13 @@ static int BIO_AdapterExecuteCommand(void *deviceContext, int commandType, void 
                     cmdResult->errorCode = SUCCESS;
                 } else {
                     cmdResult->errorCode = BIO_ERR_NO_DATA_RETRIEVED;
+                }
+            } else if (techContext->state == BIO_TECH_STATE_CANCELLED) {
+                if (BIO_GetTechniqueRawData(techContext, &rawData) == SUCCESS && rawData) {
+                    partialData = true;
+                    cmdResult->errorCode = BIO_ERR_PARTIAL_DATA;
+                } else {
+                    cmdResult->errorCode = ERR_CANCELLED;
                 }
             }
             
@@ -488,6 +508,9 @@ static int BIO_AdapterExecuteCommand(void *deviceContext, int commandType, void 
             
             if (cmdResult->errorCode != SUCCESS) break;
             
+            // Set cancellation flag pointer from params
+            techContext->cancelled = cmd->base.cancelled;
+            
             // Set up progress callback if provided
             if (cmd->base.progressCallback) {
                 techContext->progressCallback = cmd->base.progressCallback;
@@ -525,6 +548,13 @@ static int BIO_AdapterExecuteCommand(void *deviceContext, int commandType, void 
                 } else {
                     cmdResult->errorCode = BIO_ERR_NO_DATA_RETRIEVED;
                 }
+            } else if (techContext->state == BIO_TECH_STATE_CANCELLED) {
+                if (BIO_GetTechniqueRawData(techContext, &rawData) == SUCCESS && rawData) {
+                    partialData = true;
+                    cmdResult->errorCode = BIO_ERR_PARTIAL_DATA;
+                } else {
+                    cmdResult->errorCode = ERR_CANCELLED;
+                }
             }
             
             // Copy data to combined result
@@ -557,7 +587,7 @@ static int BIO_AdapterExecuteCommand(void *deviceContext, int commandType, void 
             // Clean up
             BIO_FreeTechniqueContext(techContext);
             break;
-		}
+        }
         
         case BIO_CMD_GET_HARDWARE_CONFIG: {
             BioChannelCommand *cmd = (BioChannelCommand*)params;
@@ -994,12 +1024,13 @@ int BIO_RunOCVQueued(int ID, uint8_t channel,
                     double record_every_dE,
                     double record_every_dT,
                     int e_range,
-					bool processData,
+                    bool processData,
                     BIO_TechniqueData **result,
                     int timeout_ms,
                     DevicePriority priority,
                     BioTechniqueProgressCallback progressCallback,
-                    void *userData) {
+                    void *userData,
+                    volatile int *cancelled) {
 
     BioQueueManager *mgr = BIO_GetGlobalQueueManager();
     if (!mgr) {
@@ -1012,14 +1043,15 @@ int BIO_RunOCVQueued(int ID, uint8_t channel,
             .channel = channel,
             .timeout_ms = timeout_ms > 0 ? timeout_ms : (int)((duration_s + 5) * 1000),
             .progressCallback = progressCallback,
-            .userData = userData
+            .userData = userData,
+            .cancelled = cancelled
         },
         .duration_s = duration_s,
         .sample_interval_s = sample_interval_s,
         .record_every_dE = record_every_dE,
         .record_every_dT = record_every_dT,
         .e_range = e_range,
-		.processData = processData
+        .processData = processData
     };
     
     BioCommandResult cmdResult;
@@ -1050,12 +1082,13 @@ int BIO_RunPEISQueued(int ID, uint8_t channel,
                      int average_n_times,
                      bool correction,
                      double wait_for_steady,
-					 bool processData,
+                     bool processData,
                      BIO_TechniqueData **result,
                      int timeout_ms,
                      DevicePriority priority,
                      BioTechniqueProgressCallback progressCallback,
-                     void *userData) {
+                     void *userData,
+                     volatile int *cancelled) {
     
     BioQueueManager *mgr = BIO_GetGlobalQueueManager();
     if (!mgr) {
@@ -1068,7 +1101,8 @@ int BIO_RunPEISQueued(int ID, uint8_t channel,
             .channel = channel,
             .timeout_ms = timeout_ms > 0 ? timeout_ms : BIO_DEFAULT_PEIS_TIMEOUT_MS,
             .progressCallback = progressCallback,
-            .userData = userData
+            .userData = userData,
+            .cancelled = cancelled
         },
         .vs_initial = vs_initial,
         .initial_voltage_step = initial_voltage_step,
@@ -1083,7 +1117,7 @@ int BIO_RunPEISQueued(int ID, uint8_t channel,
         .average_n_times = average_n_times,
         .correction = correction,
         .wait_for_steady = wait_for_steady,
-		.processData = processData
+        .processData = processData
     };
     
     BioCommandResult cmdResult;
@@ -1115,12 +1149,13 @@ int BIO_RunGEISQueued(int ID, uint8_t channel,
                      bool correction,
                      double wait_for_steady,
                      int i_range,
-					 bool processData,
+                     bool processData,
                      BIO_TechniqueData **result,
                      int timeout_ms,
                      DevicePriority priority,
                      BioTechniqueProgressCallback progressCallback,
-                     void *userData) {
+                     void *userData,
+                     volatile int *cancelled) {
     
     BioQueueManager *mgr = BIO_GetGlobalQueueManager();
     if (!mgr) {
@@ -1133,7 +1168,8 @@ int BIO_RunGEISQueued(int ID, uint8_t channel,
             .channel = channel,
             .timeout_ms = timeout_ms > 0 ? timeout_ms : BIO_DEFAULT_PEIS_TIMEOUT_MS,
             .progressCallback = progressCallback,
-            .userData = userData
+            .userData = userData,
+            .cancelled = cancelled
         },
         .vs_initial = vs_initial,
         .initial_current_step = initial_current_step,
@@ -1149,7 +1185,7 @@ int BIO_RunGEISQueued(int ID, uint8_t channel,
         .correction = correction,
         .wait_for_steady = wait_for_steady,
         .i_range = i_range,
-		.processData = processData
+        .processData = processData
     };
     
     BioCommandResult cmdResult;
@@ -1176,10 +1212,11 @@ BioCommandID BIO_RunOCVAsync(int ID, uint8_t channel,
                             double record_every_dE,
                             double record_every_dT,
                             int e_range,
-							bool processData,
+                            bool processData,
                             DevicePriority priority,
                             BioCommandCallback callback,
-                            void *userData) {
+                            void *userData,
+                            volatile int *cancelled) {
     
     BioQueueManager *mgr = BIO_GetGlobalQueueManager();
     if (!mgr) return 0;
@@ -1190,14 +1227,15 @@ BioCommandID BIO_RunOCVAsync(int ID, uint8_t channel,
             .channel = channel,
             .timeout_ms = (int)((duration_s + 5) * 1000),
             .progressCallback = NULL,  // Progress callbacks not supported in async mode
-            .userData = NULL
+            .userData = NULL,
+            .cancelled = cancelled
         },
         .duration_s = duration_s,
         .sample_interval_s = sample_interval_s,
         .record_every_dE = record_every_dE,
         .record_every_dT = record_every_dT,
         .e_range = e_range,
-		.processData = processData
+        .processData = processData
     };
     
     return BIO_QueueCommandAsync(mgr, BIO_CMD_RUN_OCV, (BioCommandParams*)&cmd,
@@ -1218,10 +1256,11 @@ BioCommandID BIO_RunPEISAsync(int ID, uint8_t channel,
                              int average_n_times,
                              bool correction,
                              double wait_for_steady,
-							 bool processData,
+                             bool processData,
                              DevicePriority priority,
                              BioCommandCallback callback,
-                             void *userData) {
+                             void *userData,
+                             volatile int *cancelled) {
     
     BioQueueManager *mgr = BIO_GetGlobalQueueManager();
     if (!mgr) return 0;
@@ -1232,7 +1271,8 @@ BioCommandID BIO_RunPEISAsync(int ID, uint8_t channel,
             .channel = channel,
             .timeout_ms = BIO_DEFAULT_PEIS_TIMEOUT_MS,
             .progressCallback = NULL,
-            .userData = NULL
+            .userData = NULL,
+            .cancelled = cancelled
         },
         .vs_initial = vs_initial,
         .initial_voltage_step = initial_voltage_step,
@@ -1247,7 +1287,7 @@ BioCommandID BIO_RunPEISAsync(int ID, uint8_t channel,
         .average_n_times = average_n_times,
         .correction = correction,
         .wait_for_steady = wait_for_steady,
-		.processData = processData
+        .processData = processData
     };
     
     return BIO_QueueCommandAsync(mgr, BIO_CMD_RUN_PEIS, (BioCommandParams*)&cmd,
@@ -1269,10 +1309,11 @@ BioCommandID BIO_RunGEISAsync(int ID, uint8_t channel,
                              bool correction,
                              double wait_for_steady,
                              int i_range,
-							 bool processData,
+                             bool processData,
                              DevicePriority priority,
                              BioCommandCallback callback,
-                             void *userData) {
+                             void *userData,
+                             volatile int *cancelled) {
     
     BioQueueManager *mgr = BIO_GetGlobalQueueManager();
     if (!mgr) return 0;
@@ -1283,7 +1324,8 @@ BioCommandID BIO_RunGEISAsync(int ID, uint8_t channel,
             .channel = channel,
             .timeout_ms = BIO_DEFAULT_PEIS_TIMEOUT_MS,
             .progressCallback = NULL,
-            .userData = NULL
+            .userData = NULL,
+            .cancelled = cancelled
         },
         .vs_initial = vs_initial,
         .initial_current_step = initial_current_step,
@@ -1299,7 +1341,7 @@ BioCommandID BIO_RunGEISAsync(int ID, uint8_t channel,
         .correction = correction,
         .wait_for_steady = wait_for_steady,
         .i_range = i_range,
-		.processData = processData
+        .processData = processData
     };
     
     return BIO_QueueCommandAsync(mgr, BIO_CMD_RUN_GEIS, (BioCommandParams*)&cmd,

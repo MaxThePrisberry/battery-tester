@@ -75,6 +75,7 @@ int CVICALLBACK StartSOCEISExperimentCallback(int panel, int control, int event,
         // This is a Stop request
         LogMessage("User requested to stop SOCEIS experiment");
         g_experimentContext.state = SOCEIS_STATE_CANCELLED;
+		g_experimentContext.cancelRequested = 1;
         return 0;
     }
     
@@ -426,6 +427,7 @@ static int SOCEISExperimentThread(void *functionData) {
     if (!response || ctx->state == SOCEIS_STATE_CANCELLED) {
         LogMessage("SOCEIS experiment cancelled by user");
         ctx->state = SOCEIS_STATE_CANCELLED;
+		ctx->cancelRequested = 1;
         goto cleanup;
     }
     
@@ -994,7 +996,7 @@ static int RunOCVMeasurement(SOCEISExperimentContext *ctx, EISMeasurement *measu
                             &measurement->ocvData,
                             SOCEIS_OCV_TIMEOUT_MS,
                             DEVICE_PRIORITY_NORMAL,
-                            NULL, NULL);
+                            NULL, NULL, &(ctx->cancelRequested));
     
     if (result != SUCCESS) {
         LogError("OCV measurement failed: %s (error code: %d)", BIO_GetErrorString(result), result);
@@ -1054,7 +1056,7 @@ static int RunGEISMeasurement(SOCEISExperimentContext *ctx, EISMeasurement *meas
                              &measurement->geisData,
                              SOCEIS_GEIS_TIMEOUT_MS,
                              DEVICE_PRIORITY_NORMAL,
-                             NULL, NULL);
+                             NULL, NULL, &(ctx->cancelRequested));
     
     if (result != SUCCESS) {
         LogError("GEIS measurement failed: %d %s", result, GetErrorString(result));
