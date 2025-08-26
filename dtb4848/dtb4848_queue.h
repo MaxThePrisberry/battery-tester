@@ -277,6 +277,14 @@ int DTB_ConfigureAllDefaultQueued(DevicePriority priority);
  */
 int DTB_EnableWriteAccessAllQueued(DevicePriority priority);
 
+/**
+ * Set temperature setpoint for all initialized DTB devices
+ * @param temperature - Target temperature in degrees Celsius
+ * @param priority - Command priority for all device commands
+ * @return DTB_SUCCESS if all devices succeeded, error code of first failure otherwise
+ */
+int DTB_SetSetPointAllQueued(double temperature, DevicePriority priority);
+
 /******************************************************************************
  * Async Command Functions
  * 

@@ -1219,6 +1219,40 @@ int DTB_EnableWriteAccessAllQueued(DevicePriority priority) {
     return allSuccess;
 }
 
+int DTB_SetSetPointAllQueued(double temperature, DevicePriority priority) {
+    if (!g_dtbQueueManager) return ERR_QUEUE_NOT_INIT;
+    
+    DTBDeviceContext *ctx = (DTBDeviceContext*)DeviceQueue_GetDeviceContext(g_dtbQueueManager);
+    if (!ctx) return ERR_QUEUE_NOT_INIT;
+    
+    int allSuccess = DTB_SUCCESS;
+    int failureCount = 0;
+    
+    LogMessageEx(LOG_DEVICE_DTB, "Setting setpoint to %.1f°C for all %d DTB devices...", 
+                 temperature, ctx->numDevices);
+    
+    for (int i = 0; i < ctx->numDevices; i++) {
+        int result = DTB_SetSetPointQueued(ctx->slaveAddresses[i], temperature, priority);
+        if (result != DTB_SUCCESS) {
+            LogErrorEx(LOG_DEVICE_DTB, "Failed to set setpoint for slave %d: %s", 
+                       ctx->slaveAddresses[i], DTB_GetErrorString(result));
+            if (allSuccess == DTB_SUCCESS) {
+                allSuccess = result;  // Store first failure
+            }
+            failureCount++;
+        }
+    }
+    
+    if (failureCount == 0) {
+        LogMessageEx(LOG_DEVICE_DTB, "Successfully set setpoint for all DTB devices");
+    } else {
+        LogErrorEx(LOG_DEVICE_DTB, "Failed to set setpoint for %d of %d DTB devices", 
+                   failureCount, ctx->numDevices);
+    }
+    
+    return allSuccess;
+}
+
 /******************************************************************************
  * Async Command Function Implementations
  ******************************************************************************/
