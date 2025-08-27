@@ -46,6 +46,10 @@ static int CreateExperimentFileSystem(BaselineExperimentContext *ctx);
 static int InitializeExperimentLogging(BaselineExperimentContext *ctx);
 static int SaveExperimentSettings(BaselineExperimentContext *ctx);
 
+// Helper functions for UI and data management
+static void UpdateOutputDisplay(BaselineExperimentContext *ctx, const char *label, double value);
+static void Phase1ProgressCallback(double voltage_V, double current_A, double mAhTransferred);
+
 // Phase implementation functions
 static int RunPhase1_DischargeAndTemp(BaselineExperimentContext *ctx);
 static int RunPhase2_CapacityExperiment(BaselineExperimentContext *ctx);
@@ -88,8 +92,8 @@ static int SavePhaseResults(BaselineExperimentContext *ctx, BaselinePhaseResults
 
 // Graph and UI functions
 static int ConfigureExperimentGraphs(BaselineExperimentContext *ctx);
-static void UpdateCurrentGraph(BaselineExperimentContext *ctx, double current, double time);
-static void UpdateVoltageGraph(BaselineExperimentContext *ctx, double voltage, double time);
+static void UpdateCurrentGraph(BaselineExperimentContext *ctx, double current, double time_min);
+static void UpdateVoltageGraph(BaselineExperimentContext *ctx, double voltage, double time_min);
 static void UpdateOCVGraph(BaselineExperimentContext *ctx, BaselineEISMeasurement *measurement);
 static void UpdateNyquistPlot(BaselineExperimentContext *ctx, BaselineEISMeasurement *measurement);
 static void ClearAllExperimentGraphs(BaselineExperimentContext *ctx);
@@ -101,10 +105,86 @@ static void LogExperimentError(BaselineExperimentContext *ctx, const char *forma
 static void CleanupExperiment(BaselineExperimentContext *ctx);
 static void RestoreUI(BaselineExperimentContext *ctx);
 
-// Utility functions
+// Utility functions - DECLARED ONLY ONCE HERE
 static int CheckCancellation(BaselineExperimentContext *ctx);
 static const char* GetPhaseDescription(BaselineExperimentPhase phase);
 static const char* GetStateDescription(BaselineExperimentState state);
+
+/******************************************************************************
+ * Helper Functions Implementation
+ ******************************************************************************/
+
+static void UpdateOutputDisplay(BaselineExperimentContext *ctx, const char *label, double value) {
+    if (ctx->tabPanelHandle > 0 && ctx->outputControl > 0) {
+        SetCtrlAttribute(ctx->tabPanelHandle, ctx->outputControl, ATTR_LABEL_TEXT, label);
+        SetCtrlVal(ctx->tabPanelHandle, ctx->outputControl, value);
+    }
+}
+
+static void Phase1ProgressCallback(double voltage_V, double current_A, double mAhTransferred) {
+    BaselineExperimentContext *ctx = &g_experimentContext;
+    
+    // Check if we have a valid context and phase log file
+    if (!ctx || !ctx->currentPhaseLogFile) {
+        return;
+    }
+    
+    // Update output display continuously
+    UpdateOutputDisplay(ctx, "Capacity Discharged (mAh)", fabs(mAhTransferred));
+    
+    // Calculate elapsed time from experiment start
+    double elapsedTime = Timer() - ctx->experimentStartTime - ctx->phaseStartTime;
+    
+    // Read temperature data
+    TemperatureDataPoint tempData;
+    ReadAllTemperatures(ctx, &tempData, elapsedTime);
+    
+    // Log to phase file: Time_s,Voltage_V,Current_A,Power_W,DTB_Temp_C,TC0_Temp_C,TC1_Temp_C
+    double power_W = voltage_V * fabs(current_A);
+    LogPhaseDataPoint(ctx, "%.3f,%.3f,%.3f,%.3f,%.2f,%.2f,%.2f",
+                     elapsedTime, voltage_V, current_A, power_W,
+                     tempData.dtbTemperature, tempData.tc0Temperature, tempData.tc1Temperature);
+}
+
+/******************************************************************************
+ * Utility and Helper Functions - IMPLEMENTED ONCE HERE
+ ******************************************************************************/
+
+static int CheckCancellation(BaselineExperimentContext *ctx) {
+    return (ctx->cancelRequested || ctx->emergencyStop || 
+            ctx->state == BASELINE_STATE_CANCELLED ||
+            ctx->state == BASELINE_STATE_ERROR);
+}
+
+static const char* GetPhaseDescription(BaselineExperimentPhase phase) {
+    switch (phase) {
+        case BASELINE_PHASE_1: return "Phase 1: Discharge & Temperature";
+        case BASELINE_PHASE_2: return "Phase 2: Capacity Test";
+        case BASELINE_PHASE_3: return "Phase 3: EIS Charge";
+        case BASELINE_PHASE_4: return "Phase 4: Discharge to 50%";
+        default: return "Unknown Phase";
+    }
+}
+
+static const char* GetStateDescription(BaselineExperimentState state) {
+    switch (state) {
+        case BASELINE_STATE_IDLE: return "Idle";
+        case BASELINE_STATE_PREPARING: return "Preparing";
+        case BASELINE_STATE_PHASE1_DISCHARGE: return "Phase 1 Discharge";
+        case BASELINE_STATE_PHASE1_TEMP_WAIT: return "Phase 1 Temperature Wait";
+        case BASELINE_STATE_PHASE1_TEMP_STABILIZE: return "Phase 1 Temperature Stabilize";
+        case BASELINE_STATE_PHASE2_CHARGE: return "Phase 2 Charge";
+        case BASELINE_STATE_PHASE2_DISCHARGE: return "Phase 2 Discharge";
+        case BASELINE_STATE_PHASE3_SETUP: return "Phase 3 Setup";
+        case BASELINE_STATE_PHASE3_CHARGING: return "Phase 3 Charging";
+        case BASELINE_STATE_PHASE3_EIS_MEASUREMENT: return "Phase 3 EIS Measurement";
+        case BASELINE_STATE_PHASE4_DISCHARGE: return "Phase 4 Discharge";
+        case BASELINE_STATE_COMPLETED: return "Completed";
+        case BASELINE_STATE_ERROR: return "Error";
+        case BASELINE_STATE_CANCELLED: return "Cancelled";
+        default: return "Unknown State";
+    }
+}
 
 /******************************************************************************
  * Public Functions Implementation
@@ -164,7 +244,7 @@ int CVICALLBACK StartBaselineExperimentCallback(int panel, int control, int even
     GetCtrlVal(g_mainPanelHandle, PANEL_NUM_SET_DISCHARGE_I, &g_experimentContext.params.dischargeCurrent);
     
     // Preliminary validation
-    if (g_experimentContext.params.targetTemperature < 5.0 || g_experimentContext.params.targetTemperature > 80.0) {
+    if (ENABLE_DTB && (g_experimentContext.params.targetTemperature < 5.0 || g_experimentContext.params.targetTemperature > 80.0)) {
         CmtGetLock(g_busyLock);
         g_systemBusy = 0;
         CmtReleaseLock(g_busyLock);
@@ -290,11 +370,16 @@ static int BaselineExperimentThread(void *functionData) {
     }
     
     // Show comprehensive confirmation popup
+    char tempSection[256] = "";
+    if (ENABLE_DTB) {
+        snprintf(tempSection, sizeof(tempSection), "• Target Temperature: %.1f °C\n", ctx->params.targetTemperature);
+    }
+
     snprintf(message, sizeof(message),
         "BASELINE BATTERY EXPERIMENT\n"
         "=============================\n\n"
         "PARAMETERS:\n"
-        "• Target Temperature: %.1f °C\n"
+        "%s"
         "• EIS Interval: %.1f%% SOC\n"
         "• Charge Voltage: %.2f V\n"
         "• Discharge Voltage: %.2f V\n"
@@ -303,20 +388,21 @@ static int BaselineExperimentThread(void *functionData) {
         "• Current Threshold: %.3f A\n"
         "• Log Interval: %d seconds\n\n"
         "EXPERIMENT PHASES:\n"
-        "1. Discharge battery and establish temperature\n"
+        "1. Discharge battery%s\n"
         "2. Capacity test (charge ? discharge)\n"
         "3. EIS measurements during charge\n"
         "4. Discharge to 50%% capacity\n\n"
-        "ESTIMATED DURATION: 6-12 hours\n\n"
+        "ESTIMATED DURATION: 12-20 hours\n\n"
         "Continue with experiment?",
-        ctx->params.targetTemperature,
+        tempSection,
         ctx->params.eisInterval,
         ctx->params.chargeVoltage,
         ctx->params.dischargeVoltage,
         ctx->params.chargeCurrent,
         ctx->params.dischargeCurrent,
         ctx->params.currentThreshold,
-        ctx->params.logInterval);
+        ctx->params.logInterval,
+        ENABLE_DTB ? " and establish temperature" : "");
     
     int response = ConfirmPopup("Confirm Baseline Experiment", message);
     if (!response || CheckCancellation(ctx)) {
@@ -372,9 +458,10 @@ static int BaselineExperimentThread(void *functionData) {
     }
     
     // PHASE 1: Initial Discharge and Temperature Setup
-    LogMessage("=== PHASE 1: Initial Discharge and Temperature Setup ===");
+    LogMessage("=== PHASE 1: Initial Discharge%s ===", ENABLE_DTB ? " and Temperature Setup" : "");
     ctx->currentPhase = BASELINE_PHASE_1;
-    SetCtrlVal(ctx->tabPanelHandle, ctx->statusControl, "Phase 1: Discharging and establishing temperature...");
+    SetCtrlVal(ctx->tabPanelHandle, ctx->statusControl, 
+               ENABLE_DTB ? "Phase 1: Discharging and establishing temperature..." : "Phase 1: Discharging battery...");
     
     result = RunPhase1_DischargeAndTemp(ctx);
     if (result != SUCCESS || CheckCancellation(ctx)) {
@@ -489,7 +576,7 @@ cleanup:
  ******************************************************************************/
 
 static int VerifyAllDevicesAndInitialize(BaselineExperimentContext *ctx) {
-    // Check PSB connection
+    // Check PSB connection (REQUIRED)
     PSBQueueManager *psbQueueMgr = PSB_GetGlobalQueueManager();
     if (!psbQueueMgr) {
         MessagePopup("PSB Not Connected", 
@@ -506,7 +593,7 @@ static int VerifyAllDevicesAndInitialize(BaselineExperimentContext *ctx) {
         return ERR_NOT_CONNECTED;
     }
     
-    // Check BioLogic connection
+    // Check BioLogic connection (REQUIRED)
     BioQueueManager *bioQueueMgr = BIO_GetGlobalQueueManager();
     if (!bioQueueMgr) {
         MessagePopup("BioLogic Not Connected", 
@@ -523,24 +610,28 @@ static int VerifyAllDevicesAndInitialize(BaselineExperimentContext *ctx) {
         return ERR_NOT_CONNECTED;
     }
     
-    // Check DTB connection (REQUIRED for baseline)
-    DTBQueueManager *dtbQueueMgr = DTB_GetGlobalQueueManager();
-    if (!dtbQueueMgr) {
-        MessagePopup("DTB Not Connected", 
-                     "The DTB temperature controller is REQUIRED for baseline experiments.\n"
-                     "Please ensure it is connected before running.");
-        return ERR_NOT_CONNECTED;
+    // Check DTB connection (REQUIRED only if ENABLE_DTB is 1)
+    if (ENABLE_DTB) {
+        DTBQueueManager *dtbQueueMgr = DTB_GetGlobalQueueManager();
+        if (!dtbQueueMgr) {
+            MessagePopup("DTB Not Connected", 
+                         "The DTB temperature controller is REQUIRED for baseline experiments.\n"
+                         "Please ensure it is connected before running.");
+            return ERR_NOT_CONNECTED;
+        }
+        
+        DTB_Handle *dtbHandle = DTB_QueueGetHandle(dtbQueueMgr, ctx->dtbSlaveAddress);
+        if (!dtbHandle || !dtbHandle->isConnected) {
+            MessagePopup("DTB Not Connected", 
+                         "The DTB temperature controller is REQUIRED for baseline experiments.\n"
+                         "Please ensure it is connected before running.");
+            return ERR_NOT_CONNECTED;
+        }
+    } else {
+        LogMessage("DTB temperature control disabled - experiment will run without temperature control");
     }
     
-    DTB_Handle *dtbHandle = DTB_QueueGetHandle(dtbQueueMgr, ctx->dtbSlaveAddress);
-    if (!dtbHandle || !dtbHandle->isConnected) {
-        MessagePopup("DTB Not Connected", 
-                     "The DTB temperature controller is REQUIRED for baseline experiments.\n"
-                     "Please ensure it is connected before running.");
-        return ERR_NOT_CONNECTED;
-    }
-    
-    // Check Teensy connection (for relay control)
+    // Check Teensy connection (REQUIRED for relay control)
     TNYQueueManager *tnyQueueMgr = TNY_GetGlobalQueueManager();
     if (!tnyQueueMgr) {
         MessagePopup("Teensy Not Connected", 
@@ -565,7 +656,7 @@ static int VerifyAllDevicesAndInitialize(BaselineExperimentContext *ctx) {
         return ERR_COMM_FAILED;
     }
     
-    LogMessage("All devices verified and initialized successfully");
+    LogMessage("All required devices verified and initialized successfully");
     return SUCCESS;
 }
 
@@ -649,7 +740,7 @@ static int InitializeExperimentLogging(BaselineExperimentContext *ctx) {
                              "DTB_Temp_C,TC0_Temp_C,TC1_Temp_C,Description\n");
     fflush(ctx->mainLogFile);
     
-    // Open error log
+    // Open error log - FIXED PATH CONSTRUCTION
     snprintf(filename, sizeof(filename), "%s%s%s%s%s", 
              ctx->experimentDirectory, PATH_SEPARATOR, 
              BASELINE_DIAGNOSTICS_DIR, PATH_SEPARATOR, BASELINE_ERROR_LOG_FILE);
@@ -690,7 +781,11 @@ static int SaveExperimentSettings(BaselineExperimentContext *ctx) {
     fprintf(file, "# Battery Tester v%s\n\n", PROJECT_VERSION);
     
     WriteINISection(file, "Experiment_Parameters");
-    WriteINIDouble(file, "Target_Temperature_C", ctx->params.targetTemperature, 1);
+    if (ENABLE_DTB) {
+        WriteINIDouble(file, "Target_Temperature_C", ctx->params.targetTemperature, 1);
+    } else {
+        WriteINIValue(file, "Target_Temperature_C", "N/A (DTB disabled)");
+    }
     WriteINIDouble(file, "EIS_Interval_Percent", ctx->params.eisInterval, 1);
     WriteINIDouble(file, "Current_Threshold_A", ctx->params.currentThreshold, 3);
     WriteINIValue(file, "Log_Interval_s", "%u", ctx->params.logInterval);
@@ -701,7 +796,11 @@ static int SaveExperimentSettings(BaselineExperimentContext *ctx) {
     fprintf(file, "\n");
     
     WriteINISection(file, "Device_Configuration");
-    WriteINIValue(file, "DTB_Slave_Address", "%d", ctx->dtbSlaveAddress);
+    WriteINIValue(file, "ENABLE_DTB", "%d", ENABLE_DTB);
+    WriteINIValue(file, "ENABLE_CDAQ", "%d", ENABLE_CDAQ);
+    if (ENABLE_DTB) {
+        WriteINIValue(file, "DTB_Slave_Address", "%d", ctx->dtbSlaveAddress);
+    }
     WriteINIValue(file, "BioLogic_Device_ID", "%d", ctx->biologicID);
     fprintf(file, "\n");
     
@@ -733,11 +832,16 @@ static int RunPhase1_DischargeAndTemp(BaselineExperimentContext *ctx) {
              ctx->experimentDirectory, PATH_SEPARATOR, BASELINE_PHASE1_DIR);
     strcpy(ctx->phase1Results.phaseDirectory, ctx->currentPhaseDirectory);
     
-    // Setup temperature control first
-    result = SetupTemperatureControl(ctx);
-    if (result != SUCCESS || CheckCancellation(ctx)) {
-        LogExperimentError(ctx, "Failed to setup temperature control in Phase 1");
-        return result != SUCCESS ? result : ERR_CANCELLED;
+    // Setup output display for Phase 1
+    UpdateOutputDisplay(ctx, "Capacity Discharged (mAh)", 0.0);
+    
+    // Setup temperature control if enabled
+    if (ENABLE_DTB) {
+        result = SetupTemperatureControl(ctx);
+        if (result != SUCCESS || CheckCancellation(ctx)) {
+            LogExperimentError(ctx, "Failed to setup temperature control in Phase 1");
+            return result != SUCCESS ? result : ERR_CANCELLED;
+        }
     }
     
     // Open phase log file
@@ -756,16 +860,19 @@ static int RunPhase1_DischargeAndTemp(BaselineExperimentContext *ctx) {
     // Switch to PSB for discharge
     result = SwitchToPSB(ctx);
     if (result != SUCCESS || CheckCancellation(ctx)) {
-        fclose(ctx->currentPhaseLogFile);
+        if (ctx->currentPhaseLogFile) {
+            fclose(ctx->currentPhaseLogFile);
+            ctx->currentPhaseLogFile = NULL;
+        }
         return result != SUCCESS ? result : ERR_CANCELLED;
     }
     
-    // Use battery_utils for discharge with graph updates
+    // Use battery_utils for discharge with graph updates and data logging
     VoltageTargetParams dischargeParams = {
         .targetVoltage_V = ctx->params.dischargeVoltage,
         .maxCurrent_A = ctx->params.dischargeCurrent,
         .currentThreshold_A = ctx->params.currentThreshold,
-        .timeoutSeconds = 7200.0,  // 2 hours max
+        .timeoutSeconds = 18000.0,  // 5 hours max
         .updateIntervalMs = ctx->params.logInterval * 1000,
         .panelHandle = ctx->mainPanelHandle,
         .statusControl = PANEL_STR_PSB_STATUS,
@@ -773,7 +880,7 @@ static int RunPhase1_DischargeAndTemp(BaselineExperimentContext *ctx) {
         .graph1Handle = ctx->graph1Handle,
         .graph2Handle = ctx->graph2Handle,
         .cancelFlag = &ctx->cancelRequested,
-        .progressCallback = NULL,
+        .progressCallback = Phase1ProgressCallback,  // Enable data logging
         .statusCallback = NULL
     };
     
@@ -783,17 +890,26 @@ static int RunPhase1_DischargeAndTemp(BaselineExperimentContext *ctx) {
     result = Battery_GoToVoltage(&dischargeParams);
     
     if (CheckCancellation(ctx)) {
-        fclose(ctx->currentPhaseLogFile);
+        if (ctx->currentPhaseLogFile) {
+            fclose(ctx->currentPhaseLogFile);
+            ctx->currentPhaseLogFile = NULL;
+        }
         return ERR_CANCELLED;
     }
     
     if (result != SUCCESS || dischargeParams.result != BATTERY_OP_SUCCESS) {
         if (dischargeParams.result == BATTERY_OP_ABORTED) {
-            fclose(ctx->currentPhaseLogFile);
+            if (ctx->currentPhaseLogFile) {
+                fclose(ctx->currentPhaseLogFile);
+                ctx->currentPhaseLogFile = NULL;
+            }
             return ERR_CANCELLED;
         }
         LogExperimentError(ctx, "Phase 1 discharge failed");
-        fclose(ctx->currentPhaseLogFile);
+        if (ctx->currentPhaseLogFile) {
+            fclose(ctx->currentPhaseLogFile);
+            ctx->currentPhaseLogFile = NULL;
+        }
         return ERR_OPERATION_FAILED;
     }
     
@@ -806,28 +922,44 @@ static int RunPhase1_DischargeAndTemp(BaselineExperimentContext *ctx) {
     LogMessage("Phase 1 discharge completed: %.2f mAh in %.1f minutes", 
                ctx->phase1Results.capacity_mAh, dischargeParams.elapsedTime_s / 60.0);
     
-    // Update output display
-    SetCtrlVal(ctx->tabPanelHandle, ctx->outputControl, ctx->phase1Results.capacity_mAh);
+    // Final output display update
+    UpdateOutputDisplay(ctx, "Capacity Discharged (mAh)", ctx->phase1Results.capacity_mAh);
     
-    fclose(ctx->currentPhaseLogFile);
-    ctx->currentPhaseLogFile = NULL;
-    
-    // Wait for target temperature
-    ctx->state = BASELINE_STATE_PHASE1_TEMP_WAIT;
-    SetCtrlVal(ctx->tabPanelHandle, ctx->statusControl, "Phase 1: Waiting for target temperature...");
-    
-    result = WaitForTargetTemperature(ctx);
-    if (result != SUCCESS || CheckCancellation(ctx)) {
-        return result != SUCCESS ? result : ERR_CANCELLED;
+    if (ctx->currentPhaseLogFile) {
+        fclose(ctx->currentPhaseLogFile);
+        ctx->currentPhaseLogFile = NULL;
     }
     
-    // Stabilize temperature
-    ctx->state = BASELINE_STATE_PHASE1_TEMP_STABILIZE;
-    SetCtrlVal(ctx->tabPanelHandle, ctx->statusControl, "Phase 1: Stabilizing temperature...");
+    // Battery settling time after discharge
+    LogMessage("Waiting %.0f seconds for battery relaxation...", BASELINE_SETTLING_TIME);
+    for (int i = 0; i < (int)BASELINE_SETTLING_TIME && !CheckCancellation(ctx); i++) {
+        ProcessSystemEvents();
+        Delay(1.0);
+    }
     
-    result = StabilizeTemperature(ctx);
-    if (result != SUCCESS || CheckCancellation(ctx)) {
-        return result != SUCCESS ? result : ERR_CANCELLED;
+    if (CheckCancellation(ctx)) {
+        return ERR_CANCELLED;
+    }
+    
+    // Temperature control phase (if enabled)
+    if (ENABLE_DTB) {
+        // Wait for target temperature
+        ctx->state = BASELINE_STATE_PHASE1_TEMP_WAIT;
+        SetCtrlVal(ctx->tabPanelHandle, ctx->statusControl, "Phase 1: Waiting for target temperature...");
+        
+        result = WaitForTargetTemperature(ctx);
+        if (result != SUCCESS || CheckCancellation(ctx)) {
+            return result != SUCCESS ? result : ERR_CANCELLED;
+        }
+        
+        // Stabilize temperature
+        ctx->state = BASELINE_STATE_PHASE1_TEMP_STABILIZE;
+        SetCtrlVal(ctx->tabPanelHandle, ctx->statusControl, "Phase 1: Stabilizing temperature...");
+        
+        result = StabilizeTemperature(ctx);
+        if (result != SUCCESS || CheckCancellation(ctx)) {
+            return result != SUCCESS ? result : ERR_CANCELLED;
+        }
     }
     
     // Finalize phase results
@@ -851,22 +983,29 @@ static int RunPhase2_CapacityExperiment(BaselineExperimentContext *ctx) {
     strcpy(ctx->phase2ChargeResults.phaseDirectory, ctx->currentPhaseDirectory);
     strcpy(ctx->phase2DischargeResults.phaseDirectory, ctx->currentPhaseDirectory);
     
-    // Reconfigure graphs for capacity experiment
+    // Reconfigure graphs for capacity experiment - TIME IN MINUTES
     ConfigureGraph(ctx->mainPanelHandle, ctx->graph2Handle, 
-                   "Voltage vs Time", "Time (s)", "Voltage (V)", 
+                   "Voltage vs Time", "Time (min)", "Voltage (V)", 
                    ctx->params.dischargeVoltage * 0.9, 
                    ctx->params.chargeVoltage * 1.1);
+    
+    ConfigureGraph(ctx->mainPanelHandle, ctx->graph1Handle, 
+                   "Current vs Time", "Time (min)", "Current (A)", 
+                   0.0, MAX(ctx->params.chargeCurrent, ctx->params.dischargeCurrent) * 1.1);
     
     // --- CHARGE PHASE ---
     LogMessage("Running Phase 2 charge phase...");
     SetCtrlVal(ctx->tabPanelHandle, ctx->statusControl, "Phase 2: Charging battery...");
+    
+    // Setup output display for charging
+    UpdateOutputDisplay(ctx, "Capacity Charged (mAh)", 0.0);
     
     // Use battery_utils for charge (no EIS interruptions in Phase 2)
     VoltageTargetParams chargeParams = {
         .targetVoltage_V = ctx->params.chargeVoltage,
         .maxCurrent_A = ctx->params.chargeCurrent,
         .currentThreshold_A = ctx->params.currentThreshold,
-        .timeoutSeconds = 7200.0,  // 2 hours max
+        .timeoutSeconds = 18000.0,  // 5 hours max
         .updateIntervalMs = ctx->params.logInterval * 1000,
         .panelHandle = ctx->mainPanelHandle,
         .statusControl = PANEL_STR_PSB_STATUS,
@@ -905,16 +1044,18 @@ static int RunPhase2_CapacityExperiment(BaselineExperimentContext *ctx) {
                ctx->phase2ChargeResults.capacity_mAh, ctx->phase2ChargeResults.energy_Wh, 
                ctx->phase2ChargeResults.duration / 60.0);
     
-    // Update output display
-    SetCtrlVal(ctx->tabPanelHandle, ctx->outputControl, ctx->phase2ChargeResults.capacity_mAh);
+    // Final charge output display update
+    UpdateOutputDisplay(ctx, "Capacity Charged (mAh)", ctx->phase2ChargeResults.capacity_mAh);
     
-    // Brief pause between charge and discharge
-    LogMessage("Pausing between charge and discharge phases...");
-    for (int i = 0; i < 30; i++) {
-        if (CheckCancellation(ctx)) {
-            return ERR_CANCELLED;
-        }
-        Delay(0.1);
+    // Battery settling time after charge
+    LogMessage("Waiting %.0f seconds for battery relaxation after charge...", BASELINE_SETTLING_TIME);
+    for (int i = 0; i < (int)BASELINE_SETTLING_TIME && !CheckCancellation(ctx); i++) {
+        ProcessSystemEvents();
+        Delay(1.0);
+    }
+    
+    if (CheckCancellation(ctx)) {
+        return ERR_CANCELLED;
     }
     
     // --- DISCHARGE PHASE ---
@@ -922,11 +1063,14 @@ static int RunPhase2_CapacityExperiment(BaselineExperimentContext *ctx) {
     SetCtrlVal(ctx->tabPanelHandle, ctx->statusControl, "Phase 2: Discharging battery...");
     ctx->state = BASELINE_STATE_PHASE2_DISCHARGE;
     
+    // Reset output display for discharging
+    UpdateOutputDisplay(ctx, "Capacity Discharged (mAh)", 0.0);
+    
     VoltageTargetParams dischargeParams = {
         .targetVoltage_V = ctx->params.dischargeVoltage,
         .maxCurrent_A = ctx->params.dischargeCurrent,
         .currentThreshold_A = ctx->params.currentThreshold,
-        .timeoutSeconds = 7200.0,  // 2 hours max
+        .timeoutSeconds = 18000.0,  // 5 hours max
         .updateIntervalMs = ctx->params.logInterval * 1000,
         .panelHandle = ctx->mainPanelHandle,
         .statusControl = PANEL_STR_PSB_STATUS,
@@ -961,8 +1105,19 @@ static int RunPhase2_CapacityExperiment(BaselineExperimentContext *ctx) {
                ctx->phase2DischargeResults.capacity_mAh, ctx->phase2DischargeResults.energy_Wh, 
                ctx->phase2DischargeResults.duration / 60.0);
     
-    // Update output display
-    SetCtrlVal(ctx->tabPanelHandle, ctx->outputControl, ctx->phase2DischargeResults.capacity_mAh);
+    // Final discharge output display update
+    UpdateOutputDisplay(ctx, "Capacity Discharged (mAh)", ctx->phase2DischargeResults.capacity_mAh);
+    
+    // Battery settling time after discharge
+    LogMessage("Waiting %.0f seconds for battery relaxation after discharge...", BASELINE_SETTLING_TIME);
+    for (int i = 0; i < (int)BASELINE_SETTLING_TIME && !CheckCancellation(ctx); i++) {
+        ProcessSystemEvents();
+        Delay(1.0);
+    }
+    
+    if (CheckCancellation(ctx)) {
+        return ERR_CANCELLED;
+    }
     
     // Update battery capacity estimate for Phase 3
     ctx->estimatedBatteryCapacity_mAh = ctx->measuredChargeCapacity_mAh;
@@ -1010,7 +1165,7 @@ static int RunPhase3_EISCharge(BaselineExperimentContext *ctx) {
              ctx->experimentDirectory, PATH_SEPARATOR, BASELINE_PHASE3_DIR);
     strcpy(ctx->phase3Results.phaseDirectory, ctx->currentPhaseDirectory);
     
-    // Reconfigure graphs for EIS phase
+    // Reconfigure graphs for EIS phase - TIME IN MINUTES
     ClearAllExperimentGraphs(ctx);
     
     // Configure Graph 2 for OCV vs SOC
@@ -1027,6 +1182,9 @@ static int RunPhase3_EISCharge(BaselineExperimentContext *ctx) {
                        VAL_AUTOSCALE, 0.0, 0.0);
     SetAxisScalingMode(ctx->mainPanelHandle, ctx->graphBiologicHandle, VAL_LEFT_YAXIS, 
                        VAL_AUTOSCALE, 0.0, 0.0);
+    
+    // Setup output display for Phase 3
+    UpdateOutputDisplay(ctx, "State of Charge (%)", 0.0);
     
     // Perform initial EIS measurement at 0% SOC
     LogMessage("Performing initial EIS measurement at 0%% SOC...");
@@ -1055,7 +1213,10 @@ static int RunPhase3_EISCharge(BaselineExperimentContext *ctx) {
     // Switch to PSB for charging
     result = SwitchToPSB(ctx);
     if (result != SUCCESS || CheckCancellation(ctx)) {
-        fclose(ctx->currentPhaseLogFile);
+        if (ctx->currentPhaseLogFile) {
+            fclose(ctx->currentPhaseLogFile);
+            ctx->currentPhaseLogFile = NULL;
+        }
         return result != SUCCESS ? result : ERR_CANCELLED;
     }
     
@@ -1063,14 +1224,20 @@ static int RunPhase3_EISCharge(BaselineExperimentContext *ctx) {
     result = PSB_SetVoltageQueued(ctx->params.chargeVoltage, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         LogExperimentError(ctx, "Failed to set charge voltage: %s", PSB_GetErrorString(result));
-        fclose(ctx->currentPhaseLogFile);
+        if (ctx->currentPhaseLogFile) {
+            fclose(ctx->currentPhaseLogFile);
+            ctx->currentPhaseLogFile = NULL;
+        }
         return result;
     }
     
     result = PSB_SetCurrentQueued(ctx->params.chargeCurrent, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         LogExperimentError(ctx, "Failed to set charge current: %s", PSB_GetErrorString(result));
-        fclose(ctx->currentPhaseLogFile);
+        if (ctx->currentPhaseLogFile) {
+            fclose(ctx->currentPhaseLogFile);
+            ctx->currentPhaseLogFile = NULL;
+        }
         return result;
     }
     
@@ -1083,7 +1250,10 @@ static int RunPhase3_EISCharge(BaselineExperimentContext *ctx) {
     result = PSB_SetOutputEnableQueued(1, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         LogExperimentError(ctx, "Failed to enable output: %s", PSB_GetErrorString(result));
-        fclose(ctx->currentPhaseLogFile);
+        if (ctx->currentPhaseLogFile) {
+            fclose(ctx->currentPhaseLogFile);
+            ctx->currentPhaseLogFile = NULL;
+        }
         return result;
     }
     
@@ -1123,7 +1293,7 @@ static int RunPhase3_EISCharge(BaselineExperimentContext *ctx) {
         double currentTime = Timer();
         double elapsedTime = currentTime - ctx->experimentStartTime - ctx->phaseStartTime;
         
-        // Safety timeout
+        // Safety timeout - increased to 20 hours / 2 = 10 hours for Phase 3
         if (elapsedTime > BASELINE_MAX_EXPERIMENT_TIME / 2) {  // Half total experiment time
             LogExperimentError(ctx, "Phase 3 timeout - charging too long");
             break;
@@ -1141,6 +1311,9 @@ static int RunPhase3_EISCharge(BaselineExperimentContext *ctx) {
         UpdateSOCTracking(ctx, status.voltage, status.current);
         UpdateCapacityEstimate(ctx);
         
+        // Update output display continuously
+        UpdateOutputDisplay(ctx, "State of Charge (%)", ctx->currentSOC);
+        
         // Check for SOC safety limit
         if (ctx->currentSOC > BASELINE_SOC_OVERCHARGE_LIMIT) {
             LogExperimentError(ctx, "Safety limit reached - SOC exceeds %.1f%%", BASELINE_SOC_OVERCHARGE_LIMIT);
@@ -1157,14 +1330,12 @@ static int RunPhase3_EISCharge(BaselineExperimentContext *ctx) {
                             tempData.dtbTemperature, tempData.tc0Temperature, tempData.tc1Temperature);
             
             ctx->lastLogTime = currentTime;
-            
-            // Update SOC display
-            SetCtrlVal(ctx->tabPanelHandle, ctx->outputControl, ctx->currentSOC);
         }
         
-        // Update graphs if needed
+        // Update graphs if needed - CONVERT TO MINUTES
         if ((currentTime - ctx->lastGraphUpdate) >= 1.0) {
-            UpdateCurrentGraph(ctx, status.current, elapsedTime);
+            double elapsedTime_min = elapsedTime / 60.0;  // Convert to minutes
+            UpdateCurrentGraph(ctx, status.current, elapsedTime_min);
             ctx->lastGraphUpdate = currentTime;
         }
         
@@ -1273,8 +1444,21 @@ static int RunPhase3_EISCharge(BaselineExperimentContext *ctx) {
     PSB_SetOutputEnableQueued(0, DEVICE_PRIORITY_NORMAL);
     
     // Close phase log file
-    fclose(ctx->currentPhaseLogFile);
-    ctx->currentPhaseLogFile = NULL;
+    if (ctx->currentPhaseLogFile) {
+        fclose(ctx->currentPhaseLogFile);
+        ctx->currentPhaseLogFile = NULL;
+    }
+    
+    // Battery settling time after charge
+    LogMessage("Waiting %.0f seconds for battery relaxation after charge...", BASELINE_SETTLING_TIME);
+    for (int i = 0; i < (int)BASELINE_SETTLING_TIME && !CheckCancellation(ctx); i++) {
+        ProcessSystemEvents();
+        Delay(1.0);
+    }
+    
+    if (CheckCancellation(ctx)) {
+        return ERR_CANCELLED;
+    }
     
     // Write OCV vs SOC data file
     snprintf(filename, sizeof(filename), "%s%s%s", 
@@ -1328,11 +1512,18 @@ static int RunPhase4_Discharge50Percent(BaselineExperimentContext *ctx) {
     LogMessage("Target discharge: %.2f mAh (50%% of %.2f mAh)", 
                ctx->measuredChargeCapacity_mAh * 0.5, ctx->measuredChargeCapacity_mAh);
     
-    // Reconfigure graphs for discharge
+    // Setup output display for Phase 4
+    UpdateOutputDisplay(ctx, "Capacity Discharged (mAh)", 0.0);
+    
+    // Reconfigure graphs for discharge - TIME IN MINUTES
     ConfigureGraph(ctx->mainPanelHandle, ctx->graph2Handle, 
-                   "Voltage vs Time", "Time (s)", "Voltage (V)", 
+                   "Voltage vs Time", "Time (min)", "Voltage (V)", 
                    ctx->params.dischargeVoltage * 0.9, 
                    ctx->params.chargeVoltage * 1.1);
+    
+    ConfigureGraph(ctx->mainPanelHandle, ctx->graph1Handle, 
+                   "Current vs Time", "Time (min)", "Current (A)", 
+                   0.0, ctx->params.dischargeCurrent * 1.1);
     
     // Switch to PSB for discharge
     int result = SwitchToPSB(ctx);
@@ -1341,14 +1532,14 @@ static int RunPhase4_Discharge50Percent(BaselineExperimentContext *ctx) {
         return result != SUCCESS ? result : ERR_CANCELLED;
     }
     
-    // Use battery_utils for precise capacity discharge
+    // Use battery_utils for precise capacity discharge - INCREASED TIMEOUT TO 5 HOURS
     CapacityTransferParams discharge50 = {
         .mode = BATTERY_MODE_DISCHARGE,
         .targetCapacity_mAh = ctx->measuredChargeCapacity_mAh * 0.5,
         .current_A = ctx->params.dischargeCurrent,
         .voltage_V = ctx->params.dischargeVoltage,
         .currentThreshold_A = ctx->params.currentThreshold,
-        .timeoutSeconds = 3600.0,  // 1 hour max
+        .timeoutSeconds = 18000.0,  // INCREASED: 5 hours max (same as other phases)
         .updateIntervalMs = ctx->params.logInterval * 1000,
         .panelHandle = ctx->mainPanelHandle,
         .statusControl = PANEL_STR_PSB_STATUS,
@@ -1370,6 +1561,9 @@ static int RunPhase4_Discharge50Percent(BaselineExperimentContext *ctx) {
     ctx->phase4Results.duration = discharge50.elapsedTime_s;
     ctx->phase4Results.endVoltage = discharge50.finalVoltage_V;
     
+    // Final output display update
+    UpdateOutputDisplay(ctx, "Capacity Discharged (mAh)", ctx->phase4Results.capacity_mAh);
+    
     if (result == SUCCESS && discharge50.result == BATTERY_OP_SUCCESS) {
         LogMessage("Phase 4 completed successfully");
         LogMessage("  Discharged: %.2f mAh", discharge50.actualTransferred_mAh);
@@ -1379,7 +1573,6 @@ static int RunPhase4_Discharge50Percent(BaselineExperimentContext *ctx) {
         // Calculate final SOC estimate
         double finalSOC = 50.0 - ((discharge50.actualTransferred_mAh - discharge50.targetCapacity_mAh) / 
                                  ctx->measuredChargeCapacity_mAh) * 100.0;
-        SetCtrlVal(ctx->tabPanelHandle, ctx->outputControl, MAX(0.0, finalSOC));
         
         strcpy(ctx->phase4Results.completionReason, "Target capacity reached");
     } else {
@@ -1396,6 +1589,13 @@ static int RunPhase4_Discharge50Percent(BaselineExperimentContext *ctx) {
         }
     }
     
+    // Battery settling time after discharge
+    LogMessage("Waiting %.0f seconds for battery relaxation after discharge...", BASELINE_SETTLING_TIME);
+    for (int i = 0; i < (int)BASELINE_SETTLING_TIME && !CheckCancellation(ctx); i++) {
+        ProcessSystemEvents();
+        Delay(1.0);
+    }
+    
     // Finalize phase results
     FinalizePhaseResults(ctx, &ctx->phase4Results);
     SavePhaseResults(ctx, &ctx->phase4Results);
@@ -1409,6 +1609,11 @@ static int RunPhase4_Discharge50Percent(BaselineExperimentContext *ctx) {
  ******************************************************************************/
 
 static int SetupTemperatureControl(BaselineExperimentContext *ctx) {
+    if (!ENABLE_DTB) {
+        LogMessage("Temperature control disabled - skipping DTB setup");
+        return SUCCESS;
+    }
+    
     int result;
     
     LogMessage("Setting up temperature control - target: %.1f °C", ctx->params.targetTemperature);
@@ -1432,6 +1637,11 @@ static int SetupTemperatureControl(BaselineExperimentContext *ctx) {
 }
 
 static int WaitForTargetTemperature(BaselineExperimentContext *ctx) {
+    if (!ENABLE_DTB) {
+        LogMessage("Temperature control disabled - skipping temperature wait");
+        return SUCCESS;
+    }
+    
     double startTime = Timer();
     double lastCheckTime = startTime;
     
@@ -1491,6 +1701,22 @@ static int WaitForTargetTemperature(BaselineExperimentContext *ctx) {
 }
 
 static int StabilizeTemperature(BaselineExperimentContext *ctx) {
+    if (!ENABLE_DTB) {
+        LogMessage("Temperature control disabled - using settling time instead (%.0f seconds)", BASELINE_SETTLING_TIME);
+        for (int i = 0; i < (int)BASELINE_SETTLING_TIME && !CheckCancellation(ctx); i++) {
+            ProcessSystemEvents();
+            Delay(1.0);
+        }
+        
+        if (CheckCancellation(ctx)) {
+            return ERR_CANCELLED;
+        }
+        
+        ctx->temperatureStable = 1;
+        LogMessage("Settling time completed");
+        return SUCCESS;
+    }
+    
     double startTime = ctx->temperatureStabilizationStart;
     double lastCheckTime = startTime;
     
@@ -1627,7 +1853,9 @@ static int SafeDisconnectAllDevices(BaselineExperimentContext *ctx) {
     // Disable all outputs (non-blocking, best effort)
     PSB_SetOutputEnableQueued(0, DEVICE_PRIORITY_LOW);
     BIO_StopChannelQueued(ctx->biologicID, 0, DEVICE_PRIORITY_LOW);
-    DTB_SetRunStopQueued(ctx->dtbSlaveAddress, 0, DEVICE_PRIORITY_LOW);
+    if (ENABLE_DTB) {
+        DTB_SetRunStopQueued(ctx->dtbSlaveAddress, 0, DEVICE_PRIORITY_LOW);
+    }
     
     // Disconnect all relays
     SetRelayState(TNY_PSB_PIN, TNY_STATE_DISCONNECTED);
@@ -1638,7 +1866,7 @@ static int SafeDisconnectAllDevices(BaselineExperimentContext *ctx) {
 }
 
 /******************************************************************************
- * EIS Measurement Functions  
+ * EIS Measurement Functions
  ******************************************************************************/
 
 static int InitializeEISTargets(BaselineExperimentContext *ctx) {
@@ -1737,6 +1965,17 @@ static int PerformEISMeasurement(BaselineExperimentContext *ctx, double targetSO
     snprintf(statusMsg, sizeof(statusMsg), 
              "Measuring EIS at %.1f%% SOC...", ctx->currentSOC);
     SetCtrlVal(ctx->tabPanelHandle, ctx->statusControl, statusMsg);
+    
+    // Battery settling time before EIS measurement
+    LogMessage("Waiting %.0f seconds for battery relaxation before EIS measurement...", BASELINE_SETTLING_TIME);
+    for (int i = 0; i < (int)BASELINE_SETTLING_TIME && !CheckCancellation(ctx); i++) {
+        ProcessSystemEvents();
+        Delay(1.0);
+    }
+    
+    if (CheckCancellation(ctx)) {
+        return ERR_CANCELLED;
+    }
     
     // Perform measurement with retry capability
     result = RetryEISMeasurement(ctx, measurement);
@@ -1967,7 +2206,7 @@ static int SaveEISMeasurementData(BaselineExperimentContext *ctx, BaselineEISMea
     FILE *file;
     
     // Create filename with zero-padded SOC for proper sorting
-    snprintf(filename, sizeof(filename), "%s%s%s%seis_%03d_soc.txt", 
+    snprintf(filename, sizeof(filename), "%s%s%s%s%s%seis_%03d_soc.txt", 
              ctx->experimentDirectory, PATH_SEPARATOR, 
              BASELINE_PHASE3_DIR, PATH_SEPARATOR, 
              BASELINE_PHASE3_EIS_DIR, PATH_SEPARATOR,
@@ -2044,22 +2283,32 @@ static int SaveEISMeasurementData(BaselineExperimentContext *ctx, BaselineEISMea
 static int ReadAllTemperatures(BaselineExperimentContext *ctx, TemperatureDataPoint *tempData, double timestamp) {
     tempData->timestamp = timestamp;
     
-    // Read DTB temperature
-    DTB_Status dtbStatus;
-    if (DTB_GetStatusQueued(ctx->dtbSlaveAddress, &dtbStatus, DEVICE_PRIORITY_NORMAL) == DTB_SUCCESS) {
-        tempData->dtbTemperature = dtbStatus.processValue;
-        snprintf(tempData->status, sizeof(tempData->status), "DTB: %.1f°C", dtbStatus.processValue);
+    // Read DTB temperature (if enabled)
+    if (ENABLE_DTB) {
+        DTB_Status dtbStatus;
+        if (DTB_GetStatusQueued(ctx->dtbSlaveAddress, &dtbStatus, DEVICE_PRIORITY_NORMAL) == DTB_SUCCESS) {
+            tempData->dtbTemperature = dtbStatus.processValue;
+            snprintf(tempData->status, sizeof(tempData->status), "DTB: %.1f°C", dtbStatus.processValue);
+        } else {
+            tempData->dtbTemperature = 0.0;
+            strcpy(tempData->status, "DTB: Error");
+        }
     } else {
         tempData->dtbTemperature = 0.0;
-        strcpy(tempData->status, "DTB: Error");
+        strcpy(tempData->status, "DTB: Disabled");
     }
     
-    // Read thermocouple temperatures
-    if (CDAQ_ReadTC(2, 0, &tempData->tc0Temperature) != SUCCESS) {
+    // Read thermocouple temperatures (if enabled)
+    if (ENABLE_CDAQ) {
+        if (CDAQ_ReadTC(2, 0, &tempData->tc0Temperature) != SUCCESS) {
+            tempData->tc0Temperature = 0.0;
+        }
+        
+        if (CDAQ_ReadTC(2, 1, &tempData->tc1Temperature) != SUCCESS) {
+            tempData->tc1Temperature = 0.0;
+        }
+    } else {
         tempData->tc0Temperature = 0.0;
-    }
-    
-    if (CDAQ_ReadTC(2, 1, &tempData->tc1Temperature) != SUCCESS) {
         tempData->tc1Temperature = 0.0;
     }
     
@@ -2130,124 +2379,18 @@ static int LogPhaseDataPoint(BaselineExperimentContext *ctx, const char *format,
 }
 
 /******************************************************************************
- * Utility and Helper Functions
- ******************************************************************************/
-
-static int CheckCancellation(BaselineExperimentContext *ctx) {
-    return (ctx->cancelRequested || ctx->emergencyStop || 
-            ctx->state == BASELINE_STATE_CANCELLED ||
-            ctx->state == BASELINE_STATE_ERROR);
-}
-
-static const char* GetPhaseDescription(BaselineExperimentPhase phase) {
-    switch (phase) {
-        case BASELINE_PHASE_1: return "Phase 1: Discharge & Temperature";
-        case BASELINE_PHASE_2: return "Phase 2: Capacity Test";
-        case BASELINE_PHASE_3: return "Phase 3: EIS Charge";
-        case BASELINE_PHASE_4: return "Phase 4: Discharge to 50%";
-        default: return "Unknown Phase";
-    }
-}
-
-static const char* GetStateDescription(BaselineExperimentState state) {
-    switch (state) {
-        case BASELINE_STATE_IDLE: return "Idle";
-        case BASELINE_STATE_PREPARING: return "Preparing";
-        case BASELINE_STATE_PHASE1_DISCHARGE: return "Phase 1 Discharge";
-        case BASELINE_STATE_PHASE1_TEMP_WAIT: return "Phase 1 Temperature Wait";
-        case BASELINE_STATE_PHASE1_TEMP_STABILIZE: return "Phase 1 Temperature Stabilize";
-        case BASELINE_STATE_PHASE2_CHARGE: return "Phase 2 Charge";
-        case BASELINE_STATE_PHASE2_DISCHARGE: return "Phase 2 Discharge";
-        case BASELINE_STATE_PHASE3_SETUP: return "Phase 3 Setup";
-        case BASELINE_STATE_PHASE3_CHARGING: return "Phase 3 Charging";
-        case BASELINE_STATE_PHASE3_EIS_MEASUREMENT: return "Phase 3 EIS Measurement";
-        case BASELINE_STATE_PHASE4_DISCHARGE: return "Phase 4 Discharge";
-        case BASELINE_STATE_COMPLETED: return "Completed";
-        case BASELINE_STATE_ERROR: return "Error";
-        case BASELINE_STATE_CANCELLED: return "Cancelled";
-        default: return "Unknown State";
-    }
-}
-
-static void LogExperimentError(BaselineExperimentContext *ctx, const char *format, ...) {
-    char message[LARGE_BUFFER_SIZE];
-    va_list args;
-    va_start(args, format);
-    vsnprintf(message, sizeof(message), format, args);
-    va_end(args);
-    
-    // Log to system log
-    LogError("%s", message);
-    
-    // Log to experiment error file if available
-    if (ctx->errorLogFile) {
-        time_t now = time(NULL);
-        char timeStr[64];
-        FormatTimestamp(now, timeStr, sizeof(timeStr));
-        
-        fprintf(ctx->errorLogFile, "[%s] %s: %s\n", 
-                timeStr, GetStateDescription(ctx->state), message);
-        fflush(ctx->errorLogFile);
-    }
-}
-
-/******************************************************************************
- * Phase Results Management (abbreviated due to length)
- ******************************************************************************/
-
-static int InitializePhaseResults(BaselinePhaseResults *results, BaselineExperimentPhase phase) {
-    memset(results, 0, sizeof(BaselinePhaseResults));
-    results->phase = phase;
-    results->startTime = -1;
-    results->endTime = -1;
-    return SUCCESS;
-}
-
-static int FinalizePhaseResults(BaselineExperimentContext *ctx, BaselinePhaseResults *results) {
-    results->endTime = Timer() - ctx->experimentStartTime;
-    if (results->startTime >= 0) {
-        results->duration = results->endTime - results->startTime;
-    }
-    return SUCCESS;
-}
-
-static int SavePhaseResults(BaselineExperimentContext *ctx, BaselinePhaseResults *results) {
-    char filename[MAX_PATH_LENGTH];
-    snprintf(filename, sizeof(filename), "%s%s%s", 
-             results->phaseDirectory, PATH_SEPARATOR, BASELINE_PHASE_SUMMARY_FILE);
-    
-    FILE *file = fopen(filename, "w");
-    if (!file) {
-        LogWarning("Failed to save phase results to: %s", filename);
-        return ERR_BASE_FILE;
-    }
-    
-    WriteINISection(file, "Phase_Summary");
-    WriteINIValue(file, "Phase_Number", "%d", results->phase);
-    WriteINIDouble(file, "Duration_s", results->duration, 1);
-    WriteINIDouble(file, "Capacity_mAh", results->capacity_mAh, 2);
-    WriteINIDouble(file, "Energy_Wh", results->energy_Wh, 3);
-    WriteINIDouble(file, "Start_Voltage_V", results->startVoltage, 3);
-    WriteINIDouble(file, "End_Voltage_V", results->endVoltage, 3);
-    WriteINIValue(file, "Completion_Reason", "%s", results->completionReason);
-    
-    fclose(file);
-    return SUCCESS;
-}
-
-/******************************************************************************
- * Graph Functions (abbreviated)
+ * Graph and UI Functions - UPDATED FOR MINUTES
  ******************************************************************************/
 
 static int ConfigureExperimentGraphs(BaselineExperimentContext *ctx) {
-    // Configure main graphs for experiment
+    // Configure main graphs for experiment - TIME IN MINUTES
     double maxCurrent = MAX(ctx->params.chargeCurrent, ctx->params.dischargeCurrent);
     ConfigureGraph(ctx->mainPanelHandle, ctx->graph1Handle, 
-                   "Current vs Time", "Time (s)", "Current (A)", 
+                   "Current vs Time", "Time (min)", "Current (A)", 
                    0.0, maxCurrent * 1.1);
     
     ConfigureGraph(ctx->mainPanelHandle, ctx->graph2Handle, 
-                   "Voltage vs Time", "Time (s)", "Voltage (V)", 
+                   "Voltage vs Time", "Time (min)", "Voltage (V)", 
                    ctx->params.dischargeVoltage * 0.9, 
                    ctx->params.chargeVoltage * 1.1);
     
@@ -2255,14 +2398,14 @@ static int ConfigureExperimentGraphs(BaselineExperimentContext *ctx) {
     return SUCCESS;
 }
 
-static void UpdateCurrentGraph(BaselineExperimentContext *ctx, double current, double time) {
+static void UpdateCurrentGraph(BaselineExperimentContext *ctx, double current, double time_min) {
     PlotDataPoint(ctx->mainPanelHandle, ctx->graph1Handle, 
-                  time, fabs(current), VAL_SOLID_CIRCLE, VAL_RED);
+                  time_min, fabs(current), VAL_SOLID_CIRCLE, VAL_RED);
 }
 
-static void UpdateVoltageGraph(BaselineExperimentContext *ctx, double voltage, double time) {
+static void UpdateVoltageGraph(BaselineExperimentContext *ctx, double voltage, double time_min) {
     PlotDataPoint(ctx->mainPanelHandle, ctx->graph2Handle, 
-                  time, voltage, VAL_SOLID_CIRCLE, VAL_BLUE);
+                  time_min, voltage, VAL_SOLID_CIRCLE, VAL_BLUE);
 }
 
 static void UpdateOCVGraph(BaselineExperimentContext *ctx, BaselineEISMeasurement *measurement) {
@@ -2326,6 +2469,50 @@ static void ClearAllExperimentGraphs(BaselineExperimentContext *ctx) {
 }
 
 /******************************************************************************
+ * Phase Results Management
+ ******************************************************************************/
+
+static int InitializePhaseResults(BaselinePhaseResults *results, BaselineExperimentPhase phase) {
+    memset(results, 0, sizeof(BaselinePhaseResults));
+    results->phase = phase;
+    results->startTime = -1;
+    results->endTime = -1;
+    return SUCCESS;
+}
+
+static int FinalizePhaseResults(BaselineExperimentContext *ctx, BaselinePhaseResults *results) {
+    results->endTime = Timer() - ctx->experimentStartTime;
+    if (results->startTime >= 0) {
+        results->duration = results->endTime - results->startTime;
+    }
+    return SUCCESS;
+}
+
+static int SavePhaseResults(BaselineExperimentContext *ctx, BaselinePhaseResults *results) {
+    char filename[MAX_PATH_LENGTH];
+    snprintf(filename, sizeof(filename), "%s%s%s", 
+             results->phaseDirectory, PATH_SEPARATOR, BASELINE_PHASE_SUMMARY_FILE);
+    
+    FILE *file = fopen(filename, "w");
+    if (!file) {
+        LogWarning("Failed to save phase results to: %s", filename);
+        return ERR_BASE_FILE;
+    }
+    
+    WriteINISection(file, "Phase_Summary");
+    WriteINIValue(file, "Phase_Number", "%d", results->phase);
+    WriteINIDouble(file, "Duration_s", results->duration, 1);
+    WriteINIDouble(file, "Capacity_mAh", results->capacity_mAh, 2);
+    WriteINIDouble(file, "Energy_Wh", results->energy_Wh, 3);
+    WriteINIDouble(file, "Start_Voltage_V", results->startVoltage, 3);
+    WriteINIDouble(file, "End_Voltage_V", results->endVoltage, 3);
+    WriteINIValue(file, "Completion_Reason", "%s", results->completionReason);
+    
+    fclose(file);
+    return SUCCESS;
+}
+
+/******************************************************************************
  * Results and Cleanup Functions
  ******************************************************************************/
 
@@ -2361,7 +2548,13 @@ static int WriteComprehensiveResults(BaselineExperimentContext *ctx) {
     WriteINIValue(file, "End_Time", "%s", endTimeStr);
     WriteINIDouble(file, "Total_Duration_h", (ctx->experimentEndTime - ctx->experimentStartTime) / 3600.0, 2);
     WriteINIValue(file, "Final_State", "%s", GetStateDescription(ctx->state));
-    WriteINIDouble(file, "Target_Temperature_C", ctx->params.targetTemperature, 1);
+    if (ENABLE_DTB) {
+        WriteINIDouble(file, "Target_Temperature_C", ctx->params.targetTemperature, 1);
+    } else {
+        WriteINIValue(file, "Target_Temperature_C", "N/A (DTB disabled)");
+    }
+    WriteINIValue(file, "Temperature_Control", "%s", ENABLE_DTB ? "Enabled" : "Disabled");
+    WriteINIValue(file, "CDAQ_Enabled", "%s", ENABLE_CDAQ ? "Yes" : "No");
     fprintf(file, "\n");
     
     // Phase 1 Results
@@ -2486,6 +2679,28 @@ static int WriteImportableResults(BaselineExperimentContext *ctx) {
     return SUCCESS;
 }
 
+static void LogExperimentError(BaselineExperimentContext *ctx, const char *format, ...) {
+    char message[LARGE_BUFFER_SIZE];
+    va_list args;
+    va_start(args, format);
+    vsnprintf(message, sizeof(message), format, args);
+    va_end(args);
+    
+    // Log to system log
+    LogError("%s", message);
+    
+    // Log to experiment error file if available
+    if (ctx->errorLogFile) {
+        time_t now = time(NULL);
+        char timeStr[64];
+        FormatTimestamp(now, timeStr, sizeof(timeStr));
+        
+        fprintf(ctx->errorLogFile, "[%s] %s: %s\n", 
+                timeStr, GetStateDescription(ctx->state), message);
+        fflush(ctx->errorLogFile);
+    }
+}
+
 static void CleanupExperiment(BaselineExperimentContext *ctx) {
     LogMessage("Cleaning up baseline experiment...");
     
@@ -2547,64 +2762,4 @@ static void CleanupExperiment(BaselineExperimentContext *ctx) {
 
 static void RestoreUI(BaselineExperimentContext *ctx) {
     DimExperimentControls(ctx->mainPanelHandle, ctx->tabPanelHandle, 0, controls, numControls);
-}
-
-/******************************************************************************
- * Additional Missing Function Implementations
- ******************************************************************************/
-
-static int LogMainDataPoint(BaselineExperimentContext *ctx, BaselineDataPoint *point) {
-    if (!ctx->mainLogFile) {
-        return ERR_INVALID_STATE;
-    }
-    
-    // Log to main experiment log file
-    fprintf(ctx->mainLogFile, "%.3f,%d,%s,%.3f,%.3f,%.3f,%.2f,%.2f,%.2f,%.2f,%s\n",
-            point->timestamp,
-            point->phase,
-            GetStateDescription(ctx->state),
-            point->voltage,
-            point->current,
-            point->power,
-            point->soc,
-            point->tempData.dtbTemperature,
-            point->tempData.tc0Temperature,
-            point->tempData.tc1Temperature,
-            point->phaseDescription);
-    
-    fflush(ctx->mainLogFile);
-    
-    return SUCCESS;
-}
-
-static int UpdatePhaseResults(BaselinePhaseResults *results, BaselineDataPoint *dataPoint) {
-    if (!results || !dataPoint) {
-        return ERR_NULL_POINTER;
-    }
-    
-    // Update running statistics
-    results->dataPointCount++;
-    
-    // Update sums for averaging
-    results->avgCurrent += fabs(dataPoint->current);
-    results->avgVoltage += dataPoint->voltage;
-    results->avgTemperature_dtb += dataPoint->tempData.dtbTemperature;
-    results->avgTemperature_tc0 += dataPoint->tempData.tc0Temperature;
-    results->avgTemperature_tc1 += dataPoint->tempData.tc1Temperature;
-    
-    // Track peak current
-    if (fabs(dataPoint->current) > results->peakCurrent) {
-        results->peakCurrent = fabs(dataPoint->current);
-    }
-    
-    // Calculate averages
-    if (results->dataPointCount > 0) {
-        results->avgCurrent = results->avgCurrent / results->dataPointCount;
-        results->avgVoltage = results->avgVoltage / results->dataPointCount;
-        results->avgTemperature_dtb = results->avgTemperature_dtb / results->dataPointCount;
-        results->avgTemperature_tc0 = results->avgTemperature_tc0 / results->dataPointCount;
-        results->avgTemperature_tc1 = results->avgTemperature_tc1 / results->dataPointCount;
-    }
-    
-    return SUCCESS;
 }

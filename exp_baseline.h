@@ -23,7 +23,10 @@
  * Configuration Constants
  ******************************************************************************/
 
-// Temperature Control Constants
+// Battery Settling Time
+#define BASELINE_SETTLING_TIME          60.0    // Seconds to wait for battery relaxation after operations
+
+// Temperature Control Constants (when ENABLE_DTB is 1)
 #define BASELINE_TEMP_TOLERANCE         2.0     // °C tolerance for temperature target
 #define BASELINE_TEMP_CHECK_INTERVAL    5.0     // Seconds between temperature checks
 #define BASELINE_TEMP_TIMEOUT_SEC       1800    // 30 minutes max wait for temperature
@@ -43,7 +46,7 @@
 #define BASELINE_SUMMARY_FILE           "summary.txt"
 #define BASELINE_SETTINGS_FILE          "experiment_settings.ini"
 #define BASELINE_MAIN_LOG_FILE          "experiment_log.csv"
-#define BASELINE_ERROR_LOG_FILE         "diagnostics/errors.log"
+#define BASELINE_ERROR_LOG_FILE         "errors.log"
 
 #define BASELINE_PHASE1_DIR             "phase_1"
 #define BASELINE_PHASE2_DIR             "phase_2" 
@@ -62,7 +65,7 @@
 #define BASELINE_PHASE_SUMMARY_FILE     "phase_summary.ini"
 
 // Experiment Limits and Safety
-#define BASELINE_MAX_EXPERIMENT_TIME    43200   // 12 hours maximum experiment time
+#define BASELINE_MAX_EXPERIMENT_TIME    72000   // 20 hours maximum experiment time
 #define BASELINE_POWER_LIMIT            30      // 30W power limit
 #define BASELINE_VOLTAGE_SAFETY_MARGIN  0.05    // 50mV safety margin for voltage targets
 

@@ -183,7 +183,7 @@ int Battery_GoToVoltage(VoltageTargetParams *params) {
         
         // Check timeout
         if (elapsedTime > params->timeoutSeconds) {
-            LogWarning("Voltage target timeout reached after %.1f seconds", elapsedTime);
+            LogWarning("Voltage target timeout reached after %.1f minutes", elapsedTime / 60.0);
             params->result = BATTERY_OP_TIMEOUT;
             break;
         }
@@ -211,12 +211,12 @@ int Battery_GoToVoltage(VoltageTargetParams *params) {
 			// Update graphs if provided
 			if (params->graph1Handle > 0 && params->panelHandle > 0) {
 			    PlotDataPoint(params->panelHandle, params->graph1Handle, 
-			                  elapsedTime, fabs(status.current), VAL_SOLID_CIRCLE, VAL_RED);
+			                  elapsedTime / 60.0, fabs(status.current), VAL_SOLID_CIRCLE, VAL_RED);
 			}
 
 			if (params->graph2Handle > 0 && params->panelHandle > 0) {
 			    PlotDataPoint(params->panelHandle, params->graph2Handle, 
-			                  elapsedTime, status.voltage, VAL_SOLID_CIRCLE, VAL_BLUE);
+			                  elapsedTime / 60.0, status.voltage, VAL_SOLID_CIRCLE, VAL_BLUE);
 			}
             
             // Store final voltage
@@ -420,7 +420,7 @@ int Battery_TransferCapacity(CapacityTransferParams *params) {
         
         // Check timeout
         if (elapsedTime > params->timeoutSeconds) {
-            LogWarning("%s timeout reached after %.1f seconds", modeStr, elapsedTime);
+            LogWarning("%s timeout reached after %.1f minutes", modeStr, elapsedTime / 60.0);
             params->result = BATTERY_OP_TIMEOUT;
             break;
         }
