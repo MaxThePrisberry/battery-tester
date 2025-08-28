@@ -21,7 +21,7 @@
 
 double Battery_CalculateCoulombicEfficiency(double chargeCapacity_mAh, double dischargeCapacity_mAh) {
     if (dischargeCapacity_mAh <= 0) return 0.0;
-    return (chargeCapacity_mAh / dischargeCapacity_mAh) * 100.0;
+    return (dischargeCapacity_mAh / chargeCapacity_mAh) * 100.0;
 }
 
 double Battery_CalculateEnergyEfficiency(double chargeEnergy_Wh, double dischargeEnergy_Wh) {
@@ -210,12 +210,12 @@ int Battery_GoToVoltage(VoltageTargetParams *params) {
 			
 			// Update graphs if provided
 			if (params->graph1Handle > 0 && params->panelHandle > 0) {
-			    PlotDataPoint(params->panelHandle, params->graph1Handle, 
+			    PlotPoint(params->panelHandle, params->graph1Handle, 
 			                  elapsedTime / 60.0, fabs(status.current), VAL_SOLID_CIRCLE, VAL_RED);
 			}
 
 			if (params->graph2Handle > 0 && params->panelHandle > 0) {
-			    PlotDataPoint(params->panelHandle, params->graph2Handle, 
+			    PlotPoint(params->panelHandle, params->graph2Handle, 
 			                  elapsedTime / 60.0, status.voltage, VAL_SOLID_CIRCLE, VAL_BLUE);
 			}
             
@@ -400,7 +400,6 @@ int Battery_TransferCapacity(CapacityTransferParams *params) {
     // Initialize timing and coulomb counting
     double startTime = Timer();
     double lastUpdateTime = startTime;
-    double lastLogTime = startTime;
     double accumulatedCapacity_mAh = 0.0;
     double lastCurrent = 0.0;
     double lastTime = 0.0;
@@ -444,6 +443,17 @@ int Battery_TransferCapacity(CapacityTransferParams *params) {
                 params->result = BATTERY_OP_ABORTED;
                 break;
             }
+			
+			// Update graphs if provided
+			if (params->graph1Handle > 0 && params->panelHandle > 0) {
+			    PlotPoint(params->panelHandle, params->graph1Handle, 
+			                  elapsedTime / 60.0, fabs(status.current), VAL_SOLID_CIRCLE, VAL_RED);
+			}
+
+			if (params->graph2Handle > 0 && params->panelHandle > 0) {
+			    PlotPoint(params->panelHandle, params->graph2Handle, 
+			                  elapsedTime / 60.0, status.voltage, VAL_SOLID_CIRCLE, VAL_BLUE);
+			}
             
             // Store final voltage
             params->finalVoltage_V = status.voltage;
@@ -471,34 +481,16 @@ int Battery_TransferCapacity(CapacityTransferParams *params) {
                     break;
                 }
                 
-                // Update progress
-                double percentComplete = (accumulatedCapacity_mAh / params->targetCapacity_mAh) * 100.0;
-                percentComplete = CLAMP(percentComplete, 0.0, 100.0);
-                
+                // CHANGED: Update progress with voltage and current instead of percentage
                 if (params->progressCallback) {
-                    params->progressCallback(percentComplete, accumulatedCapacity_mAh);
+                    params->progressCallback(status.voltage, status.current, accumulatedCapacity_mAh);
                 }
                 
                 // Update progress control if provided
                 if (params->panelHandle > 0 && params->progressControl > 0) {
+                    double percentComplete = (accumulatedCapacity_mAh / params->targetCapacity_mAh) * 100.0;
+                    percentComplete = CLAMP(percentComplete, 0.0, 100.0);
                     SetCtrlVal(params->panelHandle, params->progressControl, percentComplete);
-                }
-                
-                // Log progress periodically (every 5 seconds)
-                if ((currentTime - lastLogTime) >= 5.0) {
-                    LogMessage("%s progress: %.1f%% (%.2f / %.2f mAh)", 
-                              modeStr, percentComplete, accumulatedCapacity_mAh, params->targetCapacity_mAh);
-                    
-                    // Update status message
-                    if (params->panelHandle > 0 && params->statusControl > 0) {
-                        snprintf(statusMsg, sizeof(statusMsg), 
-                                 "%s: %.1f%% (%.2f mAh)", 
-                                 (params->mode == BATTERY_MODE_CHARGE) ? "Charging" : "Discharging",
-                                 percentComplete, accumulatedCapacity_mAh);
-                        SetCtrlVal(params->panelHandle, params->statusControl, statusMsg);
-                    }
-                    
-                    lastLogTime = currentTime;
                 }
             }
             

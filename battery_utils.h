@@ -79,13 +79,17 @@ typedef struct {
     int updateIntervalMs;          // How often to update/check (minimum 100ms)
     
     // UI update callbacks (optional)
-    void (*progressCallback)(double percentComplete, double mAhTransferred);
+    void (*progressCallback)(double voltage_V, double current_A, double mAhTransferred);
     void (*statusCallback)(const char* message);
     
     // Control handles for UI updates (optional)
     int panelHandle;
     int statusControl;
     int progressControl;
+	
+	// Graph controls (optional)
+    int graph1Handle;              // Graph for current vs time  
+    int graph2Handle;              // Graph for voltage vs time
     
     // Cancellation support
     volatile int *cancelFlag;      // Set to 1 when cancellation requested

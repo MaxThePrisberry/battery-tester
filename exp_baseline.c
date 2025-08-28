@@ -43,7 +43,6 @@ static int BaselineExperimentThread(void *functionData);
 // Setup and verification functions
 static int VerifyAllDevicesAndInitialize(BaselineExperimentContext *ctx);
 static int CreateExperimentFileSystem(BaselineExperimentContext *ctx);
-static int InitializeExperimentLogging(BaselineExperimentContext *ctx);
 static int SaveExperimentSettings(BaselineExperimentContext *ctx);
 
 // Helper functions for UI and data management
@@ -62,7 +61,6 @@ static int WaitForTargetTemperature(BaselineExperimentContext *ctx);
 static int StabilizeTemperature(BaselineExperimentContext *ctx);
 
 // Device control functions
-static int SetRelayState(int pin, int state);
 static int SwitchToPSB(BaselineExperimentContext *ctx);
 static int SwitchToBioLogic(BaselineExperimentContext *ctx);
 static int SafeDisconnectAllDevices(BaselineExperimentContext *ctx);
@@ -78,22 +76,15 @@ static int SaveEISMeasurementData(BaselineExperimentContext *ctx, BaselineEISMea
 static int RetryEISMeasurement(BaselineExperimentContext *ctx, BaselineEISMeasurement *measurement);
 
 // Data logging and tracking functions
-static int LogMainDataPoint(BaselineExperimentContext *ctx, BaselineDataPoint *point);
 static int LogPhaseDataPoint(BaselineExperimentContext *ctx, const char *format, ...);
 static int ReadAllTemperatures(BaselineExperimentContext *ctx, TemperatureDataPoint *tempData, double timestamp);
 static int UpdateSOCTracking(BaselineExperimentContext *ctx, double voltage, double current);
-static int UpdateCapacityEstimate(BaselineExperimentContext *ctx);
 
 // Phase results management
 static int InitializePhaseResults(BaselinePhaseResults *results, BaselineExperimentPhase phase);
-static int UpdatePhaseResults(BaselinePhaseResults *results, BaselineDataPoint *dataPoint);
-static int FinalizePhaseResults(BaselineExperimentContext *ctx, BaselinePhaseResults *results);
-static int SavePhaseResults(BaselineExperimentContext *ctx, BaselinePhaseResults *results);
 
 // Graph and UI functions
 static int ConfigureExperimentGraphs(BaselineExperimentContext *ctx);
-static void UpdateCurrentGraph(BaselineExperimentContext *ctx, double current, double time_min);
-static void UpdateVoltageGraph(BaselineExperimentContext *ctx, double voltage, double time_min);
 static void UpdateOCVGraph(BaselineExperimentContext *ctx, BaselineEISMeasurement *measurement);
 static void UpdateNyquistPlot(BaselineExperimentContext *ctx, BaselineEISMeasurement *measurement);
 static void ClearAllExperimentGraphs(BaselineExperimentContext *ctx);
@@ -101,11 +92,9 @@ static void ClearAllExperimentGraphs(BaselineExperimentContext *ctx);
 // Results and cleanup functions
 static int WriteComprehensiveResults(BaselineExperimentContext *ctx);
 static int WriteImportableResults(BaselineExperimentContext *ctx);
-static void LogExperimentError(BaselineExperimentContext *ctx, const char *format, ...);
 static void CleanupExperiment(BaselineExperimentContext *ctx);
-static void RestoreUI(BaselineExperimentContext *ctx);
 
-// Utility functions - DECLARED ONLY ONCE HERE
+// Utility functions
 static int CheckCancellation(BaselineExperimentContext *ctx);
 static const char* GetPhaseDescription(BaselineExperimentPhase phase);
 static const char* GetStateDescription(BaselineExperimentState state);
@@ -121,29 +110,98 @@ static void UpdateOutputDisplay(BaselineExperimentContext *ctx, const char *labe
     }
 }
 
-static void Phase1ProgressCallback(double voltage_V, double current_A, double mAhTransferred) {
+static void UnifiedProgressCallback(double voltage_V, double current_A, double mAhTransferred) {
     BaselineExperimentContext *ctx = &g_experimentContext;
     
-    // Check if we have a valid context and phase log file
     if (!ctx || !ctx->currentPhaseLogFile) {
         return;
     }
     
-    // Update output display continuously
-    UpdateOutputDisplay(ctx, "Capacity Discharged (mAh)", fabs(mAhTransferred));
-    
-    // Calculate elapsed time from experiment start
+    // Calculate elapsed time from phase start
     double elapsedTime = Timer() - ctx->experimentStartTime - ctx->phaseStartTime;
     
     // Read temperature data
     TemperatureDataPoint tempData;
     ReadAllTemperatures(ctx, &tempData, elapsedTime);
     
-    // Log to phase file: Time_s,Voltage_V,Current_A,Power_W,DTB_Temp_C,TC0_Temp_C,TC1_Temp_C
-    double power_W = voltage_V * fabs(current_A);
-    LogPhaseDataPoint(ctx, "%.3f,%.3f,%.3f,%.3f,%.2f,%.2f,%.2f",
-                     elapsedTime, voltage_V, current_A, power_W,
-                     tempData.dtbTemperature, tempData.tc0Temperature, tempData.tc1Temperature);
+    // Update output display based on phase
+    switch (ctx->currentPhase) {
+        case BASELINE_PHASE_1:
+            UpdateOutputDisplay(ctx, "Capacity Discharged (mAh)", fabs(mAhTransferred));
+            break;
+        case BASELINE_PHASE_2:
+            if (ctx->state == BASELINE_STATE_PHASE2_CHARGE) {
+                UpdateOutputDisplay(ctx, "Capacity Charged (mAh)", fabs(mAhTransferred));
+            } else {
+                UpdateOutputDisplay(ctx, "Capacity Discharged (mAh)", fabs(mAhTransferred));
+            }
+            break;
+        case BASELINE_PHASE_4:
+            UpdateOutputDisplay(ctx, "Capacity Discharged (mAh)", mAhTransferred);
+            break;
+        default:
+            break;
+    }
+    
+    // Direct logging to phase file based on phase type
+    switch (ctx->currentPhase) {
+        case BASELINE_PHASE_4:
+            // Phase 4 includes capacity in the log
+            fprintf(ctx->currentPhaseLogFile, "%.3f,%.3f,%.3f,%.3f,%.2f,%.2f,%.2f,%.2f\n",
+                    elapsedTime, voltage_V, current_A, voltage_V * fabs(current_A), mAhTransferred,
+                    tempData.dtbTemperature, tempData.tc0Temperature, tempData.tc1Temperature);
+            break;
+        default:
+            // Phases 1 and 2 use standard format
+            fprintf(ctx->currentPhaseLogFile, "%.3f,%.3f,%.3f,%.3f,%.2f,%.2f,%.2f\n",
+                    elapsedTime, voltage_V, current_A, voltage_V * fabs(current_A),
+                    tempData.dtbTemperature, tempData.tc0Temperature, tempData.tc1Temperature);
+            break;
+    }
+    
+    fflush(ctx->currentPhaseLogFile);
+}
+
+static const char* GetPhaseHeader(BaselineExperimentPhase phase) {
+    switch (phase) {
+        case BASELINE_PHASE_1:
+        case BASELINE_PHASE_2:
+            return BASELINE_STANDARD_HEADER;
+        case BASELINE_PHASE_3:
+            return BASELINE_SOC_HEADER;
+        case BASELINE_PHASE_4:
+            return BASELINE_EXTENDED_HEADER;
+        default:
+            return BASELINE_STANDARD_HEADER;
+    }
+}
+
+static void ClosePhaseLogFile(BaselineExperimentContext *ctx) {
+    if (ctx->currentPhaseLogFile) {
+        fclose(ctx->currentPhaseLogFile);
+        ctx->currentPhaseLogFile = NULL;
+    }
+}
+
+static int OpenPhaseLogFile(BaselineExperimentContext *ctx, const char* filename) {
+    ClosePhaseLogFile(ctx);
+    
+    char fullPath[MAX_PATH_LENGTH];
+    snprintf(fullPath, sizeof(fullPath), "%s%s%s", 
+             ctx->currentPhaseDirectory, PATH_SEPARATOR, filename);
+    
+    ctx->currentPhaseLogFile = fopen(fullPath, "w");
+    if (!ctx->currentPhaseLogFile) {
+        LogError("Failed to create phase log file: %s", fullPath);
+        return ERR_BASE_FILE;
+    }
+    
+    // Write header based on current phase
+    const char* header = GetPhaseHeader(ctx->currentPhase);
+    fprintf(ctx->currentPhaseLogFile, "%s\n", header);
+    fflush(ctx->currentPhaseLogFile);
+    
+    return SUCCESS;
 }
 
 /******************************************************************************
@@ -414,19 +472,14 @@ static int BaselineExperimentThread(void *functionData) {
     // Create file system and initialize logging
     result = CreateExperimentFileSystem(ctx);
     if (result != SUCCESS || CheckCancellation(ctx)) {
-        LogExperimentError(ctx, "Failed to create experiment file system");
+        LogError("Failed to create experiment file system");
         MessagePopup("Error", "Failed to create experiment directory.\nPlease check disk space and permissions.");
         ctx->state = BASELINE_STATE_ERROR;
         goto cleanup;
     }
     
-    result = InitializeExperimentLogging(ctx);
-    if (result != SUCCESS || CheckCancellation(ctx)) {
-        LogExperimentError(ctx, "Failed to initialize experiment logging");
-        ctx->state = BASELINE_STATE_ERROR;
-        goto cleanup;
-    }
-    
+	SetExternalLogFile(g_experimentContext.baselineExperimentLog);
+	
     // Save experiment settings for future reference
     SaveExperimentSettings(ctx);
     
@@ -435,24 +488,24 @@ static int BaselineExperimentThread(void *functionData) {
     
     // Initialize relay states (safety: both OFF)
     LogMessage("Initializing relay states...");
-    result = SetRelayState(TNY_PSB_PIN, TNY_STATE_DISCONNECTED);
-    if (result != SUCCESS || CheckCancellation(ctx)) {
-        LogExperimentError(ctx, "Failed to initialize PSB relay");
-        ctx->state = BASELINE_STATE_ERROR;
-        goto cleanup;
-    }
-    
-    result = SetRelayState(TNY_BIOLOGIC_PIN, TNY_STATE_DISCONNECTED);
-    if (result != SUCCESS || CheckCancellation(ctx)) {
-        LogExperimentError(ctx, "Failed to initialize BioLogic relay");
-        ctx->state = BASELINE_STATE_ERROR;
-        goto cleanup;
-    }
+    result = TNY_SetPinQueued(TNY_PSB_PIN, TNY_STATE_DISCONNECTED, DEVICE_PRIORITY_NORMAL);
+	if (result != SUCCESS || CheckCancellation(ctx)) {
+	    LogError("Failed to initialize PSB relay");
+	    ctx->state = BASELINE_STATE_ERROR;
+	    goto cleanup;
+	}
+
+	result = TNY_SetPinQueued(TNY_BIOLOGIC_PIN, TNY_STATE_DISCONNECTED, DEVICE_PRIORITY_NORMAL);
+	if (result != SUCCESS || CheckCancellation(ctx)) {
+	    LogError("Failed to initialize BioLogic relay");
+	    ctx->state = BASELINE_STATE_ERROR;
+	    goto cleanup;
+	}
     
     // Initialize EIS target SOCs
     result = InitializeEISTargets(ctx);
     if (result != SUCCESS || CheckCancellation(ctx)) {
-        LogExperimentError(ctx, "Failed to initialize EIS targets");
+        LogError("Failed to initialize EIS targets");
         ctx->state = BASELINE_STATE_ERROR;
         goto cleanup;
     }
@@ -523,12 +576,12 @@ static int BaselineExperimentThread(void *functionData) {
     // Write comprehensive results
     result = WriteComprehensiveResults(ctx);
     if (result != SUCCESS) {
-        LogExperimentError(ctx, "Failed to write comprehensive results");
+        LogError("Failed to write comprehensive results");
     }
     
     result = WriteImportableResults(ctx);
     if (result != SUCCESS) {
-        LogExperimentError(ctx, "Failed to write importable results");
+        LogError("Failed to write importable results");
     }
     
 cleanup:
@@ -558,7 +611,7 @@ cleanup:
     
     // Restore button text and UI
     SetCtrlAttribute(ctx->tabPanelHandle, ctx->buttonControl, ATTR_LABEL_TEXT, "Start");
-    RestoreUI(ctx);
+    DimExperimentControls(ctx->mainPanelHandle, ctx->tabPanelHandle, 0, controls, numControls);
     
     // Clear busy flag
     CmtGetLock(g_busyLock);
@@ -685,6 +738,16 @@ static int CreateExperimentFileSystem(BaselineExperimentContext *ctx) {
         LogError("Failed to create experiment directory");
         return result;
     }
+	
+	// Create and open external log file
+	char logFile[MAX_PATH_LENGTH];
+	snprintf(logFile, sizeof(logFile), "%s%s%s", ctx->experimentDirectory, PATH_SEPARATOR, BASELINE_LOG_FILE);
+	ctx->baselineExperimentLog = fopen(logFile, "w");
+
+	if (!ctx->baselineExperimentLog) {
+	    LogWarning("Failed to create experiment log file: %s", logFile);
+	    LogWarning("Experiment will continue without dedicated experiment logging");
+	}
     
     // Create phase subdirectories
     char phaseDir[MAX_PATH_LENGTH];
@@ -692,8 +755,7 @@ static int CreateExperimentFileSystem(BaselineExperimentContext *ctx) {
         BASELINE_PHASE1_DIR,
         BASELINE_PHASE2_DIR,
         BASELINE_PHASE3_DIR,
-        BASELINE_PHASE4_DIR,
-        BASELINE_DIAGNOSTICS_DIR
+        BASELINE_PHASE4_DIR
     };
     
     for (int i = 0; i < sizeof(phaseDirs)/sizeof(phaseDirs[0]); i++) {
@@ -720,45 +782,6 @@ static int CreateExperimentFileSystem(BaselineExperimentContext *ctx) {
     return SUCCESS;
 }
 
-static int InitializeExperimentLogging(BaselineExperimentContext *ctx) {
-    char filename[MAX_PATH_LENGTH];
-    
-    // Open main experiment log
-    snprintf(filename, sizeof(filename), "%s%s%s", 
-             ctx->experimentDirectory, PATH_SEPARATOR, BASELINE_MAIN_LOG_FILE);
-    
-    ctx->mainLogFile = fopen(filename, "w");
-    if (!ctx->mainLogFile) {
-        LogError("Failed to create main experiment log: %s", filename);
-        return ERR_BASE_FILE;
-    }
-    
-    // Write main log header
-    fprintf(ctx->mainLogFile, "# Baseline Battery Experiment Log\n");
-    fprintf(ctx->mainLogFile, "# Generated by Battery Tester v%s\n", PROJECT_VERSION);
-    fprintf(ctx->mainLogFile, "Timestamp_s,Phase,State,Voltage_V,Current_A,Power_W,SOC_Percent,"
-                             "DTB_Temp_C,TC0_Temp_C,TC1_Temp_C,Description\n");
-    fflush(ctx->mainLogFile);
-    
-    // Open error log - FIXED PATH CONSTRUCTION
-    snprintf(filename, sizeof(filename), "%s%s%s%s%s", 
-             ctx->experimentDirectory, PATH_SEPARATOR, 
-             BASELINE_DIAGNOSTICS_DIR, PATH_SEPARATOR, BASELINE_ERROR_LOG_FILE);
-    
-    ctx->errorLogFile = fopen(filename, "w");
-    if (!ctx->errorLogFile) {
-        LogError("Failed to create error log: %s", filename);
-        // Non-critical, continue without error log
-    } else {
-        fprintf(ctx->errorLogFile, "# Baseline Experiment Error Log\n");
-        fprintf(ctx->errorLogFile, "# Generated by Battery Tester v%s\n\n", PROJECT_VERSION);
-        fflush(ctx->errorLogFile);
-    }
-    
-    LogMessage("Experiment logging initialized");
-    return SUCCESS;
-}
-
 static int SaveExperimentSettings(BaselineExperimentContext *ctx) {
     char filename[MAX_PATH_LENGTH];
     FILE *file;
@@ -780,6 +803,7 @@ static int SaveExperimentSettings(BaselineExperimentContext *ctx) {
     fprintf(file, "# Created: %s\n", timeStr);
     fprintf(file, "# Battery Tester v%s\n\n", PROJECT_VERSION);
     
+    // Experiment Parameters
     WriteINISection(file, "Experiment_Parameters");
     if (ENABLE_DTB) {
         WriteINIDouble(file, "Target_Temperature_C", ctx->params.targetTemperature, 1);
@@ -795,21 +819,77 @@ static int SaveExperimentSettings(BaselineExperimentContext *ctx) {
     WriteINIDouble(file, "Discharge_Current_A", ctx->params.dischargeCurrent, 3);
     fprintf(file, "\n");
     
-    WriteINISection(file, "Device_Configuration");
+    // Device Enable Flags
+    WriteINISection(file, "Device_Enable_Flags");
+    WriteINIValue(file, "ENABLE_PSB", "%d", ENABLE_PSB);
+    WriteINIValue(file, "ENABLE_BIOLOGIC", "%d", ENABLE_BIOLOGIC);
     WriteINIValue(file, "ENABLE_DTB", "%d", ENABLE_DTB);
+    WriteINIValue(file, "ENABLE_TNY", "%d", ENABLE_TNY);
     WriteINIValue(file, "ENABLE_CDAQ", "%d", ENABLE_CDAQ);
-    if (ENABLE_DTB) {
-        WriteINIValue(file, "DTB_Slave_Address", "%d", ctx->dtbSlaveAddress);
-    }
-    WriteINIValue(file, "BioLogic_Device_ID", "%d", ctx->biologicID);
     fprintf(file, "\n");
     
+    // Communication Settings
+    WriteINISection(file, "Communication_Settings");
+    WriteINIValue(file, "PSB_COM_PORT", "%d", PSB_COM_PORT);
+    WriteINIValue(file, "PSB_SLAVE_ADDRESS", "%d", PSB_SLAVE_ADDRESS);
+    WriteINIValue(file, "PSB_BAUD_RATE", "%d", PSB_BAUD_RATE);
+    WriteINIValue(file, "DTB_COM_PORT", "%d", DTB_COM_PORT);
+    WriteINIValue(file, "DTB_BAUD_RATE", "%d", DTB_BAUD_RATE);
+    WriteINIValue(file, "DTB1_SLAVE_ADDRESS", "%d", DTB1_SLAVE_ADDRESS);
+    WriteINIValue(file, "DTB2_SLAVE_ADDRESS", "%d", DTB2_SLAVE_ADDRESS);
+    WriteINIValue(file, "DTB_NUM_DEVICES", "%d", DTB_NUM_DEVICES);
+    WriteINIValue(file, "TNY_COM_PORT", "%d", TNY_COM_PORT);
+    fprintf(file, "\n");
+    
+    // Device Configuration
+    WriteINISection(file, "Device_Configuration");
+    WriteINIValue(file, "Active_DTB_Slave_Address", "%d", ctx->dtbSlaveAddress);
+    WriteINIValue(file, "BioLogic_Device_ID", "%d", ctx->biologicID);
+    WriteINIValue(file, "TNY_PSB_PIN", "%d", TNY_PSB_PIN);
+    WriteINIValue(file, "TNY_BIOLOGIC_PIN", "%d", TNY_BIOLOGIC_PIN);
+    WriteINIValue(file, "TNY_SWITCH_DELAY_MS", "%d", TNY_SWITCH_DELAY_MS);
+    WriteINIValue(file, "TNY_STATE_CONNECTED", "%d", TNY_STATE_CONNECTED);
+    WriteINIValue(file, "TNY_STATE_DISCONNECTED", "%d", TNY_STATE_DISCONNECTED);
+    fprintf(file, "\n");
+    
+    // Safety and Operational Limits
+    WriteINISection(file, "Safety_Limits");
+    WriteINIValue(file, "BASELINE_POWER_LIMIT_W", "%d", BASELINE_POWER_LIMIT);
+    WriteINIValue(file, "PSB_BATTERY_POWER_MAX_W", "%d", PSB_BATTERY_POWER_MAX);
+    WriteINIDouble(file, "BASELINE_VOLTAGE_SAFETY_MARGIN_V", BASELINE_VOLTAGE_SAFETY_MARGIN, 3);
+    WriteINIValue(file, "BASELINE_MAX_EXPERIMENT_TIME_s", "%d", BASELINE_MAX_EXPERIMENT_TIME);
+    WriteINIDouble(file, "BASELINE_SOC_OVERCHARGE_LIMIT_Percent", BASELINE_SOC_OVERCHARGE_LIMIT, 1);
+    WriteINIValue(file, "BASELINE_MAX_DYNAMIC_TARGETS", "%d", BASELINE_MAX_DYNAMIC_TARGETS);
+    fprintf(file, "\n");
+    
+    // Temperature Control Settings
+    WriteINISection(file, "Temperature_Control");
+    WriteINIDouble(file, "BASELINE_TEMP_TOLERANCE_C", BASELINE_TEMP_TOLERANCE, 1);
+    WriteINIDouble(file, "BASELINE_TEMP_CHECK_INTERVAL_s", BASELINE_TEMP_CHECK_INTERVAL, 1);
+    WriteINIValue(file, "BASELINE_TEMP_TIMEOUT_s", "%d", BASELINE_TEMP_TIMEOUT_SEC);
+    WriteINIValue(file, "BASELINE_TEMP_STABILIZE_TIME_s", "%d", BASELINE_TEMP_STABILIZE_TIME);
+    WriteINIDouble(file, "BASELINE_SETTLING_TIME_s", BASELINE_SETTLING_TIME, 1);
+    fprintf(file, "\n");
+    
+    // EIS Configuration
     WriteINISection(file, "EIS_Configuration");
     WriteINIDouble(file, "OCV_Duration_s", OCV_DURATION_S, 1);
+    WriteINIDouble(file, "OCV_Sample_Interval_s", OCV_SAMPLE_INTERVAL_S, 1);
+    WriteINIDouble(file, "OCV_Record_Every_DE_mV", OCV_RECORD_EVERY_DE, 1);
+    WriteINIDouble(file, "OCV_Record_Every_DT_s", OCV_RECORD_EVERY_DT, 1);
+    WriteINIValue(file, "OCV_Timeout_ms", "%d", OCV_TIMEOUT_MS);
     WriteINIDouble(file, "GEIS_Initial_Freq_Hz", GEIS_INITIAL_FREQ, 0);
     WriteINIDouble(file, "GEIS_Final_Freq_Hz", GEIS_FINAL_FREQ, 1);
     WriteINIValue(file, "GEIS_Freq_Points", "%d", GEIS_FREQ_NUMBER);
     WriteINIDouble(file, "GEIS_Amplitude_A", GEIS_AMPLITUDE_I, 3);
+    WriteINIValue(file, "GEIS_Average_N", "%d", GEIS_AVERAGE_N);
+    WriteINIValue(file, "GEIS_Sweep_Linear", "%s", GEIS_SWEEP_LINEAR ? "true" : "false");
+    WriteINIDouble(file, "GEIS_Wait_For_Steady_periods", GEIS_WAIT_FOR_STEADY, 1);
+    WriteINIValue(file, "GEIS_Timeout_ms", "%d", GEIS_TIMEOUT_MS);
+    WriteINIValue(file, "BASELINE_MAX_EIS_RETRY", "%d", BASELINE_MAX_EIS_RETRY);
+    WriteINIDouble(file, "BASELINE_EIS_RETRY_DELAY_s", BASELINE_EIS_RETRY_DELAY, 1);
+    WriteINIDouble(file, "BASELINE_SOC_TOLERANCE_Percent", BASELINE_SOC_TOLERANCE, 1);
+    fprintf(file, "\n");
     
     fclose(file);
     
@@ -825,6 +905,7 @@ static int RunPhase1_DischargeAndTemp(BaselineExperimentContext *ctx) {
     int result;
     
     ctx->state = BASELINE_STATE_PHASE1_DISCHARGE;
+    ctx->currentPhase = BASELINE_PHASE_1;
     InitializePhaseResults(&ctx->phase1Results, BASELINE_PHASE_1);
     
     // Create phase directory path
@@ -839,35 +920,25 @@ static int RunPhase1_DischargeAndTemp(BaselineExperimentContext *ctx) {
     if (ENABLE_DTB) {
         result = SetupTemperatureControl(ctx);
         if (result != SUCCESS || CheckCancellation(ctx)) {
-            LogExperimentError(ctx, "Failed to setup temperature control in Phase 1");
+            LogError("Failed to setup temperature control in Phase 1");
             return result != SUCCESS ? result : ERR_CANCELLED;
         }
     }
     
-    // Open phase log file
-    char filename[MAX_PATH_LENGTH];
-    snprintf(filename, sizeof(filename), "%s%s%s", 
-             ctx->currentPhaseDirectory, PATH_SEPARATOR, BASELINE_PHASE1_DISCHARGE_FILE);
-    
-    ctx->currentPhaseLogFile = fopen(filename, "w");
-    if (!ctx->currentPhaseLogFile) {
-        LogExperimentError(ctx, "Failed to create Phase 1 log file");
-        return ERR_BASE_FILE;
+    // Open phase log file with automatic header
+    result = OpenPhaseLogFile(ctx, BASELINE_PHASE1_DISCHARGE_FILE);
+    if (result != SUCCESS || CheckCancellation(ctx)) {
+        return result != SUCCESS ? result : ERR_CANCELLED;
     }
-    
-    fprintf(ctx->currentPhaseLogFile, "Time_s,Voltage_V,Current_A,Power_W,DTB_Temp_C,TC0_Temp_C,TC1_Temp_C\n");
     
     // Switch to PSB for discharge
     result = SwitchToPSB(ctx);
     if (result != SUCCESS || CheckCancellation(ctx)) {
-        if (ctx->currentPhaseLogFile) {
-            fclose(ctx->currentPhaseLogFile);
-            ctx->currentPhaseLogFile = NULL;
-        }
+        ClosePhaseLogFile(ctx);
         return result != SUCCESS ? result : ERR_CANCELLED;
     }
     
-    // Use battery_utils for discharge with graph updates and data logging
+    // Use battery_utils for discharge with unified callback
     VoltageTargetParams dischargeParams = {
         .targetVoltage_V = ctx->params.dischargeVoltage,
         .maxCurrent_A = ctx->params.dischargeCurrent,
@@ -880,7 +951,7 @@ static int RunPhase1_DischargeAndTemp(BaselineExperimentContext *ctx) {
         .graph1Handle = ctx->graph1Handle,
         .graph2Handle = ctx->graph2Handle,
         .cancelFlag = &ctx->cancelRequested,
-        .progressCallback = Phase1ProgressCallback,  // Enable data logging
+        .progressCallback = UnifiedProgressCallback,
         .statusCallback = NULL
     };
     
@@ -889,27 +960,17 @@ static int RunPhase1_DischargeAndTemp(BaselineExperimentContext *ctx) {
     
     result = Battery_GoToVoltage(&dischargeParams);
     
+    ClosePhaseLogFile(ctx);
+    
     if (CheckCancellation(ctx)) {
-        if (ctx->currentPhaseLogFile) {
-            fclose(ctx->currentPhaseLogFile);
-            ctx->currentPhaseLogFile = NULL;
-        }
         return ERR_CANCELLED;
     }
     
     if (result != SUCCESS || dischargeParams.result != BATTERY_OP_SUCCESS) {
         if (dischargeParams.result == BATTERY_OP_ABORTED) {
-            if (ctx->currentPhaseLogFile) {
-                fclose(ctx->currentPhaseLogFile);
-                ctx->currentPhaseLogFile = NULL;
-            }
             return ERR_CANCELLED;
         }
-        LogExperimentError(ctx, "Phase 1 discharge failed");
-        if (ctx->currentPhaseLogFile) {
-            fclose(ctx->currentPhaseLogFile);
-            ctx->currentPhaseLogFile = NULL;
-        }
+        LogError("Phase 1 discharge failed");
         return ERR_OPERATION_FAILED;
     }
     
@@ -924,11 +985,6 @@ static int RunPhase1_DischargeAndTemp(BaselineExperimentContext *ctx) {
     
     // Final output display update
     UpdateOutputDisplay(ctx, "Capacity Discharged (mAh)", ctx->phase1Results.capacity_mAh);
-    
-    if (ctx->currentPhaseLogFile) {
-        fclose(ctx->currentPhaseLogFile);
-        ctx->currentPhaseLogFile = NULL;
-    }
     
     // Battery settling time after discharge
     LogMessage("Waiting %.0f seconds for battery relaxation...", BASELINE_SETTLING_TIME);
@@ -961,10 +1017,25 @@ static int RunPhase1_DischargeAndTemp(BaselineExperimentContext *ctx) {
             return result != SUCCESS ? result : ERR_CANCELLED;
         }
     }
+	
+	// Set completion reason based on discharge result
+    if (dischargeParams.result == BATTERY_OP_SUCCESS) {
+        strcpy(ctx->phase1Results.completionReason, "Target voltage and current threshold reached");
+    } else if (dischargeParams.result == BATTERY_OP_TIMEOUT) {
+        strcpy(ctx->phase1Results.completionReason, "Timeout reached");
+    } else if (dischargeParams.result == BATTERY_OP_ABORTED) {
+        strcpy(ctx->phase1Results.completionReason, "Cancelled by user");
+    } else {
+        strcpy(ctx->phase1Results.completionReason, "Discharge failed");
+    }
     
-    // Finalize phase results
-    FinalizePhaseResults(ctx, &ctx->phase1Results);
-    SavePhaseResults(ctx, &ctx->phase1Results);
+    // Add temperature control completion info if applicable
+    if (ENABLE_DTB) {
+        char tempStr[64];
+        snprintf(tempStr, sizeof(tempStr), " + Temperature stabilized");
+        strncat(ctx->phase1Results.completionReason, tempStr, 
+                sizeof(ctx->phase1Results.completionReason) - strlen(ctx->phase1Results.completionReason) - 1);
+    }
     
     LogMessage("Phase 1 completed successfully");
     return SUCCESS;
@@ -973,6 +1044,7 @@ static int RunPhase1_DischargeAndTemp(BaselineExperimentContext *ctx) {
 static int RunPhase2_CapacityExperiment(BaselineExperimentContext *ctx) {
     int result;
     
+    ctx->currentPhase = BASELINE_PHASE_2;
     ctx->state = BASELINE_STATE_PHASE2_CHARGE;
     InitializePhaseResults(&ctx->phase2ChargeResults, BASELINE_PHASE_2);
     InitializePhaseResults(&ctx->phase2DischargeResults, BASELINE_PHASE_2);
@@ -1000,7 +1072,14 @@ static int RunPhase2_CapacityExperiment(BaselineExperimentContext *ctx) {
     // Setup output display for charging
     UpdateOutputDisplay(ctx, "Capacity Charged (mAh)", 0.0);
     
-    // Use battery_utils for charge (no EIS interruptions in Phase 2)
+    // Open phase charge log file
+    result = OpenPhaseLogFile(ctx, BASELINE_PHASE2_CHARGE_FILE);
+    if (result != SUCCESS) {
+        LogError("Failed to create Phase 2 charge log file");
+        return ERR_BASE_FILE;
+    }
+    
+    // Use battery_utils for charge with unified callback
     VoltageTargetParams chargeParams = {
         .targetVoltage_V = ctx->params.chargeVoltage,
         .maxCurrent_A = ctx->params.chargeCurrent,
@@ -1013,12 +1092,14 @@ static int RunPhase2_CapacityExperiment(BaselineExperimentContext *ctx) {
         .graph1Handle = ctx->graph1Handle,
         .graph2Handle = ctx->graph2Handle,
         .cancelFlag = &ctx->cancelRequested,
-        .progressCallback = NULL,
+        .progressCallback = UnifiedProgressCallback,
         .statusCallback = NULL
     };
     
     ctx->phaseStartTime = Timer() - ctx->experimentStartTime;
     result = Battery_GoToVoltage(&chargeParams);
+    
+    ClosePhaseLogFile(ctx);
     
     if (CheckCancellation(ctx)) {
         return ERR_CANCELLED;
@@ -1028,7 +1109,7 @@ static int RunPhase2_CapacityExperiment(BaselineExperimentContext *ctx) {
         if (chargeParams.result == BATTERY_OP_ABORTED) {
             return ERR_CANCELLED;
         }
-        LogExperimentError(ctx, "Phase 2 charge failed");
+        LogError("Phase 2 charge failed");
         return ERR_OPERATION_FAILED;
     }
     
@@ -1043,6 +1124,17 @@ static int RunPhase2_CapacityExperiment(BaselineExperimentContext *ctx) {
     LogMessage("Phase 2 charge completed: %.2f mAh, %.2f Wh in %.1f minutes", 
                ctx->phase2ChargeResults.capacity_mAh, ctx->phase2ChargeResults.energy_Wh, 
                ctx->phase2ChargeResults.duration / 60.0);
+	
+	// Set charge completion reason
+    if (chargeParams.result == BATTERY_OP_SUCCESS) {
+        strcpy(ctx->phase2ChargeResults.completionReason, "Target voltage and current threshold reached");
+    } else if (chargeParams.result == BATTERY_OP_TIMEOUT) {
+        strcpy(ctx->phase2ChargeResults.completionReason, "Timeout reached");
+    } else if (chargeParams.result == BATTERY_OP_ABORTED) {
+        strcpy(ctx->phase2ChargeResults.completionReason, "Cancelled by user");
+    } else {
+        strcpy(ctx->phase2ChargeResults.completionReason, "Charge failed");
+    }
     
     // Final charge output display update
     UpdateOutputDisplay(ctx, "Capacity Charged (mAh)", ctx->phase2ChargeResults.capacity_mAh);
@@ -1057,6 +1149,9 @@ static int RunPhase2_CapacityExperiment(BaselineExperimentContext *ctx) {
     if (CheckCancellation(ctx)) {
         return ERR_CANCELLED;
     }
+	
+	// Clear graphs before starting discharge phase for better visualization
+    ClearAllExperimentGraphs(ctx);
     
     // --- DISCHARGE PHASE ---
     LogMessage("Running Phase 2 discharge phase...");
@@ -1065,6 +1160,13 @@ static int RunPhase2_CapacityExperiment(BaselineExperimentContext *ctx) {
     
     // Reset output display for discharging
     UpdateOutputDisplay(ctx, "Capacity Discharged (mAh)", 0.0);
+    
+    // Open phase discharge log file
+    result = OpenPhaseLogFile(ctx, BASELINE_PHASE2_DISCHARGE_FILE);
+    if (result != SUCCESS) {
+        LogError("Failed to create Phase 2 discharge log file");
+        return ERR_BASE_FILE;
+    }
     
     VoltageTargetParams dischargeParams = {
         .targetVoltage_V = ctx->params.dischargeVoltage,
@@ -1078,18 +1180,20 @@ static int RunPhase2_CapacityExperiment(BaselineExperimentContext *ctx) {
         .graph1Handle = ctx->graph1Handle,
         .graph2Handle = ctx->graph2Handle,
         .cancelFlag = &ctx->cancelRequested,
-        .progressCallback = NULL,
+        .progressCallback = UnifiedProgressCallback,
         .statusCallback = NULL
     };
     
     result = Battery_GoToVoltage(&dischargeParams);
+    
+    ClosePhaseLogFile(ctx);
     
     if (CheckCancellation(ctx)) {
         return ERR_CANCELLED;
     }
     
     if (result != SUCCESS || dischargeParams.result != BATTERY_OP_SUCCESS) {
-        LogExperimentError(ctx, "Phase 2 discharge failed");
+        LogError("Phase 2 discharge failed");
         return ERR_OPERATION_FAILED;
     }
     
@@ -1104,6 +1208,17 @@ static int RunPhase2_CapacityExperiment(BaselineExperimentContext *ctx) {
     LogMessage("Phase 2 discharge completed: %.2f mAh, %.2f Wh in %.1f minutes", 
                ctx->phase2DischargeResults.capacity_mAh, ctx->phase2DischargeResults.energy_Wh, 
                ctx->phase2DischargeResults.duration / 60.0);
+	
+	// Set discharge completion reason
+    if (dischargeParams.result == BATTERY_OP_SUCCESS) {
+        strcpy(ctx->phase2DischargeResults.completionReason, "Target voltage and current threshold reached");
+    } else if (dischargeParams.result == BATTERY_OP_TIMEOUT) {
+        strcpy(ctx->phase2DischargeResults.completionReason, "Timeout reached");
+    } else if (dischargeParams.result == BATTERY_OP_ABORTED) {
+        strcpy(ctx->phase2DischargeResults.completionReason, "Cancelled by user");
+    } else {
+        strcpy(ctx->phase2DischargeResults.completionReason, "Discharge failed");
+    }
     
     // Final discharge output display update
     UpdateOutputDisplay(ctx, "Capacity Discharged (mAh)", ctx->phase2DischargeResults.capacity_mAh);
@@ -1122,18 +1237,12 @@ static int RunPhase2_CapacityExperiment(BaselineExperimentContext *ctx) {
     // Update battery capacity estimate for Phase 3
     ctx->estimatedBatteryCapacity_mAh = ctx->measuredChargeCapacity_mAh;
     
-    // Finalize phase results
-    FinalizePhaseResults(ctx, &ctx->phase2ChargeResults);
-    FinalizePhaseResults(ctx, &ctx->phase2DischargeResults);
-    SavePhaseResults(ctx, &ctx->phase2ChargeResults);
-    SavePhaseResults(ctx, &ctx->phase2DischargeResults);
-    
     // Write Phase 2 capacity results file
-    char filename[MAX_PATH_LENGTH];
-    snprintf(filename, sizeof(filename), "%s%s%s", 
+    char resultsFile[MAX_PATH_LENGTH];
+    snprintf(resultsFile, sizeof(resultsFile), "%s%s%s", 
              ctx->currentPhaseDirectory, PATH_SEPARATOR, BASELINE_PHASE2_RESULTS_FILE);
     
-    FILE *file = fopen(filename, "w");
+    FILE *file = fopen(resultsFile, "w");
     if (file) {
         WriteINISection(file, "Phase2_Capacity_Results");
         WriteINIDouble(file, "Charge_Capacity_mAh", ctx->phase2ChargeResults.capacity_mAh, 2);
@@ -1190,7 +1299,7 @@ static int RunPhase3_EISCharge(BaselineExperimentContext *ctx) {
     LogMessage("Performing initial EIS measurement at 0%% SOC...");
     result = PerformEISMeasurement(ctx, 0.0);
     if (result != SUCCESS || CheckCancellation(ctx)) {
-        LogExperimentError(ctx, "Initial EIS measurement failed");
+        LogError("Initial EIS measurement failed");
         return result != SUCCESS ? result : ERR_CANCELLED;
     }
     
@@ -1204,7 +1313,7 @@ static int RunPhase3_EISCharge(BaselineExperimentContext *ctx) {
     
     ctx->currentPhaseLogFile = fopen(filename, "w");
     if (!ctx->currentPhaseLogFile) {
-        LogExperimentError(ctx, "Failed to create Phase 3 log file");
+        LogError("Failed to create Phase 3 log file");
         return ERR_BASE_FILE;
     }
     
@@ -1223,7 +1332,7 @@ static int RunPhase3_EISCharge(BaselineExperimentContext *ctx) {
     // Configure PSB for charging
     result = PSB_SetVoltageQueued(ctx->params.chargeVoltage, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
-        LogExperimentError(ctx, "Failed to set charge voltage: %s", PSB_GetErrorString(result));
+        LogError("Failed to set charge voltage: %s", PSB_GetErrorString(result));
         if (ctx->currentPhaseLogFile) {
             fclose(ctx->currentPhaseLogFile);
             ctx->currentPhaseLogFile = NULL;
@@ -1233,7 +1342,7 @@ static int RunPhase3_EISCharge(BaselineExperimentContext *ctx) {
     
     result = PSB_SetCurrentQueued(ctx->params.chargeCurrent, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
-        LogExperimentError(ctx, "Failed to set charge current: %s", PSB_GetErrorString(result));
+        LogError("Failed to set charge current: %s", PSB_GetErrorString(result));
         if (ctx->currentPhaseLogFile) {
             fclose(ctx->currentPhaseLogFile);
             ctx->currentPhaseLogFile = NULL;
@@ -1249,7 +1358,7 @@ static int RunPhase3_EISCharge(BaselineExperimentContext *ctx) {
     // Enable PSB output
     result = PSB_SetOutputEnableQueued(1, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
-        LogExperimentError(ctx, "Failed to enable output: %s", PSB_GetErrorString(result));
+        LogError("Failed to enable output: %s", PSB_GetErrorString(result));
         if (ctx->currentPhaseLogFile) {
             fclose(ctx->currentPhaseLogFile);
             ctx->currentPhaseLogFile = NULL;
@@ -1295,7 +1404,7 @@ static int RunPhase3_EISCharge(BaselineExperimentContext *ctx) {
         
         // Safety timeout - increased to 20 hours / 2 = 10 hours for Phase 3
         if (elapsedTime > BASELINE_MAX_EXPERIMENT_TIME / 2) {  // Half total experiment time
-            LogExperimentError(ctx, "Phase 3 timeout - charging too long");
+            LogError("Phase 3 timeout - charging too long");
             break;
         }
         
@@ -1303,20 +1412,19 @@ static int RunPhase3_EISCharge(BaselineExperimentContext *ctx) {
         PSB_Status status;
         result = PSB_GetStatusQueued(&status, DEVICE_PRIORITY_NORMAL);
         if (result != PSB_SUCCESS) {
-            LogExperimentError(ctx, "Failed to read PSB status: %s", PSB_GetErrorString(result));
+            LogError("Failed to read PSB status: %s", PSB_GetErrorString(result));
             break;
         }
         
         // Update SOC tracking
         UpdateSOCTracking(ctx, status.voltage, status.current);
-        UpdateCapacityEstimate(ctx);
         
         // Update output display continuously
         UpdateOutputDisplay(ctx, "State of Charge (%)", ctx->currentSOC);
         
         // Check for SOC safety limit
         if (ctx->currentSOC > BASELINE_SOC_OVERCHARGE_LIMIT) {
-            LogExperimentError(ctx, "Safety limit reached - SOC exceeds %.1f%%", BASELINE_SOC_OVERCHARGE_LIMIT);
+            LogError("Safety limit reached - SOC exceeds %.1f%%", BASELINE_SOC_OVERCHARGE_LIMIT);
             break;
         }
         
@@ -1332,10 +1440,11 @@ static int RunPhase3_EISCharge(BaselineExperimentContext *ctx) {
             ctx->lastLogTime = currentTime;
         }
         
-        // Update graphs if needed - CONVERT TO MINUTES
+        // Update graphs if needed
         if ((currentTime - ctx->lastGraphUpdate) >= 1.0) {
             double elapsedTime_min = elapsedTime / 60.0;  // Convert to minutes
-            UpdateCurrentGraph(ctx, status.current, elapsedTime_min);
+			PlotPoint(ctx->mainPanelHandle, ctx->graph1Handle, 
+                  elapsedTime_min, fabs(status.current), VAL_SOLID_CIRCLE, VAL_RED);
             ctx->lastGraphUpdate = currentTime;
         }
         
@@ -1358,7 +1467,7 @@ static int RunPhase3_EISCharge(BaselineExperimentContext *ctx) {
             }
             
             if (result != SUCCESS) {
-                LogExperimentError(ctx, "EIS measurement failed at %.1f%% SOC", ctx->currentSOC);
+                LogError("EIS measurement failed at %.1f%% SOC", ctx->currentSOC);
                 // Continue with charging despite EIS failure
             }
             
@@ -1373,7 +1482,7 @@ static int RunPhase3_EISCharge(BaselineExperimentContext *ctx) {
                         if (result == SUCCESS) {
                             ctx->dynamicTargetsAdded++;
                             if (ctx->dynamicTargetsAdded == 1) {
-                                LogMessage("Battery capacity underestimated - adding dynamic EIS targets beyond 100%% SOC");
+                                LogMessage("Battery capacity underestimated - adding dynamic EIS target beyond 100%% SOC");
                             }
                         }
                     }
@@ -1481,9 +1590,6 @@ static int RunPhase3_EISCharge(BaselineExperimentContext *ctx) {
     ctx->phase3Results.endVoltage = ctx->eisMeasurementCount > 0 ? 
                                    ctx->eisMeasurements[ctx->eisMeasurementCount - 1].ocvVoltage : 0.0;
     
-    FinalizePhaseResults(ctx, &ctx->phase3Results);
-    SavePhaseResults(ctx, &ctx->phase3Results);
-    
     if (ctx->dynamicTargetsAdded > 0) {
         LogMessage("Phase 3 completed - battery capacity was underestimated, took %d measurements beyond 100%% SOC", 
                   ctx->dynamicTargetsAdded);
@@ -1495,12 +1601,13 @@ static int RunPhase3_EISCharge(BaselineExperimentContext *ctx) {
 }
 
 static int RunPhase4_Discharge50Percent(BaselineExperimentContext *ctx) {
-    if (ctx->measuredChargeCapacity_mAh <= 0) {
-        LogExperimentError(ctx, "Cannot discharge to 50%% - charge capacity unknown");
+    if (ctx->measuredDischargeCapacity_mAh <= 0) {
+        LogError("Cannot discharge to 50%% - discharge capacity unknown");
         return ERR_INVALID_PARAMETER;
     }
     
     ctx->state = BASELINE_STATE_PHASE4_DISCHARGE;
+    ctx->currentPhase = BASELINE_PHASE_4;
     InitializePhaseResults(&ctx->phase4Results, BASELINE_PHASE_4);
     
     // Create phase directory path
@@ -1509,13 +1616,13 @@ static int RunPhase4_Discharge50Percent(BaselineExperimentContext *ctx) {
     strcpy(ctx->phase4Results.phaseDirectory, ctx->currentPhaseDirectory);
     
     LogMessage("=== Phase 4: Discharging battery to 50%% capacity ===");
-    LogMessage("Target discharge: %.2f mAh (50%% of %.2f mAh)", 
-               ctx->measuredChargeCapacity_mAh * 0.5, ctx->measuredChargeCapacity_mAh);
+    LogMessage("Target discharge: %.2f mAh (50%% of %.2f mAh usable capacity)", 
+               ctx->measuredDischargeCapacity_mAh * 0.5, ctx->measuredDischargeCapacity_mAh);
     
     // Setup output display for Phase 4
     UpdateOutputDisplay(ctx, "Capacity Discharged (mAh)", 0.0);
     
-    // Reconfigure graphs for discharge - TIME IN MINUTES
+    // Reconfigure graphs for discharge
     ConfigureGraph(ctx->mainPanelHandle, ctx->graph2Handle, 
                    "Voltage vs Time", "Time (min)", "Voltage (V)", 
                    ctx->params.dischargeVoltage * 0.9, 
@@ -1525,32 +1632,44 @@ static int RunPhase4_Discharge50Percent(BaselineExperimentContext *ctx) {
                    "Current vs Time", "Time (min)", "Current (A)", 
                    0.0, ctx->params.dischargeCurrent * 1.1);
     
+    // Open phase log file with automatic header
+    int result = OpenPhaseLogFile(ctx, BASELINE_PHASE4_DISCHARGE_FILE);
+    if (result != SUCCESS) {
+        LogError("Failed to create Phase 4 log file");
+        return ERR_BASE_FILE;
+    }
+    
     // Switch to PSB for discharge
-    int result = SwitchToPSB(ctx);
+    result = SwitchToPSB(ctx);
     if (result != SUCCESS || CheckCancellation(ctx)) {
-        LogExperimentError(ctx, "Failed to switch to PSB for Phase 4 discharge");
+        LogError("Failed to switch to PSB for Phase 4 discharge");
+        ClosePhaseLogFile(ctx);
         return result != SUCCESS ? result : ERR_CANCELLED;
     }
     
-    // Use battery_utils for precise capacity discharge - INCREASED TIMEOUT TO 5 HOURS
-    CapacityTransferParams discharge50 = {
-        .mode = BATTERY_MODE_DISCHARGE,
-        .targetCapacity_mAh = ctx->measuredChargeCapacity_mAh * 0.5,
-        .current_A = ctx->params.dischargeCurrent,
-        .voltage_V = ctx->params.dischargeVoltage,
-        .currentThreshold_A = ctx->params.currentThreshold,
-        .timeoutSeconds = 18000.0,  // INCREASED: 5 hours max (same as other phases)
-        .updateIntervalMs = ctx->params.logInterval * 1000,
-        .panelHandle = ctx->mainPanelHandle,
-        .statusControl = PANEL_STR_PSB_STATUS,
-        .progressControl = 0,
-        .progressCallback = NULL,
-        .statusCallback = NULL,
-        .cancelFlag = &ctx->cancelRequested
-    };
+    // Use battery_utils for precise capacity discharge with unified callback
+	CapacityTransferParams discharge50 = {
+	    .mode = BATTERY_MODE_DISCHARGE,
+	    .targetCapacity_mAh = ctx->measuredDischargeCapacity_mAh * 0.5,
+	    .current_A = ctx->params.dischargeCurrent,
+	    .voltage_V = ctx->params.dischargeVoltage,
+	    .currentThreshold_A = ctx->params.currentThreshold,
+	    .timeoutSeconds = 18000.0,  // 5 hours max
+	    .updateIntervalMs = ctx->params.logInterval * 1000,
+	    .panelHandle = ctx->mainPanelHandle,
+	    .statusControl = PANEL_STR_PSB_STATUS,
+	    .progressControl = 0,
+	    .graph1Handle = ctx->graph1Handle,
+	    .graph2Handle = ctx->graph2Handle,
+	    .progressCallback = UnifiedProgressCallback,
+	    .statusCallback = NULL,
+	    .cancelFlag = &ctx->cancelRequested
+	};
     
     ctx->phaseStartTime = Timer() - ctx->experimentStartTime;
     result = Battery_TransferCapacity(&discharge50);
+    
+    ClosePhaseLogFile(ctx);
     
     if (CheckCancellation(ctx)) {
         return ERR_CANCELLED;
@@ -1569,16 +1688,16 @@ static int RunPhase4_Discharge50Percent(BaselineExperimentContext *ctx) {
         LogMessage("  Discharged: %.2f mAh", discharge50.actualTransferred_mAh);
         LogMessage("  Time taken: %.1f minutes", discharge50.elapsedTime_s / 60.0);
         LogMessage("  Final voltage: %.3f V", discharge50.finalVoltage_V);
-        
-        // Calculate final SOC estimate
-        double finalSOC = 50.0 - ((discharge50.actualTransferred_mAh - discharge50.targetCapacity_mAh) / 
-                                 ctx->measuredChargeCapacity_mAh) * 100.0;
+        LogMessage("  Percentage of usable capacity: %.1f%%", 
+                   (discharge50.actualTransferred_mAh / ctx->measuredDischargeCapacity_mAh) * 100.0);
         
         strcpy(ctx->phase4Results.completionReason, "Target capacity reached");
     } else {
-        LogWarning("Phase 4 incomplete - failed to discharge to exactly 50%%");
+        LogWarning("Phase 4 incomplete - failed to discharge to exactly 50%% of usable capacity");
         LogMessage("  Discharged: %.2f mAh (target: %.2f mAh)", 
                    discharge50.actualTransferred_mAh, discharge50.targetCapacity_mAh);
+        LogMessage("  Percentage of usable capacity: %.1f%%", 
+                   (discharge50.actualTransferred_mAh / ctx->measuredDischargeCapacity_mAh) * 100.0);
         
         if (discharge50.result == BATTERY_OP_CURRENT_THRESHOLD) {
             strcpy(ctx->phase4Results.completionReason, "Current below threshold");
@@ -1588,17 +1707,6 @@ static int RunPhase4_Discharge50Percent(BaselineExperimentContext *ctx) {
             strcpy(ctx->phase4Results.completionReason, "Discharge incomplete");
         }
     }
-    
-    // Battery settling time after discharge
-    LogMessage("Waiting %.0f seconds for battery relaxation after discharge...", BASELINE_SETTLING_TIME);
-    for (int i = 0; i < (int)BASELINE_SETTLING_TIME && !CheckCancellation(ctx); i++) {
-        ProcessSystemEvents();
-        Delay(1.0);
-    }
-    
-    // Finalize phase results
-    FinalizePhaseResults(ctx, &ctx->phase4Results);
-    SavePhaseResults(ctx, &ctx->phase4Results);
     
     LogMessage("Phase 4 completed");
     return SUCCESS;
@@ -1621,14 +1729,14 @@ static int SetupTemperatureControl(BaselineExperimentContext *ctx) {
     // Set DTB target temperature
     result = DTB_SetSetPointQueued(ctx->dtbSlaveAddress, ctx->params.targetTemperature, DEVICE_PRIORITY_NORMAL);
     if (result != DTB_SUCCESS) {
-        LogExperimentError(ctx, "Failed to set DTB temperature: %s", DTB_GetErrorString(result));
+        LogError("Failed to set DTB temperature: %s", DTB_GetErrorString(result));
         return result;
     }
     
     // Start DTB controller
     result = DTB_SetRunStopQueued(ctx->dtbSlaveAddress, 1, DEVICE_PRIORITY_NORMAL);
     if (result != DTB_SUCCESS) {
-        LogExperimentError(ctx, "Failed to start DTB: %s", DTB_GetErrorString(result));
+        LogError("Failed to start DTB: %s", DTB_GetErrorString(result));
         return result;
     }
     
@@ -1775,15 +1883,6 @@ static int StabilizeTemperature(BaselineExperimentContext *ctx) {
  * Device Control Functions
  ******************************************************************************/
 
-static int SetRelayState(int pin, int state) {
-    TNYQueueManager *tnyQueueMgr = TNY_GetGlobalQueueManager();
-    if (!tnyQueueMgr) {
-        return ERR_NOT_CONNECTED;
-    }
-    
-    return TNY_SetPinQueued(pin, state, DEVICE_PRIORITY_NORMAL);
-}
-
 static int SwitchToPSB(BaselineExperimentContext *ctx) {
     int result;
     
@@ -1795,20 +1894,20 @@ static int SwitchToPSB(BaselineExperimentContext *ctx) {
     Delay(0.5);
     
     // Disconnect BioLogic relay first
-    result = SetRelayState(TNY_BIOLOGIC_PIN, TNY_STATE_DISCONNECTED);
-    if (result != SUCCESS) {
-        LogExperimentError(ctx, "Failed to disconnect BioLogic relay: %s", GetErrorString(result));
-        return result;
-    }
+    result = TNY_SetPinQueued(TNY_BIOLOGIC_PIN, TNY_STATE_DISCONNECTED, DEVICE_PRIORITY_NORMAL);
+	if (result != SUCCESS) {
+	    LogError("Failed to disconnect BioLogic relay: %s", GetErrorString(result));
+	    return result;
+	}
     
     Delay(TNY_SWITCH_DELAY_MS / 1000.0);
     
     // Connect PSB relay
-    result = SetRelayState(TNY_PSB_PIN, TNY_STATE_CONNECTED);
-    if (result != SUCCESS) {
-        LogExperimentError(ctx, "Failed to connect PSB relay: %s", GetErrorString(result));
-        return result;
-    }
+    result = TNY_SetPinQueued(TNY_PSB_PIN, TNY_STATE_CONNECTED, DEVICE_PRIORITY_NORMAL);
+	if (result != SUCCESS) {
+	    LogError("Failed to connect PSB relay: %s", GetErrorString(result));
+	    return result;
+	}
     
     Delay(TNY_SWITCH_DELAY_MS / 1000.0);
     
@@ -1826,20 +1925,20 @@ static int SwitchToBioLogic(BaselineExperimentContext *ctx) {
     Delay(0.5);
     
     // Disconnect PSB relay first
-    result = SetRelayState(TNY_PSB_PIN, TNY_STATE_DISCONNECTED);
-    if (result != SUCCESS) {
-        LogExperimentError(ctx, "Failed to disconnect PSB relay: %s", GetErrorString(result));
-        return result;
-    }
+    result = TNY_SetPinQueued(TNY_PSB_PIN, TNY_STATE_DISCONNECTED, DEVICE_PRIORITY_NORMAL);
+	if (result != SUCCESS) {
+	    LogError("Failed to disconnect PSB relay: %s", GetErrorString(result));
+	    return result;
+	}
     
     Delay(TNY_SWITCH_DELAY_MS / 1000.0);
     
     // Connect BioLogic relay
-    result = SetRelayState(TNY_BIOLOGIC_PIN, TNY_STATE_CONNECTED);
-    if (result != SUCCESS) {
-        LogExperimentError(ctx, "Failed to connect BioLogic relay: %s", GetErrorString(result));
-        return result;
-    }
+    result = TNY_SetPinQueued(TNY_BIOLOGIC_PIN, TNY_STATE_CONNECTED, DEVICE_PRIORITY_NORMAL);
+	if (result != SUCCESS) {
+	    LogError("Failed to connect BioLogic relay: %s", GetErrorString(result));
+	    return result;
+	}
     
     Delay(TNY_SWITCH_DELAY_MS / 1000.0);
     
@@ -1848,20 +1947,20 @@ static int SwitchToBioLogic(BaselineExperimentContext *ctx) {
 }
 
 static int SafeDisconnectAllDevices(BaselineExperimentContext *ctx) {
-    LogMessage("Performing emergency disconnect of all devices...");
+    LogMessage("Safely disconnecting all devices...");
     
     // Disable all outputs (non-blocking, best effort)
-    PSB_SetOutputEnableQueued(0, DEVICE_PRIORITY_LOW);
-    BIO_StopChannelQueued(ctx->biologicID, 0, DEVICE_PRIORITY_LOW);
+    PSB_SetOutputEnableQueued(0, DEVICE_PRIORITY_NORMAL);
+    BIO_StopChannelQueued(ctx->biologicID, 0, DEVICE_PRIORITY_NORMAL);
     if (ENABLE_DTB) {
-        DTB_SetRunStopQueued(ctx->dtbSlaveAddress, 0, DEVICE_PRIORITY_LOW);
+        DTB_SetRunStopQueued(ctx->dtbSlaveAddress, 0, DEVICE_PRIORITY_NORMAL);
     }
     
     // Disconnect all relays
-    SetRelayState(TNY_PSB_PIN, TNY_STATE_DISCONNECTED);
-    SetRelayState(TNY_BIOLOGIC_PIN, TNY_STATE_DISCONNECTED);
+    TNY_SetPinQueued(TNY_PSB_PIN, TNY_STATE_DISCONNECTED, DEVICE_PRIORITY_NORMAL);
+	TNY_SetPinQueued(TNY_BIOLOGIC_PIN, TNY_STATE_DISCONNECTED, DEVICE_PRIORITY_NORMAL);
     
-    LogMessage("Emergency disconnect completed");
+    LogMessage("Device disconnect completed");
     return SUCCESS;
 }
 
@@ -1980,7 +2079,7 @@ static int PerformEISMeasurement(BaselineExperimentContext *ctx, double targetSO
     // Perform measurement with retry capability
     result = RetryEISMeasurement(ctx, measurement);
     if (result != SUCCESS) {
-        LogExperimentError(ctx, "EIS measurement failed at %.1f%% SOC after retries", ctx->currentSOC);
+        LogError("EIS measurement failed at %.1f%% SOC after retries", ctx->currentSOC);
         return result;
     }
     
@@ -2013,7 +2112,7 @@ static int RetryEISMeasurement(BaselineExperimentContext *ctx, BaselineEISMeasur
         // Switch to BioLogic
         result = SwitchToBioLogic(ctx);
         if (result != SUCCESS) {
-            LogExperimentError(ctx, "Failed to switch to BioLogic for EIS measurement");
+            LogError("Failed to switch to BioLogic for EIS measurement");
             return result;
         }
         
@@ -2345,23 +2444,6 @@ static int UpdateSOCTracking(BaselineExperimentContext *ctx, double voltage, dou
     return SUCCESS;
 }
 
-static int UpdateCapacityEstimate(BaselineExperimentContext *ctx) {
-    // Update capacity estimate based on SOC progress
-    // This helps handle cases where initial estimate was wrong
-    
-    if (ctx->currentSOC > 110.0 && ctx->estimatedBatteryCapacity_mAh > 0) {
-        // Battery capacity was underestimated
-        double newEstimate = (ctx->accumulatedCapacity_mAh / ctx->currentSOC) * 100.0;
-        if (newEstimate > ctx->estimatedBatteryCapacity_mAh * 1.1) {
-            LogMessage("Updating battery capacity estimate from %.1f to %.1f mAh", 
-                      ctx->estimatedBatteryCapacity_mAh, newEstimate);
-            ctx->estimatedBatteryCapacity_mAh = newEstimate;
-        }
-    }
-    
-    return SUCCESS;
-}
-
 static int LogPhaseDataPoint(BaselineExperimentContext *ctx, const char *format, ...) {
     if (!ctx->currentPhaseLogFile) {
         return ERR_INVALID_STATE;
@@ -2398,34 +2480,30 @@ static int ConfigureExperimentGraphs(BaselineExperimentContext *ctx) {
     return SUCCESS;
 }
 
-static void UpdateCurrentGraph(BaselineExperimentContext *ctx, double current, double time_min) {
-    PlotDataPoint(ctx->mainPanelHandle, ctx->graph1Handle, 
-                  time_min, fabs(current), VAL_SOLID_CIRCLE, VAL_RED);
-}
-
-static void UpdateVoltageGraph(BaselineExperimentContext *ctx, double voltage, double time_min) {
-    PlotDataPoint(ctx->mainPanelHandle, ctx->graph2Handle, 
-                  time_min, voltage, VAL_SOLID_CIRCLE, VAL_BLUE);
-}
-
 static void UpdateOCVGraph(BaselineExperimentContext *ctx, BaselineEISMeasurement *measurement) {
-    PlotDataPoint(ctx->mainPanelHandle, ctx->graph2Handle, 
+    PlotPoint(ctx->mainPanelHandle, ctx->graph2Handle, 
                   measurement->actualSOC, measurement->ocvVoltage, 
                   VAL_SOLID_CIRCLE, VAL_BLUE);
     
     // Connect points with line if we have multiple measurements
-    if (ctx->eisMeasurementCount > 1) {
-        double *socArray = (double*)calloc(ctx->eisMeasurementCount, sizeof(double));
-        double *ocvArray = (double*)calloc(ctx->eisMeasurementCount, sizeof(double));
+    int totalPoints = ctx->eisMeasurementCount + 1;
+    if (totalPoints > 1) {
+        double *socArray = (double*)calloc(totalPoints, sizeof(double));
+        double *ocvArray = (double*)calloc(totalPoints, sizeof(double));
         
         if (socArray && ocvArray) {
+            // Copy existing measurements
             for (int i = 0; i < ctx->eisMeasurementCount; i++) {
                 socArray[i] = ctx->eisMeasurements[i].actualSOC;
                 ocvArray[i] = ctx->eisMeasurements[i].ocvVoltage;
             }
             
+            // Add the current measurement (which hasn't been stored in the array yet)
+            socArray[ctx->eisMeasurementCount] = measurement->actualSOC;
+            ocvArray[ctx->eisMeasurementCount] = measurement->ocvVoltage;
+            
             PlotXY(ctx->mainPanelHandle, ctx->graph2Handle,
-                   socArray, ocvArray, ctx->eisMeasurementCount,
+                   socArray, ocvArray, totalPoints,
                    VAL_DOUBLE, VAL_DOUBLE, VAL_THIN_LINE,
                    VAL_NO_POINT, VAL_SOLID, 1, VAL_BLUE);
             
@@ -2477,38 +2555,6 @@ static int InitializePhaseResults(BaselinePhaseResults *results, BaselineExperim
     results->phase = phase;
     results->startTime = -1;
     results->endTime = -1;
-    return SUCCESS;
-}
-
-static int FinalizePhaseResults(BaselineExperimentContext *ctx, BaselinePhaseResults *results) {
-    results->endTime = Timer() - ctx->experimentStartTime;
-    if (results->startTime >= 0) {
-        results->duration = results->endTime - results->startTime;
-    }
-    return SUCCESS;
-}
-
-static int SavePhaseResults(BaselineExperimentContext *ctx, BaselinePhaseResults *results) {
-    char filename[MAX_PATH_LENGTH];
-    snprintf(filename, sizeof(filename), "%s%s%s", 
-             results->phaseDirectory, PATH_SEPARATOR, BASELINE_PHASE_SUMMARY_FILE);
-    
-    FILE *file = fopen(filename, "w");
-    if (!file) {
-        LogWarning("Failed to save phase results to: %s", filename);
-        return ERR_BASE_FILE;
-    }
-    
-    WriteINISection(file, "Phase_Summary");
-    WriteINIValue(file, "Phase_Number", "%d", results->phase);
-    WriteINIDouble(file, "Duration_s", results->duration, 1);
-    WriteINIDouble(file, "Capacity_mAh", results->capacity_mAh, 2);
-    WriteINIDouble(file, "Energy_Wh", results->energy_Wh, 3);
-    WriteINIDouble(file, "Start_Voltage_V", results->startVoltage, 3);
-    WriteINIDouble(file, "End_Voltage_V", results->endVoltage, 3);
-    WriteINIValue(file, "Completion_Reason", "%s", results->completionReason);
-    
-    fclose(file);
     return SUCCESS;
 }
 
@@ -2628,7 +2674,6 @@ static int WriteComprehensiveResults(BaselineExperimentContext *ctx) {
     fprintf(file, "# Phase 3: %s/%s and %s/%s/\n", BASELINE_PHASE3_DIR, BASELINE_PHASE3_CHARGE_FILE, BASELINE_PHASE3_DIR, BASELINE_PHASE3_EIS_DIR);
     fprintf(file, "# Phase 4: %s/%s\n", BASELINE_PHASE4_DIR, BASELINE_PHASE4_DISCHARGE_FILE);
     fprintf(file, "# Settings: %s\n", BASELINE_SETTINGS_FILE);
-    fprintf(file, "# Main Log: %s\n", BASELINE_MAIN_LOG_FILE);
     
     fclose(file);
     
@@ -2679,49 +2724,21 @@ static int WriteImportableResults(BaselineExperimentContext *ctx) {
     return SUCCESS;
 }
 
-static void LogExperimentError(BaselineExperimentContext *ctx, const char *format, ...) {
-    char message[LARGE_BUFFER_SIZE];
-    va_list args;
-    va_start(args, format);
-    vsnprintf(message, sizeof(message), format, args);
-    va_end(args);
-    
-    // Log to system log
-    LogError("%s", message);
-    
-    // Log to experiment error file if available
-    if (ctx->errorLogFile) {
-        time_t now = time(NULL);
-        char timeStr[64];
-        FormatTimestamp(now, timeStr, sizeof(timeStr));
-        
-        fprintf(ctx->errorLogFile, "[%s] %s: %s\n", 
-                timeStr, GetStateDescription(ctx->state), message);
-        fflush(ctx->errorLogFile);
-    }
-}
-
 static void CleanupExperiment(BaselineExperimentContext *ctx) {
     LogMessage("Cleaning up baseline experiment...");
     
     // Safely disconnect all devices
     SafeDisconnectAllDevices(ctx);
     
-    // Close any open log files
-    if (ctx->mainLogFile) {
-        fclose(ctx->mainLogFile);
-        ctx->mainLogFile = NULL;
-    }
-    
-    if (ctx->currentPhaseLogFile) {
-        fclose(ctx->currentPhaseLogFile);
-        ctx->currentPhaseLogFile = NULL;
-    }
-    
-    if (ctx->errorLogFile) {
-        fclose(ctx->errorLogFile);
-        ctx->errorLogFile = NULL;
-    }
+    // Close the phase log
+    ClosePhaseLogFile(ctx);
+	
+	// Close experiment log
+	ClearExternalLogFile();
+	if (ctx->baselineExperimentLog) {
+	    fclose(ctx->baselineExperimentLog);
+	    ctx->baselineExperimentLog = NULL;
+	}
     
     // Free allocated memory
     if (ctx->eisMeasurements) {
@@ -2758,8 +2775,4 @@ static void CleanupExperiment(BaselineExperimentContext *ctx) {
     }
     
     LogMessage("Baseline experiment cleanup completed");
-}
-
-static void RestoreUI(BaselineExperimentContext *ctx) {
-    DimExperimentControls(ctx->mainPanelHandle, ctx->tabPanelHandle, 0, controls, numControls);
 }

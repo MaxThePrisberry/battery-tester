@@ -37,7 +37,7 @@
 #define BASELINE_EIS_RETRY_DELAY        5.0     // Seconds to wait between retries
 
 // Dynamic SOC Management
-#define BASELINE_SOC_TOLERANCE          1.0     // SOC tolerance for target matching
+#define BASELINE_SOC_TOLERANCE          0.0     // SOC tolerance for target matching (0 - have to go beyond target)
 #define BASELINE_MAX_DYNAMIC_TARGETS    20      // Maximum additional SOC targets beyond 100%
 #define BASELINE_SOC_OVERCHARGE_LIMIT   150.0   // Maximum SOC before stopping (safety)
 
@@ -45,14 +45,12 @@
 #define BASELINE_DATA_DIR               "data"
 #define BASELINE_SUMMARY_FILE           "summary.txt"
 #define BASELINE_SETTINGS_FILE          "experiment_settings.ini"
-#define BASELINE_MAIN_LOG_FILE          "experiment_log.csv"
-#define BASELINE_ERROR_LOG_FILE         "errors.log"
+#define BASELINE_LOG_FILE               "experiment.log"
 
 #define BASELINE_PHASE1_DIR             "phase_1"
 #define BASELINE_PHASE2_DIR             "phase_2" 
 #define BASELINE_PHASE3_DIR             "phase_3"
 #define BASELINE_PHASE4_DIR             "phase_4"
-#define BASELINE_DIAGNOSTICS_DIR        "diagnostics"
 
 #define BASELINE_PHASE1_DISCHARGE_FILE  "discharge_data.csv"
 #define BASELINE_PHASE2_CHARGE_FILE     "charge_data.csv"
@@ -62,12 +60,15 @@
 #define BASELINE_PHASE3_EIS_DIR         "eis_measurements"
 #define BASELINE_PHASE3_OCV_FILE        "ocv_vs_soc.csv"
 #define BASELINE_PHASE4_DISCHARGE_FILE  "discharge_data.csv"
-#define BASELINE_PHASE_SUMMARY_FILE     "phase_summary.ini"
 
 // Experiment Limits and Safety
 #define BASELINE_MAX_EXPERIMENT_TIME    72000   // 20 hours maximum experiment time
 #define BASELINE_POWER_LIMIT            30      // 30W power limit
 #define BASELINE_VOLTAGE_SAFETY_MARGIN  0.05    // 50mV safety margin for voltage targets
+
+#define BASELINE_STANDARD_HEADER "Time_s,Voltage_V,Current_A,Power_W,DTB_Temp_C,TC0_Temp_C,TC1_Temp_C"
+#define BASELINE_EXTENDED_HEADER "Time_s,Voltage_V,Current_A,Power_W,Capacity_mAh,DTB_Temp_C,TC0_Temp_C,TC1_Temp_C"
+#define BASELINE_SOC_HEADER "Time_s,Voltage_V,Current_A,Power_W,SOC_Percent,DTB_Temp_C,TC0_Temp_C,TC1_Temp_C"
 
 /******************************************************************************
  * Type Definitions
@@ -223,9 +224,8 @@ typedef struct {
     // File system and logging
     char experimentDirectory[MAX_PATH_LENGTH];
     char currentPhaseDirectory[MAX_PATH_LENGTH];
-    FILE *mainLogFile;              // Main experiment log
     FILE *currentPhaseLogFile;      // Current phase data log
-    FILE *errorLogFile;             // Error and diagnostic log
+	FILE *baselineExperimentLog;    // Experiment log file
     
     // UI handles
     int mainPanelHandle;

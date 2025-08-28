@@ -412,10 +412,6 @@ void ConfigureGraph(int panel, int graph, const char *title, const char *xLabel,
     SetAxisScalingMode(panel, graph, VAL_BOTTOM_XAXIS, VAL_AUTOSCALE, 0.0, 0.0);
 }
 
-void PlotDataPoint(int panel, int graph, double x, double y, int style, int color) {
-    PlotPoint(panel, graph, x, y, style, color);
-}
-
 /******************************************************************************
  * File Writing Utilities
  ******************************************************************************/

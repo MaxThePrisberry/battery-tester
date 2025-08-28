@@ -33,6 +33,7 @@
  * Module Variables
  ******************************************************************************/
 static FILE *g_logFile = NULL;
+static FILE *g_externalLogFile = NULL;  // External log file pointer
 static int g_logToFile = 1;
 static int g_logToUI = 1;
 static CmtTSQHandle g_logQueue = 0;
@@ -53,7 +54,8 @@ static const char* g_deviceNames[] = {
     "PSB",  // LOG_DEVICE_PSB
     "BIO",  // LOG_DEVICE_BIO
 	"DTB",  // LOG_DEVICE_DTB
-	"TNY"   // LOG_DEVICE_TNY
+	"TNY",  // LOG_DEVICE_TNY
+	"DAQ"   // LOG_DEVICE_CDAQ
 };
 
 typedef enum {
@@ -282,6 +284,8 @@ static void CleanupLogging(void) {
         g_logFile = NULL;
     }
     
+    // Note: We don't close g_externalLogFile here as it's managed externally
+    
     // Dispose of queue
     if (g_logQueue) {
         CmtDiscardTSQ(g_logQueue);
@@ -345,15 +349,30 @@ static void LogMessageInternalEx(LogDevice device, LogLevel level, const char *f
 }
 
 static void WriteToLogFile(const char *timestamp, const char *deviceStr, const char *levelStr, const char *message) {
-    if (!g_logFile) return;
+    const char *logLine;
+    char formattedLine[MAX_LOG_LINE_LEN];
     
+    // Format the log line once
     if (deviceStr && strlen(deviceStr) > 0) {
-        fprintf(g_logFile, "%s [%s] [%s] %s\n", timestamp, levelStr, deviceStr, message);
+        snprintf(formattedLine, sizeof(formattedLine), "%s [%s] [%s] %s\n", 
+                 timestamp, levelStr, deviceStr, message);
     } else {
-        fprintf(g_logFile, "%s [%s] %s\n", timestamp, levelStr, message);
+        snprintf(formattedLine, sizeof(formattedLine), "%s [%s] %s\n", 
+                 timestamp, levelStr, message);
+    }
+    logLine = formattedLine;
+    
+    // Write to main log file
+    if (g_logFile) {
+        fprintf(g_logFile, "%s", logLine);
+        fflush(g_logFile);  // Ensure immediate write
     }
     
-    fflush(g_logFile);  // Ensure immediate write
+    // Write to external log file if set
+    if (g_externalLogFile) {
+        fprintf(g_externalLogFile, "%s", logLine);
+        fflush(g_externalLogFile);  // Ensure immediate write
+    }
 }
 
 static void WriteToUI(const char *message) {
@@ -542,6 +561,29 @@ const char* GetLogFilePath(void) {
     
     // Otherwise return default location (current directory)
     return LOG_FILE_NAME;
+}
+
+/******************************************************************************
+ * External File Support Functions
+ ******************************************************************************/
+void SetExternalLogFile(FILE *externalFile) {
+    g_externalLogFile = externalFile;
+    
+    // Log that external file has been set/cleared
+    if (externalFile) {
+        LogDebug("External log file pointer set");
+    } else {
+        LogDebug("External log file pointer cleared");
+    }
+}
+
+FILE* GetExternalLogFile(void) {
+    return g_externalLogFile;
+}
+
+void ClearExternalLogFile(void) {
+    g_externalLogFile = NULL;
+    LogDebug("External log file pointer cleared");
 }
 
 /******************************************************************************

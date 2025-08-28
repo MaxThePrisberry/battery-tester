@@ -413,7 +413,7 @@ int DTB_ConfigureDefault(DTB_Handle *handle) {
         .sensorType = SENSOR_TYPE_K,
         .controlMethod = CONTROL_METHOD_PID,
         .pidMode = PID_MODE_AUTO,
-        .heatingCoolingMode = HEATING_COOLING_COOL_HEAT,
+        .heatingCoolingMode = HEATING_COOLING_HEATING,
         .upperTempLimit = K_TYPE_MAX_TEMP,
         .lowerTempLimit = K_TYPE_MIN_TEMP,
         .alarmType = ALARM_DISABLED,

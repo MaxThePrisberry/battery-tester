@@ -237,17 +237,6 @@ void ClearAllGraphs(int panel, const int graphs[], int numGraphs);
 void ConfigureGraph(int panel, int graph, const char *title, const char *xLabel, 
                    const char *yLabel, double yMin, double yMax);
 
-/**
- * Plot a single data point on a graph
- * @param panel - Panel handle containing the graph
- * @param graph - Graph control ID
- * @param x - X-coordinate of the point
- * @param y - Y-coordinate of the point
- * @param style - Point style (e.g., VAL_SOLID_CIRCLE)
- * @param color - Point color (e.g., VAL_RED)
- */
-void PlotDataPoint(int panel, int graph, double x, double y, int style, int color);
-
 /******************************************************************************
  * File Writing Utilities
  ******************************************************************************/

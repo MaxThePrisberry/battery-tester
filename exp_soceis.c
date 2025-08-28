@@ -1567,7 +1567,7 @@ static int UpdateSOCTracking(SOCEISExperimentContext *ctx, double voltage, doubl
 
 static void UpdateGraphs(SOCEISExperimentContext *ctx, double current, double time) {
     // Plot current point on graph 1
-    PlotDataPoint(ctx->mainPanelHandle, ctx->graph1Handle, 
+    PlotPoint(ctx->mainPanelHandle, ctx->graph1Handle, 
                   time, fabs(current), VAL_SOLID_CIRCLE, VAL_RED);
 }
 

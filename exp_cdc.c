@@ -576,7 +576,7 @@ static int RunOperation(CDCExperimentContext *ctx) {
 
 static void UpdateGraph(CDCExperimentContext *ctx, double current, double time) {
     // Use common utility function for plotting
-    PlotDataPoint(ctx->mainPanelHandle, ctx->graphHandle, 
+    PlotPoint(ctx->mainPanelHandle, ctx->graphHandle, 
                   time, fabs(current), VAL_SOLID_CIRCLE, VAL_RED);
     
     // Check if Y-axis needs rescaling

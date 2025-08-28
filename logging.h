@@ -16,7 +16,8 @@ typedef enum {
     LOG_DEVICE_PSB,         // [PSB] prefix
     LOG_DEVICE_BIO,         // [BIO] prefix
 	LOG_DEVICE_DTB,         // [DTB] prefix
-	LOG_DEVICE_TNY          // [TNY] prefix
+	LOG_DEVICE_TNY,         // [TNY] prefix
+	LOG_DEVICE_CDAQ,        // [DAQ] prefix
 } LogDevice;
 
 //==============================================================================
@@ -141,6 +142,28 @@ void RegisterLoggingCleanup(void);
  * @return SUCCESS if created, error code otherwise
  */
 int CreateLogFileInCurrentDir(void);
+
+/******************************************************************************
+ * External File Support Functions
+ ******************************************************************************/
+
+/**
+ * Set an external FILE pointer to receive copies of all log entries
+ * The caller is responsible for opening, maintaining, and closing the file
+ * @param externalFile - FILE pointer to write log copies to, or NULL to disable
+ */
+void SetExternalLogFile(FILE *externalFile);
+
+/**
+ * Get the currently set external log file pointer
+ * @return Current external FILE pointer, or NULL if none set
+ */
+FILE* GetExternalLogFile(void);
+
+/**
+ * Clear the external log file pointer (equivalent to SetExternalLogFile(NULL))
+ */
+void ClearExternalLogFile(void);
 
 //==============================================================================
 // End of Header

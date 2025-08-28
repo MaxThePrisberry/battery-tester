@@ -767,10 +767,10 @@ static void UpdatePhaseResults(CapacityExperimentContext *ctx, PhaseResults *res
 
 static void UpdateGraphs(CapacityExperimentContext *ctx, CapacityDataPoint *point) {
     // Plot current and voltage points
-    PlotDataPoint(ctx->mainPanelHandle, ctx->graph1Handle, 
+    PlotPoint(ctx->mainPanelHandle, ctx->graph1Handle, 
                   point->time, fabs(point->current), VAL_SOLID_CIRCLE, VAL_RED);
     
-    PlotDataPoint(ctx->mainPanelHandle, ctx->graph2Handle, 
+    PlotPoint(ctx->mainPanelHandle, ctx->graph2Handle, 
                   point->time, point->voltage, VAL_SOLID_CIRCLE, VAL_BLUE);
     
     // Auto-scale if needed
