@@ -68,6 +68,9 @@
 #define  PANEL_DEC_CMDPROMPT              53      /* control type: deco, callback function: (none) */
 #define  PANEL_DEC_TCS                    54      /* control type: deco, callback function: (none) */
 
+#define  PANEL_LOAD                       2
+#define  PANEL_LOAD_IMG_LOGO              2       /* control type: picture, callback function: (none) */
+
      /* tab page panel controls */
 #define  BASELINE_NUM_EIS_INTERVAL        2       /* control type: numeric, callback function: (none) */
 #define  BASELINE_NUM_CURRENT_THRESHOLD   3       /* control type: numeric, callback function: (none) */

@@ -48,6 +48,11 @@ int main (int argc, char *argv[]) {
     if (InitCVIRTE (0, argv, 0) == 0)
         return -1;    /* out of memory */
 	
+	// Load and display loading panel first
+    int loadingPanelHandle = LoadPanel(0, "BatteryTester.uir", PANEL_LOAD);
+    DisplayPanel(loadingPanelHandle);
+    ProcessSystemEvents(); // Ensure panel displays immediately
+	
 	SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED);
     
     // Create thread pool first
@@ -58,10 +63,6 @@ int main (int argc, char *argv[]) {
     
     // Initialize logging
     RegisterLoggingCleanup();
-    
-    // Load panel
-    if ((g_mainPanelHandle = LoadPanel (0, "BatteryTester.uir", PANEL)) < 0)
-        return -1;
     
 	// Initialize cDAQ module if enabled
 	if (ENABLE_CDAQ) {
@@ -220,6 +221,11 @@ int main (int argc, char *argv[]) {
     // Start both modules, which will use queue managers
     Status_Start();
     Controls_Start();
+	
+	// Load main panel
+	DiscardPanel(loadingPanelHandle);
+    if ((g_mainPanelHandle = LoadPanel(0, "BatteryTester.uir", PANEL)) < 0)
+        return -1;
 	
     // Display panel
     DisplayPanel(g_mainPanelHandle);
