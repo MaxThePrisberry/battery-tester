@@ -19,12 +19,6 @@
 #include "controls.h"
 
 /******************************************************************************
- * Module Constants
- ******************************************************************************/
-#define THREAD_POOL_SIZE        10
-#define PSB_TARGET_SERIAL       "2872380001"  // Target PSB serial number
-
-/******************************************************************************
  * Global Variables (defined here, declared extern in common.h)
  ******************************************************************************/
 int g_mainPanelHandle = 0;

@@ -39,6 +39,7 @@
 #define ENABLE_CDAQ        1    // Enable cDAQ 9178
 
 #define PSB_COM_PORT            3       // PSB 10000 COM port
+#define PSB_TARGET_SERIAL       "2872380001"  // Target PSB serial number
 #define PSB_SLAVE_ADDRESS       1       // PSB Modbus slave address
 #define PSB_BAUD_RATE           9600    // PSB baud rate
 
