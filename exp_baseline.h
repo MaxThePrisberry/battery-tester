@@ -28,7 +28,7 @@
 
 // Temperature Control Constants (when ENABLE_DTB is 1)
 #define BASELINE_TEMP_TOLERANCE         2.0     // °C tolerance for temperature target
-#define BASELINE_TEMP_CHECK_INTERVAL    5.0     // Seconds between temperature checks
+#define BASELINE_TEMP_CHECK_INTERVAL    10.0    // Seconds between temperature checks
 #define BASELINE_TEMP_TIMEOUT_SEC       1800    // 30 minutes max wait for temperature
 #define BASELINE_TEMP_STABILIZE_TIME    300     // 5 minutes stabilization after reaching target
 

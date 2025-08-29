@@ -91,7 +91,6 @@ static void ClearAllExperimentGraphs(BaselineExperimentContext *ctx);
 
 // Results and cleanup functions
 static int WriteComprehensiveResults(BaselineExperimentContext *ctx);
-static int WriteImportableResults(BaselineExperimentContext *ctx);
 static void CleanupExperiment(BaselineExperimentContext *ctx);
 
 // Utility functions
@@ -576,11 +575,6 @@ static int BaselineExperimentThread(void *functionData) {
     result = WriteComprehensiveResults(ctx);
     if (result != SUCCESS) {
         LogError("Failed to write comprehensive results");
-    }
-    
-    result = WriteImportableResults(ctx);
-    if (result != SUCCESS) {
-        LogError("Failed to write importable results");
     }
     
 cleanup:
@@ -1244,6 +1238,17 @@ static int RunPhase2_CapacityExperiment(BaselineExperimentContext *ctx) {
         WriteINIDouble(file, "Energy_Efficiency_Percent", 
                       Battery_CalculateEnergyEfficiency(ctx->phase2ChargeResults.energy_Wh,
                                                        ctx->phase2DischargeResults.energy_Wh), 1);
+	    WriteINIDouble(file, "Charge_Duration_s", ctx->phase2ChargeResults.duration, 1);
+	    WriteINIDouble(file, "Discharge_Duration_s", ctx->phase2DischargeResults.duration, 1);
+		
+		WriteINISection(file, "Experiment_Parameters");
+	    WriteINIDouble(file, "Charge_Voltage_V", ctx->params.chargeVoltage, 3);
+	    WriteINIDouble(file, "Discharge_Voltage_V", ctx->params.dischargeVoltage, 3);
+	    WriteINIDouble(file, "Charge_Current_A", ctx->params.chargeCurrent, 3);
+	    WriteINIDouble(file, "Discharge_Current_A", ctx->params.dischargeCurrent, 3);
+	    WriteINIDouble(file, "Current_Threshold_A", ctx->params.currentThreshold, 3);
+	    WriteINIValue(file, "Log_Interval_s", "%u", ctx->params.logInterval);
+		
         fclose(file);
     }
     
@@ -2726,49 +2731,6 @@ static int WriteComprehensiveResults(BaselineExperimentContext *ctx) {
     fclose(file);
     
     LogMessage("Comprehensive results written to: %s", filename);
-    return SUCCESS;
-}
-
-static int WriteImportableResults(BaselineExperimentContext *ctx) {
-    // This creates results files that can be imported by other experiments
-    // Similar to the capacity experiment results format
-    
-    char filename[MAX_PATH_LENGTH];
-    FILE *file;
-    
-    // Create importable capacity results for SOCEIS
-    snprintf(filename, sizeof(filename), "%s%scapacity_results.ini", 
-             ctx->experimentDirectory, PATH_SEPARATOR);
-    
-    file = fopen(filename, "w");
-    if (!file) {
-        LogWarning("Failed to create importable capacity results");
-        return ERR_BASE_FILE;
-    }
-    
-    WriteINISection(file, "Experiment_Parameters");
-    WriteINIDouble(file, "Charge_Voltage_V", ctx->params.chargeVoltage, 3);
-    WriteINIDouble(file, "Discharge_Voltage_V", ctx->params.dischargeVoltage, 3);
-    WriteINIDouble(file, "Charge_Current_A", ctx->params.chargeCurrent, 3);
-    WriteINIDouble(file, "Discharge_Current_A", ctx->params.dischargeCurrent, 3);
-    WriteINIDouble(file, "Current_Threshold_A", ctx->params.currentThreshold, 3);
-    WriteINIValue(file, "Log_Interval_s", "%u", ctx->params.logInterval);
-    fprintf(file, "\n");
-    
-    WriteINISection(file, "Charge_Results");
-    WriteINIDouble(file, "Charge_Capacity_mAh", ctx->phase2ChargeResults.capacity_mAh, 2);
-    WriteINIDouble(file, "Charge_Energy_Wh", ctx->phase2ChargeResults.energy_Wh, 3);
-    WriteINIDouble(file, "Charge_Duration_s", ctx->phase2ChargeResults.duration, 1);
-    fprintf(file, "\n");
-    
-    WriteINISection(file, "Discharge_Results");
-    WriteINIDouble(file, "Discharge_Capacity_mAh", ctx->phase2DischargeResults.capacity_mAh, 2);
-    WriteINIDouble(file, "Discharge_Energy_Wh", ctx->phase2DischargeResults.energy_Wh, 3);
-    WriteINIDouble(file, "Discharge_Duration_s", ctx->phase2DischargeResults.duration, 1);
-    
-    fclose(file);
-    
-    LogMessage("Importable results written for other experiments");
     return SUCCESS;
 }
 
