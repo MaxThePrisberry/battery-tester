@@ -14,8 +14,6 @@
 #include "cdaq_utils.h"
 #include "exp_baseline.h"
 #include "exp_cdc.h"
-#include "exp_capacity.h"
-#include "exp_soceis.h"
 #include "logging.h"
 #include "status.h"
 #include "controls.h"
@@ -214,6 +212,11 @@ int main (int argc, char *argv[]) {
 	    }
 	}
 	
+	// Load main panel
+	DiscardPanel(loadingPanelHandle);
+    if ((g_mainPanelHandle = LoadPanel(0, "BatteryTester.uir", PANEL)) < 0)
+        return -1;
+	
     // Initialize status and control modules
     Status_Initialize(g_mainPanelHandle);
 	Controls_Initialize(g_mainPanelHandle);
@@ -221,11 +224,6 @@ int main (int argc, char *argv[]) {
     // Start both modules, which will use queue managers
     Status_Start();
     Controls_Start();
-	
-	// Load main panel
-	DiscardPanel(loadingPanelHandle);
-    if ((g_mainPanelHandle = LoadPanel(0, "BatteryTester.uir", PANEL)) < 0)
-        return -1;
 	
     // Display panel
     DisplayPanel(g_mainPanelHandle);
@@ -280,26 +278,6 @@ int CVICALLBACK PanelCallback(int panel, int event, void *callbackData,
 			if (CDCExperiment_IsRunning()) {
 			    LogMessage("Aborting running CDC test...");
 			    CDCExperiment_Abort();
-			    
-			    // Give it a moment to clean up properly
-			    ProcessSystemEvents();
-			    Delay(0.5);
-			}
-			
-            // Check if capacity test is running and abort it
-			if (CapacityExperiment_IsRunning()) {
-			    LogMessage("Aborting running capacity test...");
-			    CapacityExperiment_Abort();
-			    
-			    // Give it a moment to clean up properly
-			    ProcessSystemEvents();
-			    Delay(0.5);
-			}
-
-			// Check if SOCEIS test is running and abort it
-			if (SOCEISExperiment_IsRunning()) {
-			    LogMessage("Aborting running SOCEIS test...");
-			    SOCEISExperiment_Abort();
 			    
 			    // Give it a moment to clean up properly
 			    ProcessSystemEvents();
@@ -380,14 +358,6 @@ int CVICALLBACK PanelCallback(int panel, int event, void *callbackData,
 			// Clean up CDC test module
 			LogMessage("Cleaning up CDC experiment module...");
 			CDCExperiment_Cleanup();
-            
-            // Clean up capacity test module
-            LogMessage("Cleaning up capacity experiment module...");
-            CapacityExperiment_Cleanup();
-			
-			// Clean up SOCEIS test module
-			LogMessage("Cleaning up SOCEIS experiment module...");
-			SOCEISExperiment_Cleanup();
 			
 			// Clean up Baseline test module
 			LogMessage("Cleaning up Baseline experiment module...");

@@ -81,28 +81,10 @@
 #define  BASELINE_STR_BASELINE_STATUS     8       /* control type: string, callback function: (none) */
 
      /* tab page panel controls */
-#define  CAPACITY_BTN_EXP_CAPACITY        2       /* control type: command, callback function: StartCapacityExperimentCallback */
-#define  CAPACITY_NUM_CURRENT_THRESHOLD   3       /* control type: numeric, callback function: (none) */
-#define  CAPACITY_NUM_INTERVAL            4       /* control type: numeric, callback function: (none) */
-#define  CAPACITY_NUM_DISCHARGE_CAP       5       /* control type: numeric, callback function: (none) */
-#define  CAPACITY_NUM_CHARGE_CAP          6       /* control type: numeric, callback function: (none) */
-#define  CAPACITY_CHECKBOX_RETURN_50      7       /* control type: radioButton, callback function: (none) */
-
-     /* tab page panel controls */
 #define  CDC_BTN_DISCHARGE                2       /* control type: command, callback function: CDCDischargeCallback */
 #define  CDC_BTN_CHARGE                   3       /* control type: command, callback function: CDCChargeCallback */
 #define  CDC_NUM_CURRENT_THRESHOLD        4       /* control type: numeric, callback function: (none) */
 #define  CDC_NUM_INTERVAL                 5       /* control type: numeric, callback function: (none) */
-
-     /* tab page panel controls */
-#define  SOCEIS_NUM_EIS_INTERVAL          2       /* control type: numeric, callback function: (none) */
-#define  SOCEIS_NUM_CAPACITY              3       /* control type: numeric, callback function: (none) */
-#define  SOCEIS_NUM_CURRENT_THRESHOLD     4       /* control type: numeric, callback function: (none) */
-#define  SOCEIS_NUM_INTERVAL              5       /* control type: numeric, callback function: (none) */
-#define  SOCEIS_NUM_SOC                   6       /* control type: numeric, callback function: (none) */
-#define  SOCEIS_CHECKBOX_DISCHARGE        7       /* control type: radioButton, callback function: (none) */
-#define  SOCEIS_BTN_SOC_EIS               8       /* control type: command, callback function: StartSOCEISExperimentCallback */
-#define  SOCEIS_BTN_IMPORT_SETTINGS       9       /* control type: command, callback function: ImportSOCEISSettingsCallback */
 
 
      /* Control Arrays: */
@@ -128,12 +110,9 @@ int  CVICALLBACK CmdPromptInputCallback(int panel, int control, int event, void 
 int  CVICALLBACK CmdPromptSendCallback(int panel, int control, int event, void *callbackData, int eventData1, int eventData2);
 int  CVICALLBACK DTB1RunStopCallback(int panel, int control, int event, void *callbackData, int eventData1, int eventData2);
 int  CVICALLBACK DTB2RunStopCallback(int panel, int control, int event, void *callbackData, int eventData1, int eventData2);
-int  CVICALLBACK ImportSOCEISSettingsCallback(int panel, int control, int event, void *callbackData, int eventData1, int eventData2);
 int  CVICALLBACK PanelCallback(int panel, int event, void *callbackData, int eventData1, int eventData2);
 int  CVICALLBACK RemoteModeToggle(int panel, int control, int event, void *callbackData, int eventData1, int eventData2);
 int  CVICALLBACK StartBaselineExperimentCallback(int panel, int control, int event, void *callbackData, int eventData1, int eventData2);
-int  CVICALLBACK StartCapacityExperimentCallback(int panel, int control, int event, void *callbackData, int eventData1, int eventData2);
-int  CVICALLBACK StartSOCEISExperimentCallback(int panel, int control, int event, void *callbackData, int eventData1, int eventData2);
 int  CVICALLBACK TestBiologicCallback(int panel, int control, int event, void *callbackData, int eventData1, int eventData2);
 int  CVICALLBACK TestDeviceQueueCallback(int panel, int control, int event, void *callbackData, int eventData1, int eventData2);
 int  CVICALLBACK TestPSBCallback(int panel, int control, int event, void *callbackData, int eventData1, int eventData2);
