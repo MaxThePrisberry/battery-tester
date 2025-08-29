@@ -29,14 +29,6 @@
 static volatile StatusModuleState g_moduleState = STATUS_STATE_UNINITIALIZED;
 static CmtThreadLockHandle g_stateLock = 0;
 
-// Device type enumeration
-typedef enum {
-    DEVICE_PSB = 0,
-    DEVICE_BIOLOGIC = 1,
-    DEVICE_DTB = 2,
-    DEVICE_COUNT
-} DeviceType;
-
 // Per-device state tracking
 typedef struct {
     double lastUpdateTime;
@@ -71,24 +63,23 @@ static bool Status_ShouldProcessUpdates(void);
 // Timer and device management
 static int CVICALLBACK Status_TimerThread(void *functionData);
 static void Status_ProcessDeviceUpdates(void);
-static bool Status_IsDeviceReadyForUpdate(DeviceType deviceType);
-static bool Status_CanSendCommand(DeviceType deviceType);
-static void Status_RequestDeviceUpdate(DeviceType deviceType);
+static bool Status_IsDeviceReadyForUpdate(int deviceType);
+static bool Status_CanSendCommand(int deviceType);
+static void Status_RequestDeviceUpdate(int deviceType);
 
 // Device-specific update functions
 static void PSB_RequestStatusUpdate(void);
 static void BIO_RequestStatusUpdate(void);
-static void DTB_RequestStatusUpdate(void);
 
 // Device state management
 static void Status_InitializeDeviceStates(void);
-static void Status_HandleDeviceTimeout(DeviceType deviceType);
+static void Status_HandleDeviceTimeout(int deviceType);
 
 // UI update functions
-static void UpdateDeviceLED(DeviceType deviceType, ConnectionState state);
-static void UpdateDeviceStatus(DeviceType deviceType, const char* message);
+static void UpdateDeviceLED(int deviceType, ConnectionState state);
+static void UpdateDeviceStatus(int deviceType, const char* message);
 static void UpdatePSBValues(PSB_Status* status);
-static void UpdateDTBValues(DTB_Status* status);
+static void UpdateDTBValues(int deviceIndex, DTB_Status* status);
 
 // Deferred callback functions
 static void CVICALLBACK DeferredLEDUpdate(void* data);
@@ -103,8 +94,10 @@ static void DTBStatusCallback(CommandID cmdId, DTBCommandType type,
                             void *result, void *userData);
 
 // Helper functions
-static const char* DeviceTypeToString(DeviceType deviceType);
+static const char* intToString(int deviceType);
 static const char* StateToString(StatusModuleState state);
+static bool GetDTBUIControls(int slaveAddress, int *ledControl,
+							 int *statusControl, int *tempControl);
 
 /******************************************************************************
  * UI Update Data Structure
@@ -319,13 +312,27 @@ static void Status_InitializeDeviceStates(void) {
     g_status.devices[DEVICE_BIOLOGIC].pendingCall = false;
     g_status.devices[DEVICE_BIOLOGIC].lastState = CONN_STATE_IDLE;
     
-    // Initialize DTB state
-    g_status.devices[DEVICE_DTB].enabled = ENABLE_DTB;
-    g_status.devices[DEVICE_DTB].lastUpdateTime = currentTime;
-    g_status.devices[DEVICE_DTB].pendingCall = false;
-    g_status.devices[DEVICE_DTB].lastState = CONN_STATE_IDLE;
+    // Initialize DTB states dynamically from queue manager
+    if (ENABLE_DTB) {
+        DTBQueueManager *dtbMgr = DTB_GetGlobalQueueManager();
+        if (dtbMgr) {
+            DTBDeviceContext *ctx = (DTBDeviceContext*)DeviceQueue_GetDeviceContext(dtbMgr);
+            if (ctx) {
+                for (int i = 0; i < ctx->numDevices && i < DTB_NUM_DEVICES; i++) {
+                    int deviceIndex = DEVICE_DTB_BASE + i;
+                    g_status.devices[deviceIndex].enabled = true;
+                    g_status.devices[deviceIndex].lastUpdateTime = currentTime;
+                    g_status.devices[deviceIndex].pendingCall = false;
+                    g_status.devices[deviceIndex].lastState = CONN_STATE_IDLE;
+                }
+                LogMessage("Device states initialized (DTB devices: %d)", ctx->numDevices);
+                return;
+            }
+        }
+        LogWarning("DTB queue manager not available during initialization");
+    }
     
-    LogMessage("Device states initialized");
+    LogMessage("Device states initialized (DTB disabled)");
 }
 
 /******************************************************************************
@@ -388,7 +395,7 @@ static void Status_ProcessDeviceUpdates(void) {
             double callDuration = (currentTime - device->callStartTime) * 1000.0;
             if (callDuration > STATUS_CALLBACK_TIMEOUT_MS) {
                 LogWarning("%s status callback timed out after %.1f ms", 
-                          DeviceTypeToString(i), callDuration);
+                          intToString(i), callDuration);
                 Status_HandleDeviceTimeout(i);
             }
             continue; // Skip update request if call is still pending
@@ -401,7 +408,7 @@ static void Status_ProcessDeviceUpdates(void) {
     }
 }
 
-static bool Status_IsDeviceReadyForUpdate(DeviceType deviceType) {
+static bool Status_IsDeviceReadyForUpdate(int deviceType) {
     DeviceStatusState *device = &g_status.devices[deviceType];
     double currentTime = GetTimestamp();
     double timeSinceLastUpdate = (currentTime - device->lastUpdateTime) * 1000.0;
@@ -409,45 +416,8 @@ static bool Status_IsDeviceReadyForUpdate(DeviceType deviceType) {
     return (timeSinceLastUpdate >= STATUS_UPDATE_PERIOD_MS && !device->pendingCall);
 }
 
-static bool Status_CanSendCommand(DeviceType deviceType) {
-    // Check queue connection state to determine if we should attempt sending commands
-    // This does NOT update the UI - only determines if command should be sent
-    
-    switch (deviceType) {
-        case DEVICE_PSB: {
-            PSBQueueManager *mgr = PSB_GetGlobalQueueManager();
-            if (mgr) {
-                PSBQueueStats stats;
-                PSB_QueueGetStats(mgr, &stats);
-                return stats.isConnected;
-            }
-            return false;
-        }
-        case DEVICE_BIOLOGIC: {
-            BioQueueManager *mgr = BIO_GetGlobalQueueManager();
-            if (mgr) {
-                BioQueueStats stats;
-                BIO_QueueGetStats(mgr, &stats);
-                return stats.isConnected;
-            }
-            return false;
-        }
-        case DEVICE_DTB: {
-            DTBQueueManager *mgr = DTB_GetGlobalQueueManager();
-            if (mgr) {
-                DTBQueueStats stats;
-                DTB_QueueGetStats(mgr, &stats);
-                return stats.isConnected;
-            }
-            return false;
-        }
-        default:
-            return false;
-    }
-}
-
-static void Status_RequestDeviceUpdate(DeviceType deviceType) {
-    DeviceStatusState *device = &g_status.devices[deviceType];
+static void Status_RequestDeviceUpdate(int deviceIndex) {
+    DeviceStatusState *device = &g_status.devices[deviceIndex];
     
     // Mark call as pending and record start time
     device->pendingCall = true;
@@ -455,21 +425,71 @@ static void Status_RequestDeviceUpdate(DeviceType deviceType) {
     device->lastUpdateTime = device->callStartTime;
     
     // Request device-specific status update
-    switch (deviceType) {
-        case DEVICE_PSB:
-            PSB_RequestStatusUpdate();
-            break;
-        case DEVICE_BIOLOGIC:
-            BIO_RequestStatusUpdate();
-            break;
-        case DEVICE_DTB:
-            DTB_RequestStatusUpdate();
-            break;
-        default:
-            LogError("Unknown device type: %d", deviceType);
-            device->pendingCall = false;
-            break;
+    if (deviceIndex == DEVICE_PSB) {
+        PSB_RequestStatusUpdate();
+    } else if (deviceIndex == DEVICE_BIOLOGIC) {
+        BIO_RequestStatusUpdate();
+    } else if (deviceIndex >= DEVICE_DTB_BASE) {
+        // Handle DTB devices dynamically
+        DTBQueueManager *dtbMgr = DTB_GetGlobalQueueManager();
+        if (dtbMgr) {
+            DTBDeviceContext *ctx = (DTBDeviceContext*)DeviceQueue_GetDeviceContext(dtbMgr);
+            if (ctx) {
+                int dtbIndex = deviceIndex - DEVICE_DTB_BASE;
+                if (dtbIndex >= 0 && dtbIndex < ctx->numDevices) {
+                    int slaveAddress = ctx->slaveAddresses[dtbIndex];
+                    
+                    int cmdId = DTB_GetStatusAsync(slaveAddress, DTBStatusCallback, 
+                                                  (void*)(intptr_t)slaveAddress, DEVICE_PRIORITY_LOW);
+                    if (cmdId <= 0) {
+                        LogErrorEx(LOG_DEVICE_DTB, "Failed to request DTB status for slave %d", slaveAddress);
+                        device->pendingCall = false;
+                    }
+                    return;
+                }
+            }
+        }
+        
+        LogError("DTB queue manager not available for device index %d", deviceIndex);
+        device->pendingCall = false;
+    } else {
+        LogError("Unknown device index: %d", deviceIndex);
+        device->pendingCall = false;
     }
+}
+
+static bool Status_CanSendCommand(int deviceIndex) {
+    // Check queue connection state to determine if we should attempt sending commands
+    // This does NOT update the UI - only determines if command should be sent
+    
+    if (deviceIndex == DEVICE_PSB) {
+        PSBQueueManager *mgr = PSB_GetGlobalQueueManager();
+        if (mgr) {
+            PSBQueueStats stats;
+            PSB_QueueGetStats(mgr, &stats);
+            return stats.isConnected;
+        }
+        return false;
+    } else if (deviceIndex == DEVICE_BIOLOGIC) {
+        BioQueueManager *mgr = BIO_GetGlobalQueueManager();
+        if (mgr) {
+            BioQueueStats stats;
+            BIO_QueueGetStats(mgr, &stats);
+            return stats.isConnected;
+        }
+        return false;
+    } else if (deviceIndex >= DEVICE_DTB_BASE) {
+        // All DTB devices share the same queue manager
+        DTBQueueManager *mgr = DTB_GetGlobalQueueManager();
+        if (mgr) {
+            DTBQueueStats stats;
+            DTB_QueueGetStats(mgr, &stats);
+            return stats.isConnected;
+        }
+        return false;
+    }
+    
+    return false;
 }
 
 /******************************************************************************
@@ -512,19 +532,11 @@ static void BIO_RequestStatusUpdate(void) {
     }
 }
 
-static void DTB_RequestStatusUpdate(void) {
-    int cmdId = DTB_GetStatusAsync(DTB1_SLAVE_ADDRESS, DTBStatusCallback, NULL, DEVICE_PRIORITY_LOW);
-    if (cmdId <= 0) {
-        LogErrorEx(LOG_DEVICE_DTB, "Failed to request DTB status.");
-        g_status.devices[DEVICE_DTB].pendingCall = false;
-    }
-}
-
 /******************************************************************************
  * Device State Management
  ******************************************************************************/
 
-static void Status_HandleDeviceTimeout(DeviceType deviceType) {
+static void Status_HandleDeviceTimeout(int deviceType) {
     DeviceStatusState *device = &g_status.devices[deviceType];
     
     // Clear pending call flag
@@ -536,10 +548,10 @@ static void Status_HandleDeviceTimeout(DeviceType deviceType) {
     
     // Set appropriate error message
     char errorMsg[128];
-    snprintf(errorMsg, sizeof(errorMsg), "%s Timeout", DeviceTypeToString(deviceType));
+    snprintf(errorMsg, sizeof(errorMsg), "%s Timeout", intToString(deviceType));
     UpdateDeviceStatus(deviceType, errorMsg);
     
-    LogWarning("%s status update timed out", DeviceTypeToString(deviceType));
+    LogWarning("%s status update timed out", intToString(deviceType));
 }
 
 /******************************************************************************
@@ -615,18 +627,40 @@ static void PSBStatusCallback(CommandID cmdId, PSBCommandType type,
 
 static void DTBStatusCallback(CommandID cmdId, DTBCommandType type,
                             void *result, void *userData) {
-    // Check if we should process this callback
     if (!Status_ShouldProcessUpdates()) {
         return;
     }
     
+    // Extract slave address from userData
+    int slaveAddress = (int)(intptr_t)userData;
+    
+    // Find device index by slave address dynamically
+    int deviceIndex = -1;
+    DTBQueueManager *dtbMgr = DTB_GetGlobalQueueManager();
+    if (dtbMgr) {
+        DTBDeviceContext *ctx = (DTBDeviceContext*)DeviceQueue_GetDeviceContext(dtbMgr);
+        if (ctx) {
+            for (int i = 0; i < ctx->numDevices; i++) {
+                if (ctx->slaveAddresses[i] == slaveAddress) {
+                    deviceIndex = DEVICE_DTB_BASE + i;
+                    break;
+                }
+            }
+        }
+    }
+    
+    if (deviceIndex < 0) {
+        LogError("DTBStatusCallback: Could not find device index for slave address %d", slaveAddress);
+        return;
+    }
+    
     // Clear pending call flag
-    g_status.devices[DEVICE_DTB].pendingCall = false;
+    g_status.devices[deviceIndex].pendingCall = false;
     
     DTBCommandResult *cmdResult = (DTBCommandResult *)result;
     if (!cmdResult) {
-        LogErrorEx(LOG_DEVICE_DTB, "DTBStatusCallback: NULL result pointer");
-        Status_HandleDeviceTimeout(DEVICE_DTB);
+        LogErrorEx(LOG_DEVICE_DTB, "DTBStatusCallback: NULL result pointer for slave %d", slaveAddress);
+        Status_HandleDeviceTimeout(deviceIndex);
         return;
     }
     
@@ -634,27 +668,26 @@ static void DTBStatusCallback(CommandID cmdId, DTBCommandType type,
         DTB_Status *status = &cmdResult->data.status;
         
         // Update DTB measurement values
-        UpdateDTBValues(status);
+        UpdateDTBValues(deviceIndex, status);
         
         // Update device state based on output enabled status
         ConnectionState newState = status->outputEnabled ? CONN_STATE_CONNECTED : CONN_STATE_IDLE;
-        g_status.devices[DEVICE_DTB].lastState = newState;
+        g_status.devices[deviceIndex].lastState = newState;
         
-        // Update status LED
-        UpdateDeviceLED(DEVICE_DTB, newState);
+        // Update status LED and message
+        UpdateDeviceLED(deviceIndex, newState);
         
-        // Update status message
         const char* statusMsg = status->outputEnabled ? "DTB Running" : "DTB Connected - Stopped";
-        UpdateDeviceStatus(DEVICE_DTB, statusMsg);
+        UpdateDeviceStatus(deviceIndex, statusMsg);
         
-        LogDebugEx(LOG_DEVICE_DTB, "DTB status updated: Temp=%.1f°C, Output=%s",
-                  status->processValue, status->outputEnabled ? "ON" : "OFF");
+        LogDebugEx(LOG_DEVICE_DTB, "DTB slave %d status updated: Temp=%.1f°C, Output=%s",
+                  slaveAddress, status->processValue, status->outputEnabled ? "ON" : "OFF");
     } else {
-        LogErrorEx(LOG_DEVICE_DTB, "Failed to get DTB status: %s",
-                 DTB_GetErrorString(cmdResult->errorCode));
-        g_status.devices[DEVICE_DTB].lastState = CONN_STATE_ERROR;
-        UpdateDeviceLED(DEVICE_DTB, CONN_STATE_ERROR);
-        UpdateDeviceStatus(DEVICE_DTB, "DTB Error");
+        LogErrorEx(LOG_DEVICE_DTB, "Failed to get DTB slave %d status: %s",
+                 slaveAddress, DTB_GetErrorString(cmdResult->errorCode));
+        g_status.devices[deviceIndex].lastState = CONN_STATE_ERROR;
+        UpdateDeviceLED(deviceIndex, CONN_STATE_ERROR);
+        UpdateDeviceStatus(deviceIndex, "DTB Error");
     }
 }
 
@@ -662,23 +695,53 @@ static void DTBStatusCallback(CommandID cmdId, DTBCommandType type,
  * UI Update Functions
  ******************************************************************************/
 
-static void UpdateDeviceLED(DeviceType deviceType, ConnectionState state) {
+static void UpdateDeviceLED(int deviceType, ConnectionState state) {
     UIUpdateData* data = malloc(sizeof(UIUpdateData));
     if (!data) return;
     
-    switch (deviceType) {
-        case DEVICE_PSB:
-            data->control = PANEL_LED_PSB_STATUS;
-            break;
-        case DEVICE_BIOLOGIC:
-            data->control = PANEL_LED_BIOLOGIC_STATUS;
-            break;
-        case DEVICE_DTB:
-            data->control = PANEL_LED_DTB_1_STATUS;
-            break;
-        default:
+    if (deviceType < DEVICE_DTB_BASE) {
+        // Handle PSB and BioLogic as before
+        switch (deviceType) {
+            case DEVICE_PSB:
+                data->control = PANEL_LED_PSB_STATUS;
+                break;
+            case DEVICE_BIOLOGIC:
+                data->control = PANEL_LED_BIOLOGIC_STATUS;
+                break;
+            default:
+                free(data);
+                return;
+        }
+    } else {
+        // Handle DTB devices dynamically
+        DTBQueueManager *dtbMgr = DTB_GetGlobalQueueManager();
+        if (dtbMgr) {
+            DTBDeviceContext *ctx = (DTBDeviceContext*)DeviceQueue_GetDeviceContext(dtbMgr);
+            if (ctx) {
+                int dtbIndex = deviceType - DEVICE_DTB_BASE;
+                if (dtbIndex >= 0 && dtbIndex < ctx->numDevices) {
+                    int slaveAddress = ctx->slaveAddresses[dtbIndex];
+                    int ledControl, statusControl, tempControl;
+                    
+                    if (GetDTBUIControls(slaveAddress, &ledControl, &statusControl, &tempControl)) {
+                        data->control = ledControl;
+                    } else {
+                        LogError("No UI controls defined for DTB slave address %d", slaveAddress);
+                        free(data);
+                        return;
+                    }
+                } else {
+                    free(data);
+                    return;
+                }
+            } else {
+                free(data);
+                return;
+            }
+        } else {
             free(data);
             return;
+        }
     }
     
     // Determine LED color based on state
@@ -700,23 +763,53 @@ static void UpdateDeviceLED(DeviceType deviceType, ConnectionState state) {
     PostDeferredCall(DeferredLEDUpdate, data);
 }
 
-static void UpdateDeviceStatus(DeviceType deviceType, const char* message) {
+static void UpdateDeviceStatus(int deviceType, const char* message) {
     UIUpdateData* data = malloc(sizeof(UIUpdateData));
     if (!data) return;
     
-    switch (deviceType) {
-        case DEVICE_PSB:
-            data->control = PANEL_STR_PSB_STATUS;
-            break;
-        case DEVICE_BIOLOGIC:
-            data->control = PANEL_STR_BIOLOGIC_STATUS;
-            break;
-        case DEVICE_DTB:
-            data->control = PANEL_STR_DTB_1_STATUS;
-            break;
-        default:
+    if (deviceType < DEVICE_DTB_BASE) {
+        // Handle PSB and BioLogic as before
+        switch (deviceType) {
+            case DEVICE_PSB:
+                data->control = PANEL_STR_PSB_STATUS;
+                break;
+            case DEVICE_BIOLOGIC:
+                data->control = PANEL_STR_BIOLOGIC_STATUS;
+                break;
+            default:
+                free(data);
+                return;
+        }
+    } else {
+        // Handle DTB devices dynamically
+        DTBQueueManager *dtbMgr = DTB_GetGlobalQueueManager();
+        if (dtbMgr) {
+            DTBDeviceContext *ctx = (DTBDeviceContext*)DeviceQueue_GetDeviceContext(dtbMgr);
+            if (ctx) {
+                int dtbIndex = deviceType - DEVICE_DTB_BASE;
+                if (dtbIndex >= 0 && dtbIndex < ctx->numDevices) {
+                    int slaveAddress = ctx->slaveAddresses[dtbIndex];
+                    int ledControl, statusControl, tempControl;
+                    
+                    if (GetDTBUIControls(slaveAddress, &ledControl, &statusControl, &tempControl)) {
+                        data->control = statusControl;
+                    } else {
+                        LogError("No UI controls defined for DTB slave address %d", slaveAddress);
+                        free(data);
+                        return;
+                    }
+                } else {
+                    free(data);
+                    return;
+                }
+            } else {
+                free(data);
+                return;
+            }
+        } else {
             free(data);
             return;
+        }
     }
     
     strncpy(data->strValue, message, sizeof(data->strValue) - 1);
@@ -751,13 +844,26 @@ static void UpdatePSBValues(PSB_Status* status) {
     }
 }
 
-static void UpdateDTBValues(DTB_Status* status) {
-    // Update current temperature
-    UIUpdateData* tempData = malloc(sizeof(UIUpdateData));
-    if (tempData) {
-        tempData->control = PANEL_NUM_DTB_1_TEMPERATURE;
-        tempData->dblValue = status->processValue;
-        PostDeferredCall(DeferredNumericUpdate, tempData);
+static void UpdateDTBValues(int deviceIndex, DTB_Status* status) {
+    DTBQueueManager *dtbMgr = DTB_GetGlobalQueueManager();
+    if (!dtbMgr) return;
+    
+    DTBDeviceContext *ctx = (DTBDeviceContext*)DeviceQueue_GetDeviceContext(dtbMgr);
+    if (!ctx) return;
+    
+    int dtbIndex = deviceIndex - DEVICE_DTB_BASE;
+    if (dtbIndex < 0 || dtbIndex >= ctx->numDevices) return;
+    
+    int slaveAddress = ctx->slaveAddresses[dtbIndex];
+    int ledControl, statusControl, tempControl;
+    
+    if (GetDTBUIControls(slaveAddress, &ledControl, &statusControl, &tempControl)) {
+        UIUpdateData* tempData = malloc(sizeof(UIUpdateData));
+        if (tempData) {
+            tempData->control = tempControl;
+            tempData->dblValue = status->processValue;
+            PostDeferredCall(DeferredNumericUpdate, tempData);
+        }
     }
 }
 
@@ -836,13 +942,26 @@ void Status_UpdateRemoteLED(int isOn) {
  * Helper Functions
  ******************************************************************************/
 
-static const char* DeviceTypeToString(DeviceType deviceType) {
-    switch (deviceType) {
-        case DEVICE_PSB: return "PSB";
-        case DEVICE_BIOLOGIC: return "BioLogic";
-        case DEVICE_DTB: return "DTB";
-        default: return "Unknown";
+static const char* intToString(int deviceType) {
+    if (deviceType == DEVICE_PSB) return "PSB";
+    if (deviceType == DEVICE_BIOLOGIC) return "BioLogic";
+    if (deviceType >= DEVICE_DTB_BASE) {
+        // Get DTB name dynamically
+        DTBQueueManager *dtbMgr = DTB_GetGlobalQueueManager();
+        if (dtbMgr) {
+            DTBDeviceContext *ctx = (DTBDeviceContext*)DeviceQueue_GetDeviceContext(dtbMgr);
+            if (ctx) {
+                int dtbIndex = deviceType - DEVICE_DTB_BASE;
+                if (dtbIndex >= 0 && dtbIndex < ctx->numDevices) {
+                    static char dtbName[16];
+                    snprintf(dtbName, sizeof(dtbName), "DTB(slave %d)", ctx->slaveAddresses[dtbIndex]);
+                    return dtbName;
+                }
+            }
+        }
+        return "DTB(unknown)";
     }
+    return "Unknown";
 }
 
 static const char* StateToString(StatusModuleState state) {
@@ -854,5 +973,22 @@ static const char* StateToString(StatusModuleState state) {
         case STATUS_STATE_STOPPING: return "STOPPING";
         case STATUS_STATE_STOPPED: return "STOPPED";
         default: return "UNKNOWN";
+    }
+}
+
+static bool GetDTBUIControls(int slaveAddress, int *ledControl, int *statusControl, int *tempControl) {
+    switch(slaveAddress) {
+        case DTB1_SLAVE_ADDRESS:
+            *ledControl = PANEL_LED_DTB_1_STATUS;
+            *statusControl = PANEL_STR_DTB_1_STATUS;
+            *tempControl = PANEL_NUM_DTB_1_TEMPERATURE;
+            return true;
+        case DTB2_SLAVE_ADDRESS:
+            *ledControl = PANEL_LED_DTB_2_STATUS;
+            *statusControl = PANEL_STR_DTB_2_STATUS;
+            *tempControl = PANEL_NUM_DTB_2_TEMPERATURE;
+            return true;
+        default:
+            return false;
     }
 }

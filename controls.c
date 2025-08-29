@@ -15,8 +15,24 @@
 #include "logging.h"
 
 /******************************************************************************
- * Module Variables
+ * Module Data Structures
  ******************************************************************************/
+
+typedef struct {
+    int slaveAddress;
+    int runButtonControlID;
+    int setpointControlID;
+    
+    // State tracking
+    volatile int runStateChangePending;
+    volatile int pendingRunState;
+    int lastKnownRunState;
+    double lastKnownSetpoint;
+} DTBDeviceControl;
+
+typedef struct {
+    int deviceIndex;  // For passing to callbacks
+} DTBCallbackData;
 
 static struct {
     int panelHandle;
@@ -26,11 +42,9 @@ static struct {
     volatile int pendingRemoteModeValue;
     int lastKnownRemoteMode;
     
-    // DTB run state tracking
-    volatile int dtbRunStateChangePending;
-    volatile int pendingDTBRunState;
-    int lastKnownDTBRunState;
-    double lastKnownDTBSetpoint;
+    // DTB device array
+    DTBDeviceControl dtbDevices[DTB_NUM_DEVICES];
+    int numDTBDevices;
     
 } g_controls = {0};
 
@@ -44,11 +58,12 @@ static void CVICALLBACK DeferredControlUpdate(void* data);
 static void CVICALLBACK DeferredButtonTextUpdate(void* data);
 static void RemoteModeCallback(CommandID cmdId, PSBCommandType type, 
                               void *result, void *userData);
+static void HandleDTBRunStopAction(int deviceIndex, int panel, int control);
 static void DTBSetpointCallback(CommandID cmdId, DTBCommandType type,
                                void *result, void *userData);
 static void DTBRunStopQueueCallback(CommandID cmdId, DTBCommandType type,
                                    void *result, void *userData);
-static void UpdateDTBButtonState(int isRunning);
+static void UpdateDTBButtonState(int deviceIndex, int isRunning);
 static void UpdateRemoteToggleState(int remoteMode);
 
 /******************************************************************************
@@ -62,6 +77,13 @@ typedef struct {
 } ControlUpdateData;
 
 /******************************************************************************
+ * Helper Function Prototypes
+ ******************************************************************************/
+
+static bool IsValidDTBDeviceIndex(int deviceIndex);
+static int FindDTBDeviceByControl(int controlID);
+
+/******************************************************************************
  * Public Functions Implementation
  ******************************************************************************/
 
@@ -71,22 +93,47 @@ int Controls_Initialize(int panelHandle) {
         return SUCCESS;
     }
     
+    if (panelHandle <= 0) {
+        LogError("Invalid panel handle provided to Controls_Initialize");
+        return ERR_INVALID_PARAMETER;
+    }
+    
     // Initialize state - internal setup only
     memset(&g_controls, 0, sizeof(g_controls));
     g_controls.panelHandle = panelHandle;
     
-    // Initialize pending flags to false
+    // Initialize remote mode state
     g_controls.remoteModeChangePending = 0;
     g_controls.pendingRemoteModeValue = 0;
     g_controls.lastKnownRemoteMode = 0;
     
-    g_controls.dtbRunStateChangePending = 0;
-    g_controls.pendingDTBRunState = 0;
-    g_controls.lastKnownDTBRunState = 0;
-    g_controls.lastKnownDTBSetpoint = 0.0;
+    // Initialize DTB devices array
+    g_controls.numDTBDevices = DTB_NUM_DEVICES;
+    
+    if (DTB_NUM_DEVICES > 0) {
+        // Setup DTB device 0 (DTB1)
+        g_controls.dtbDevices[0].slaveAddress = DTB1_SLAVE_ADDRESS;
+        g_controls.dtbDevices[0].runButtonControlID = PANEL_BTN_DTB_1_RUN_STOP;
+        g_controls.dtbDevices[0].setpointControlID = PANEL_NUM_DTB_1_SETPOINT;
+        g_controls.dtbDevices[0].runStateChangePending = 0;
+        g_controls.dtbDevices[0].pendingRunState = 0;
+        g_controls.dtbDevices[0].lastKnownRunState = 0;
+        g_controls.dtbDevices[0].lastKnownSetpoint = 0.0;
+    }
+    
+    if (DTB_NUM_DEVICES > 1) {
+        // Setup DTB device 1 (DTB2)
+        g_controls.dtbDevices[1].slaveAddress = DTB2_SLAVE_ADDRESS;
+        g_controls.dtbDevices[1].runButtonControlID = PANEL_BTN_DTB_2_RUN_STOP;
+        g_controls.dtbDevices[1].setpointControlID = PANEL_NUM_DTB_2_SETPOINT;
+        g_controls.dtbDevices[1].runStateChangePending = 0;
+        g_controls.dtbDevices[1].pendingRunState = 0;
+        g_controls.dtbDevices[1].lastKnownRunState = 0;
+        g_controls.dtbDevices[1].lastKnownSetpoint = 0.0;
+    }
     
     g_initialized = 1;
-    LogMessage("Controls module initialized");
+    LogMessage("Controls module initialized with %d DTB devices", g_controls.numDTBDevices);
     
     return SUCCESS;
 }
@@ -139,31 +186,37 @@ void Controls_UpdateFromDeviceStates(void) {
         }
     }
     
-    // Check DTB state if no pending changes
-    if (ENABLE_DTB && !g_controls.dtbRunStateChangePending) {
+    // Check DTB device states if no pending changes
+    if (ENABLE_DTB) {
         DTBQueueManager *dtbQueueMgr = DTB_GetGlobalQueueManager();
         if (dtbQueueMgr) {
-            DTB_Status status;
-            if (DTB_GetStatusQueued(DTB1_SLAVE_ADDRESS, &status, DEVICE_PRIORITY_NORMAL) == DTB_SUCCESS) {
-                int stateChanged = (status.outputEnabled != g_controls.lastKnownDTBRunState);
-                int setpointChanged = (fabs(status.setPoint - g_controls.lastKnownDTBSetpoint) >= 0.1);
+            for (int i = 0; i < g_controls.numDTBDevices; i++) {
+                DTBDeviceControl *device = &g_controls.dtbDevices[i];
                 
-                if (stateChanged) {
-                    g_controls.lastKnownDTBRunState = status.outputEnabled;
-                    UpdateDTBButtonState(status.outputEnabled);
-                }
-                
-                if (setpointChanged) {
-                    SetCtrlVal(g_controls.panelHandle, PANEL_NUM_DTB_1_SETPOINT, status.setPoint);
-                }
-                
-                // Always update internal tracking
-                g_controls.lastKnownDTBSetpoint = status.setPoint;
-                
-                if (stateChanged || (setpointChanged && g_controls.lastKnownDTBSetpoint == 0.0)) {
-                    LogMessage("DTB state: %s, setpoint: %.1f°C", 
-                             status.outputEnabled ? "Running" : "Stopped",
-                             status.setPoint);
+                if (!device->runStateChangePending) {
+                    DTB_Status status;
+                    if (DTB_GetStatusQueued(device->slaveAddress, &status, DEVICE_PRIORITY_NORMAL) == DTB_SUCCESS) {
+                        int stateChanged = (status.outputEnabled != device->lastKnownRunState);
+                        int setpointChanged = (fabs(status.setPoint - device->lastKnownSetpoint) >= 0.1);
+                        
+                        if (stateChanged) {
+                            device->lastKnownRunState = status.outputEnabled;
+                            UpdateDTBButtonState(i, status.outputEnabled);
+                        }
+                        
+                        if (setpointChanged) {
+                            SetCtrlVal(g_controls.panelHandle, device->setpointControlID, status.setPoint);
+                        }
+                        
+                        // Always update internal tracking
+                        device->lastKnownSetpoint = status.setPoint;
+                        
+                        if (stateChanged || (setpointChanged && device->lastKnownSetpoint == 0.0)) {
+                            LogMessage("DTB%d state: %s, setpoint: %.1f°C", 
+                                     i + 1, status.outputEnabled ? "Running" : "Stopped",
+                                     status.setPoint);
+                        }
+                    }
                 }
             }
         }
@@ -178,28 +231,17 @@ int CVICALLBACK RemoteModeToggle(int panel, int control, int event,
                                 void *callbackData, int eventData1, int eventData2) {
     switch (event) {
         case EVENT_COMMIT:
-            // Check if system is busy
-            CmtGetLock(g_busyLock);
-            if (g_systemBusy || g_controls.remoteModeChangePending) {
-                CmtReleaseLock(g_busyLock);
-                LogWarning("System is busy - please wait for current operation to complete");
-                
+            // Check if remote mode change is already pending
+            if (g_controls.remoteModeChangePending) {
                 // Reset toggle to last known state
                 SetCtrlVal(panel, control, g_controls.lastKnownRemoteMode);
                 return 0;
             }
             
-            // Mark system as busy
-            g_systemBusy = 1;
-            CmtReleaseLock(g_busyLock);
-            
             // Get PSB queue manager
             PSBQueueManager *psbQueueMgr = PSB_GetGlobalQueueManager();
             if (!psbQueueMgr) {
                 LogWarning("PSB queue manager not available");
-                CmtGetLock(g_busyLock);
-                g_systemBusy = 0;
-                CmtReleaseLock(g_busyLock);
                 SetCtrlVal(panel, control, g_controls.lastKnownRemoteMode);
                 return 0;
             }
@@ -209,9 +251,6 @@ int CVICALLBACK RemoteModeToggle(int panel, int control, int event,
             PSB_QueueGetStats(psbQueueMgr, &stats);
             if (!stats.isConnected) {
                 LogWarning("PSB not connected - cannot change remote mode");
-                CmtGetLock(g_busyLock);
-                g_systemBusy = 0;
-                CmtReleaseLock(g_busyLock);
                 SetCtrlVal(panel, control, g_controls.lastKnownRemoteMode);
                 return 0;
             }
@@ -234,10 +273,6 @@ int CVICALLBACK RemoteModeToggle(int panel, int control, int event,
                 
                 // Clear pending flags
                 g_controls.remoteModeChangePending = 0;
-                
-                CmtGetLock(g_busyLock);
-                g_systemBusy = 0;
-                CmtReleaseLock(g_busyLock);
                 
                 // Reset toggle
                 SetCtrlVal(panel, control, g_controls.lastKnownRemoteMode);
@@ -269,163 +304,185 @@ static void RemoteModeCallback(CommandID cmdId, PSBCommandType type,
     
     // Clear pending flags
     g_controls.remoteModeChangePending = 0;
-    
-    // Clear busy flag
-    CmtGetLock(g_busyLock);
-    g_systemBusy = 0;
-    CmtReleaseLock(g_busyLock);
 }
 
 /******************************************************************************
- * DTB Run/Stop Implementation
+ * DTB Run/Stop Implementation - CVICALLBACK Functions
  ******************************************************************************/
 
-int CVICALLBACK DTBRunStopCallback(int panel, int control, int event,
-                                  void *callbackData, int eventData1, int eventData2) {
-    switch (event) {
-        case EVENT_COMMIT:
-            // Check if system is busy
-            CmtGetLock(g_busyLock);
-            if (g_systemBusy || g_controls.dtbRunStateChangePending) {
-                CmtReleaseLock(g_busyLock);
-                LogWarning("System is busy - please wait for current operation to complete");
-                return 0;
-            }
-            
-            // Mark system as busy
-            g_systemBusy = 1;
-            CmtReleaseLock(g_busyLock);
-            
-            // Get DTB queue manager
-            DTBQueueManager *dtbQueueMgr = DTB_GetGlobalQueueManager();
-            if (!dtbQueueMgr) {
-                LogWarning("DTB queue manager not available");
-                CmtGetLock(g_busyLock);
-                g_systemBusy = 0;
-                CmtReleaseLock(g_busyLock);
-                return 0;
-            }
-            
-            // Check if DTB is connected
-            DTBQueueStats stats;
-            DTB_QueueGetStats(dtbQueueMgr, &stats);
-            if (!stats.isConnected) {
-                LogWarning("DTB not connected");
-                CmtGetLock(g_busyLock);
-                g_systemBusy = 0;
-                CmtReleaseLock(g_busyLock);
-                return 0;
-            }
-            
-            // Determine action based on current state
-            if (g_controls.lastKnownDTBRunState) {
-                // Currently running - stop it
-                g_controls.dtbRunStateChangePending = 1;
-                g_controls.pendingDTBRunState = 0;
-                
-                LogMessage("Stopping DTB temperature control...");
-                
-                // Queue stop command
-				CommandID cmdId = DTB_SetRunStopAsync(DTB1_SLAVE_ADDRESS, 0, DTBRunStopQueueCallback, NULL, DEVICE_PRIORITY_NORMAL);
-                
-                if (cmdId == 0) {
-                    LogError("Failed to queue DTB stop command");
-                    g_controls.dtbRunStateChangePending = 0;
-                    CmtGetLock(g_busyLock);
-                    g_systemBusy = 0;
-                    CmtReleaseLock(g_busyLock);
-                }
-                
-            } else {
-                // Currently stopped - start it
-                // First get the setpoint value
-                double setpoint;
-                GetCtrlVal(panel, PANEL_NUM_DTB_1_SETPOINT, &setpoint);
-                
-                g_controls.dtbRunStateChangePending = 1;
-                g_controls.pendingDTBRunState = 1;
-                
-                LogMessage("Setting DTB setpoint to %.1f°C...", setpoint);
-                
-                // Store the setpoint we're sending
-                g_controls.lastKnownDTBSetpoint = setpoint;
-                
-                // Queue setpoint command first
-				CommandID cmdId = DTB_SetSetPointAsync(DTB1_SLAVE_ADDRESS, setpoint, DTBSetpointCallback, NULL, DEVICE_PRIORITY_NORMAL);
-                
-                if (cmdId == 0) {
-                    LogError("Failed to queue DTB setpoint command");
-                    g_controls.dtbRunStateChangePending = 0;
-                    CmtGetLock(g_busyLock);
-                    g_systemBusy = 0;
-                    CmtReleaseLock(g_busyLock);
-                }
-            }
-            
-            break;
+int CVICALLBACK DTB1RunStopCallback(int panel, int control, int event,
+                                   void *callbackData, int eventData1, int eventData2) {
+    if (event == EVENT_COMMIT) {
+        HandleDTBRunStopAction(0, panel, control); // Device 0
     }
     return 0;
+}
+
+int CVICALLBACK DTB2RunStopCallback(int panel, int control, int event,
+                                   void *callbackData, int eventData1, int eventData2) {
+    if (event == EVENT_COMMIT) {
+        HandleDTBRunStopAction(1, panel, control); // Device 1  
+    }
+    return 0;
+}
+
+/******************************************************************************
+ * DTB Run/Stop Implementation - Internal Handler
+ ******************************************************************************/
+
+static void HandleDTBRunStopAction(int deviceIndex, int panel, int control) {
+    if (!IsValidDTBDeviceIndex(deviceIndex)) {
+        LogError("Invalid DTB device index: %d", deviceIndex);
+        return;
+    }
+    
+    DTBDeviceControl *device = &g_controls.dtbDevices[deviceIndex];
+    
+    // Check if this device already has a run state change pending
+    if (device->runStateChangePending) {
+        return;
+    }
+    
+    // Get DTB queue manager
+    DTBQueueManager *dtbQueueMgr = DTB_GetGlobalQueueManager();
+    if (!dtbQueueMgr) {
+        LogWarning("DTB queue manager not available");
+        return;
+    }
+    
+    // Check if DTB is connected
+    DTBQueueStats stats;
+    DTB_QueueGetStats(dtbQueueMgr, &stats);
+    if (!stats.isConnected) {
+        LogWarning("DTB not connected");
+        return;
+    }
+    
+    // Allocate callback data
+    DTBCallbackData *callbackData = malloc(sizeof(DTBCallbackData));
+    if (!callbackData) {
+        LogError("Failed to allocate callback data");
+        return;
+    }
+    callbackData->deviceIndex = deviceIndex;
+    
+    // Determine action based on current state
+    if (device->lastKnownRunState) {
+        // Currently running - stop it
+        device->runStateChangePending = 1;
+        device->pendingRunState = 0;
+        
+        LogMessage("Stopping DTB%d temperature control...", deviceIndex + 1);
+        
+        // Queue stop command
+        CommandID cmdId = DTB_SetRunStopAsync(device->slaveAddress, 0, DTBRunStopQueueCallback, callbackData, DEVICE_PRIORITY_NORMAL);
+        
+        if (cmdId == 0) {
+            LogError("Failed to queue DTB%d stop command", deviceIndex + 1);
+            device->runStateChangePending = 0;
+            free(callbackData);
+        }
+        
+    } else {
+        // Currently stopped - start it
+        // First get the setpoint value
+        double setpoint;
+        GetCtrlVal(panel, device->setpointControlID, &setpoint);
+        
+        device->runStateChangePending = 1;
+        device->pendingRunState = 1;
+        
+        LogMessage("Setting DTB%d setpoint to %.1f°C...", deviceIndex + 1, setpoint);
+        
+        // Store the setpoint we're sending
+        device->lastKnownSetpoint = setpoint;
+        
+        // Queue setpoint command first
+        CommandID cmdId = DTB_SetSetPointAsync(device->slaveAddress, setpoint, DTBSetpointCallback, callbackData, DEVICE_PRIORITY_NORMAL);
+        
+        if (cmdId == 0) {
+            LogError("Failed to queue DTB%d setpoint command", deviceIndex + 1);
+            device->runStateChangePending = 0;
+            free(callbackData);
+        }
+    }
 }
 
 static void DTBSetpointCallback(CommandID cmdId, DTBCommandType type,
                                void *result, void *userData) {
     DTBCommandResult *cmdResult = (DTBCommandResult *)result;
+    DTBCallbackData *callbackData = (DTBCallbackData *)userData;
+    
+    if (!callbackData || !IsValidDTBDeviceIndex(callbackData->deviceIndex)) {
+        LogError("Invalid callback data in DTBSetpointCallback");
+        if (callbackData) free(callbackData);
+        return;
+    }
+    
+    int deviceIndex = callbackData->deviceIndex;
+    DTBDeviceControl *device = &g_controls.dtbDevices[deviceIndex];
     
     if (cmdResult && cmdResult->errorCode == DTB_SUCCESS) {
         // Setpoint set successfully, now start the controller
         DTBQueueManager *dtbQueueMgr = DTB_GetGlobalQueueManager();
         if (dtbQueueMgr) {
-            LogMessage("Starting DTB temperature control...");
+            LogMessage("Starting DTB%d temperature control...", deviceIndex + 1);
             
-			CommandID cmdId = DTB_SetRunStopAsync(DTB1_SLAVE_ADDRESS, 1, DTBRunStopQueueCallback, NULL, DEVICE_PRIORITY_NORMAL);
+            CommandID cmdId = DTB_SetRunStopAsync(device->slaveAddress, 1, DTBRunStopQueueCallback, callbackData, DEVICE_PRIORITY_NORMAL);
             
             if (cmdId == 0) {
-                LogError("Failed to queue DTB start command");
-                g_controls.dtbRunStateChangePending = 0;
-                CmtGetLock(g_busyLock);
-                g_systemBusy = 0;
-                CmtReleaseLock(g_busyLock);
+                LogError("Failed to queue DTB%d start command", deviceIndex + 1);
+                device->runStateChangePending = 0;
+                free(callbackData);
             }
+            // Don't free callbackData here - it will be used by DTBRunStopQueueCallback
+            return;
         }
     } else {
         // Failed to set setpoint
         const char *errorStr = cmdResult ? DTB_GetErrorString(cmdResult->errorCode) : "Unknown error";
-        LogError("Failed to set DTB setpoint: %s", errorStr);
+        LogError("Failed to set DTB%d setpoint: %s", deviceIndex + 1, errorStr);
         
-        g_controls.dtbRunStateChangePending = 0;
-        CmtGetLock(g_busyLock);
-        g_systemBusy = 0;
-        CmtReleaseLock(g_busyLock);
+        device->runStateChangePending = 0;
+        free(callbackData);
     }
 }
 
 static void DTBRunStopQueueCallback(CommandID cmdId, DTBCommandType type,
                                    void *result, void *userData) {
     DTBCommandResult *cmdResult = (DTBCommandResult *)result;
+    DTBCallbackData *callbackData = (DTBCallbackData *)userData;
+    
+    if (!callbackData || !IsValidDTBDeviceIndex(callbackData->deviceIndex)) {
+        LogError("Invalid callback data in DTBRunStopQueueCallback");
+        if (callbackData) free(callbackData);
+        return;
+    }
+    
+    int deviceIndex = callbackData->deviceIndex;
+    DTBDeviceControl *device = &g_controls.dtbDevices[deviceIndex];
     
     if (cmdResult && cmdResult->errorCode == DTB_SUCCESS) {
         // Success - update state
-        g_controls.lastKnownDTBRunState = g_controls.pendingDTBRunState;
-        UpdateDTBButtonState(g_controls.pendingDTBRunState);
+        device->lastKnownRunState = device->pendingRunState;
+        UpdateDTBButtonState(deviceIndex, device->pendingRunState);
         
-        LogMessage("DTB temperature control %s", 
-                  g_controls.pendingDTBRunState ? "started" : "stopped");
+        LogMessage("DTB%d temperature control %s", deviceIndex + 1,
+                  device->pendingRunState ? "started" : "stopped");
     } else {
         // Failed - revert to last known state
         const char *errorStr = cmdResult ? DTB_GetErrorString(cmdResult->errorCode) : "Unknown error";
-        LogError("Failed to %s DTB: %s", 
-                g_controls.pendingDTBRunState ? "start" : "stop", errorStr);
+        LogError("Failed to %s DTB%d: %s", 
+                device->pendingRunState ? "start" : "stop", deviceIndex + 1, errorStr);
         
-        UpdateDTBButtonState(g_controls.lastKnownDTBRunState);
+        UpdateDTBButtonState(deviceIndex, device->lastKnownRunState);
     }
     
     // Clear pending flags
-    g_controls.dtbRunStateChangePending = 0;
+    device->runStateChangePending = 0;
     
-    // Clear busy flag
-    CmtGetLock(g_busyLock);
-    g_systemBusy = 0;
-    CmtReleaseLock(g_busyLock);
+    // Clean up
+    free(callbackData);
 }
 
 /******************************************************************************
@@ -442,17 +499,24 @@ void Controls_NotifyRemoteModeState(int remoteMode) {
     }
 }
 
-void Controls_NotifyDTBRunState(int isRunning, double setpoint) {
-    if (!g_controls.dtbRunStateChangePending) {
+void Controls_NotifyDTBRunState(int deviceIndex, int isRunning, double setpoint) {
+    if (!IsValidDTBDeviceIndex(deviceIndex)) {
+        LogWarning("Controls_NotifyDTBRunState: Invalid device index: %d", deviceIndex);
+        return;
+    }
+    
+    DTBDeviceControl *device = &g_controls.dtbDevices[deviceIndex];
+    
+    if (!device->runStateChangePending) {
         // Only update if no change is pending
-        if (isRunning != g_controls.lastKnownDTBRunState) {
-            g_controls.lastKnownDTBRunState = isRunning;
-            UpdateDTBButtonState(isRunning);
+        if (isRunning != device->lastKnownRunState) {
+            device->lastKnownRunState = isRunning;
+            UpdateDTBButtonState(deviceIndex, isRunning);
         }
         
         // Update internal tracking of setpoint, but DON'T update the control
         // The user might be editing it
-        g_controls.lastKnownDTBSetpoint = setpoint;
+        device->lastKnownSetpoint = setpoint;
     }
 }
 
@@ -464,19 +528,29 @@ int Controls_IsRemoteModeChangePending(void) {
     return g_controls.remoteModeChangePending;
 }
 
-int Controls_IsDTBRunStateChangePending(void) {
-    return g_controls.dtbRunStateChangePending;
+int Controls_IsDTBRunStateChangePending(int deviceIndex) {
+    if (!IsValidDTBDeviceIndex(deviceIndex)) {
+        return 0;
+    }
+    return g_controls.dtbDevices[deviceIndex].runStateChangePending;
 }
 
 /******************************************************************************
  * Helper Functions
  ******************************************************************************/
 
-static void UpdateDTBButtonState(int isRunning) {
+static void UpdateDTBButtonState(int deviceIndex, int isRunning) {
+    if (!IsValidDTBDeviceIndex(deviceIndex)) {
+        LogError("UpdateDTBButtonState: Invalid device index: %d", deviceIndex);
+        return;
+    }
+    
+    DTBDeviceControl *device = &g_controls.dtbDevices[deviceIndex];
+    
     // Update button text
     ControlUpdateData* textData = malloc(sizeof(ControlUpdateData));
     if (textData) {
-        textData->control = PANEL_BTN_DTB_1_RUN_STOP;
+        textData->control = device->runButtonControlID;
         strcpy(textData->strValue, isRunning ? "Stop" : "Run");
         PostDeferredCall(DeferredButtonTextUpdate, textData);
     }
@@ -484,7 +558,7 @@ static void UpdateDTBButtonState(int isRunning) {
     // Update setpoint control dimming
     ControlUpdateData* dimData = malloc(sizeof(ControlUpdateData));
     if (dimData) {
-        dimData->control = PANEL_NUM_DTB_1_SETPOINT;
+        dimData->control = device->setpointControlID;
         dimData->intValue = isRunning ? 1 : 0; // 1 = dim, 0 = enable
         PostDeferredCall(DeferredControlUpdate, dimData);
     }
@@ -506,8 +580,10 @@ static void UpdateRemoteToggleState(int remoteMode) {
 static void CVICALLBACK DeferredControlUpdate(void* data) {
     ControlUpdateData* updateData = (ControlUpdateData*)data;
     if (updateData && g_controls.panelHandle > 0) {
-        if (updateData->control == PANEL_NUM_DTB_1_SETPOINT) {
-            // For setpoint, intValue is dimming state
+        // Check if this is a DTB setpoint control by finding the device index
+        int deviceIndex = FindDTBDeviceByControl(updateData->control);
+        if (deviceIndex >= 0) {
+            // This is a DTB setpoint control - intValue is dimming state
             SetCtrlAttribute(g_controls.panelHandle, updateData->control, 
                            ATTR_DIMMED, updateData->intValue);
         } else {
@@ -525,6 +601,23 @@ static void CVICALLBACK DeferredButtonTextUpdate(void* data) {
                         ATTR_LABEL_TEXT, updateData->strValue);
         free(updateData);
     }
+}
+
+/******************************************************************************
+ * Helper Functions Implementation
+ ******************************************************************************/
+
+static bool IsValidDTBDeviceIndex(int deviceIndex) {
+    return (deviceIndex >= 0 && deviceIndex < g_controls.numDTBDevices);
+}
+
+static int FindDTBDeviceByControl(int controlID) {
+    for (int i = 0; i < g_controls.numDTBDevices; i++) {
+        if (g_controls.dtbDevices[i].setpointControlID == controlID) {
+            return i;
+        }
+    }
+    return -1; // Not found
 }
 
 /******************************************************************************

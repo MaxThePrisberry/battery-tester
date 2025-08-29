@@ -58,29 +58,6 @@ static CommandID DTB_QueueCommandAsync(DTBQueueManager *mgr, DTBCommandType type
                               DTBCommandCallback callback, void *userData);
 
 /******************************************************************************
- * DTB Multi-Device Context Structure
- ******************************************************************************/
-
-typedef struct {
-    DTB_Handle handles[MAX_DTB_DEVICES];
-    int slaveAddresses[MAX_DTB_DEVICES];
-    int numDevices;
-    int comPort;
-    int baudRate;
-} DTBDeviceContext;
-
-/******************************************************************************
- * DTB Connection Parameters
- ******************************************************************************/
-
-typedef struct {
-    int comPort;
-    int baudRate;
-    int *slaveAddresses;
-    int numSlaves;
-} DTBConnectionParams;
-
-/******************************************************************************
  * Helper Functions
  ******************************************************************************/
 
@@ -209,17 +186,26 @@ static int DTB_AdapterDisconnect(void *deviceContext) {
     
     if (!ctx) return DTB_SUCCESS;
     
-    // Disconnect all devices
+    // Stop all devices first (without closing COM port)
     for (int i = 0; i < ctx->numDevices; i++) {
         if (ctx->handles[i].isConnected) {
-            LogMessageEx(LOG_DEVICE_DTB, "Disconnecting DTB slave %d...", 
+            LogMessageEx(LOG_DEVICE_DTB, "Stopping DTB slave %d...", 
                          ctx->slaveAddresses[i]);
             
             // Stop output before disconnecting
             DTB_SetRunStop(&ctx->handles[i], 0);
-            DTB_Close(&ctx->handles[i]);
+            
+            // Mark as disconnected without closing COM port
+            ctx->handles[i].isConnected = 0;
+            ctx->handles[i].state = DEVICE_STATE_DISCONNECTED;
         }
     }
+    
+    // Close COM port only once for all devices
+    LogMessageEx(LOG_DEVICE_DTB, "Closing COM%d", ctx->comPort);
+    CloseCom(ctx->comPort);
+    
+    LogMessageEx(LOG_DEVICE_DTB, "Disconnected all DTB devices from COM%d", ctx->comPort);
     
     return DTB_SUCCESS;
 }
@@ -1251,6 +1237,53 @@ int DTB_SetSetPointAllQueued(double temperature, DevicePriority priority) {
     }
     
     return allSuccess;
+}
+
+int DTB_GetStatusAllQueued(DTB_Status *statuses, int *numDevices, DevicePriority priority) {
+    DTBQueueManager *queueMgr = DTB_GetGlobalQueueManager();
+    if (!queueMgr) {
+        return ERR_QUEUE_NOT_INIT;
+    }
+    if (!statuses || !numDevices) {
+        return ERR_NULL_POINTER;
+    }
+    
+    DTBDeviceContext *ctx = (DTBDeviceContext*)DeviceQueue_GetDeviceContext(queueMgr);
+    if (!ctx) {
+        return ERR_QUEUE_NOT_INIT;
+    }
+    
+    *numDevices = 0;
+    int allSuccess = DTB_SUCCESS;
+    int successCount = 0;
+    
+    for (int i = 0; i < ctx->numDevices; i++) {
+        int result = DTB_GetStatusQueued(ctx->slaveAddresses[i], &statuses[i], priority);
+        if (result == DTB_SUCCESS) {
+            successCount++;
+        } else {
+            LogErrorEx(LOG_DEVICE_DTB, "Failed to get status from DTB slave %d: %s", 
+                       ctx->slaveAddresses[i], DTB_GetErrorString(result));
+            if (allSuccess == DTB_SUCCESS) {
+                allSuccess = result;  // Store first failure
+            }
+        }
+    }
+    
+    *numDevices = ctx->numDevices;
+    
+    if (successCount == 0) {
+        LogErrorEx(LOG_DEVICE_DTB, "Failed to get status from any DTB devices");
+        return allSuccess;
+    } else if (successCount < ctx->numDevices) {
+        LogWarningEx(LOG_DEVICE_DTB, "Got status from %d of %d DTB devices", 
+                     successCount, ctx->numDevices);
+        return allSuccess;  // Return the first error encountered
+    }
+    
+    LogDebugEx(LOG_DEVICE_DTB, "Successfully got status from all %d DTB devices", 
+               ctx->numDevices);
+    return DTB_SUCCESS;
 }
 
 /******************************************************************************

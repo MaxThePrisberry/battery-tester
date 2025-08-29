@@ -44,9 +44,9 @@
 
 #define DTB_COM_PORT            5       // DTB 4848 COM port  
 #define DTB_BAUD_RATE           9600    // DTB baud rate
-#define DTB1_SLAVE_ADDRESS      1       // DTB Device 1 Modbus slave address
-#define DTB2_SLAVE_ADDRESS      2       // DTB Device 2 Modbus slave address
-#define DTB_NUM_DEVICES         1       // Number of DTB devices to initialize
+#define DTB1_SLAVE_ADDRESS      2       // DTB Device 1 Modbus slave address
+#define DTB2_SLAVE_ADDRESS      3       // DTB Device 2 Modbus slave address
+#define DTB_NUM_DEVICES         2       // Number of DTB devices to initialize
 
 #define TNY_COM_PORT            6       // Teensy COM port
 #define TNY_PSB_PIN          0          // Teensy pin for PSB relay

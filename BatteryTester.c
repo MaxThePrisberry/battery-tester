@@ -63,12 +63,6 @@ int main (int argc, char *argv[]) {
     if ((g_mainPanelHandle = LoadPanel (0, "BatteryTester.uir", PANEL)) < 0)
         return -1;
     
-    // Initialize status monitoring BEFORE queue managers
-    Status_Initialize(g_mainPanelHandle);
-	
-	// Initialize controls module
-	Controls_Initialize(g_mainPanelHandle);
-    
 	// Initialize cDAQ module if enabled
 	if (ENABLE_CDAQ) {
 	    LogMessage("Initializing cDAQ module...");
@@ -218,8 +212,12 @@ int main (int argc, char *argv[]) {
 	        LogError("Failed to initialize Teensy queue manager on COM%d", TNY_COM_PORT);
 	    }
 	}
+	
+    // Initialize status and control modules
+    Status_Initialize(g_mainPanelHandle);
+	Controls_Initialize(g_mainPanelHandle);
     
-    // Now start status monitoring (which will use the queue managers)
+    // Start both modules, which will use queue managers
     Status_Start();
     Controls_Start();
 	

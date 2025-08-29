@@ -64,7 +64,6 @@
 // Experiment Limits and Safety
 #define BASELINE_MAX_EXPERIMENT_TIME    72000   // 20 hours maximum experiment time
 #define BASELINE_POWER_LIMIT            30      // 30W power limit
-#define BASELINE_VOLTAGE_SAFETY_MARGIN  0.05    // 50mV safety margin for voltage targets
 
 #define BASELINE_STANDARD_HEADER "Time_s,Voltage_V,Current_A,Power_W,DTB_Temp_C,TC0_Temp_C,TC1_Temp_C"
 #define BASELINE_EXTENDED_HEADER "Time_s,Voltage_V,Current_A,Power_W,Capacity_mAh,DTB_Temp_C,TC0_Temp_C,TC1_Temp_C"
@@ -114,11 +113,13 @@ typedef struct {
 
 // Temperature data point
 typedef struct {
-    double timestamp;            // Time since experiment start (s)
-    double dtbTemperature;       // DTB measured temperature (°C)
-    double tc0Temperature;       // Thermocouple 0 temperature (°C)
-    double tc1Temperature;       // Thermocouple 1 temperature (°C)
-    char status[64];             // Temperature controller status
+    double timestamp;                    // Time since experiment start (s)
+    double dtbTemperatures[DTB_NUM_DEVICES]; // All DTB measured temperatures (°C)
+    double dtbAverageTemperature;        // Average DTB temperature (°C)
+    int dtbDeviceCount;                  // Number of DTB devices that responded
+    double tc0Temperature;               // Thermocouple 0 temperature (°C)
+    double tc1Temperature;               // Thermocouple 1 temperature (°C)
+    char status[128];                    // Temperature controller status
 } TemperatureDataPoint;
 
 // Generic data point for logging
@@ -240,7 +241,6 @@ typedef struct {
     // Device handles and configuration
     PSB_Handle *psbHandle;
     int biologicID;
-    int dtbSlaveAddress;
     
     // Graph plot handles
     int currentPlotHandle;

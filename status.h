@@ -17,6 +17,11 @@
 #define STATUS_UPDATE_PERIOD_MS         (1000 / STATUS_UPDATE_RATE_HZ)  // 1000ms
 #define STATUS_CALLBACK_TIMEOUT_MS      5000 // Timeout for async status callbacks
 
+#define DEVICE_PSB 0
+#define DEVICE_BIOLOGIC 1
+#define DEVICE_DTB_BASE 2
+#define DEVICE_COUNT (DEVICE_DTB_BASE + DTB_NUM_DEVICES)
+
 /******************************************************************************
  * Type Definitions
  ******************************************************************************/

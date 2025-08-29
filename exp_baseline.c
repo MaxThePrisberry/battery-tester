@@ -149,13 +149,13 @@ static void UnifiedProgressCallback(double voltage_V, double current_A, double m
             // Phase 4 includes capacity in the log
             fprintf(ctx->currentPhaseLogFile, "%.3f,%.3f,%.3f,%.3f,%.2f,%.2f,%.2f,%.2f\n",
                     elapsedTime, voltage_V, current_A, voltage_V * fabs(current_A), mAhTransferred,
-                    tempData.dtbTemperature, tempData.tc0Temperature, tempData.tc1Temperature);
+                    tempData.dtbAverageTemperature, tempData.tc0Temperature, tempData.tc1Temperature);
             break;
         default:
             // Phases 1 and 2 use standard format
-            fprintf(ctx->currentPhaseLogFile, "%.3f,%.3f,%.3f,%.3f,%.2f,%.2f,%.2f\n",
-                    elapsedTime, voltage_V, current_A, voltage_V * fabs(current_A),
-                    tempData.dtbTemperature, tempData.tc0Temperature, tempData.tc1Temperature);
+			fprintf(ctx->currentPhaseLogFile, "%.3f,%.3f,%.3f,%.3f,%.2f,%.2f,%.2f\n",
+			        elapsedTime, voltage_V, current_A, voltage_V * fabs(current_A),
+			        tempData.dtbAverageTemperature, tempData.tc0Temperature, tempData.tc1Temperature);
             break;
     }
     
@@ -289,7 +289,6 @@ int CVICALLBACK StartBaselineExperimentCallback(int panel, int control, int even
     g_experimentContext.graph1Handle = PANEL_GRAPH_1;
     g_experimentContext.graph2Handle = PANEL_GRAPH_2;
     g_experimentContext.graphBiologicHandle = PANEL_GRAPH_BIOLOGIC;
-    g_experimentContext.dtbSlaveAddress = DTB1_SLAVE_ADDRESS;
     
     // Read experiment parameters from UI
     GetCtrlVal(panel, BASELINE_NUM_TEMPERATURE, &g_experimentContext.params.targetTemperature);
@@ -672,14 +671,6 @@ static int VerifyAllDevicesAndInitialize(BaselineExperimentContext *ctx) {
                          "Please ensure it is connected before running.");
             return ERR_NOT_CONNECTED;
         }
-        
-        DTB_Handle *dtbHandle = DTB_QueueGetHandle(dtbQueueMgr, ctx->dtbSlaveAddress);
-        if (!dtbHandle || !dtbHandle->isConnected) {
-            MessagePopup("DTB Not Connected", 
-                         "The DTB temperature controller is REQUIRED for baseline experiments.\n"
-                         "Please ensure it is connected before running.");
-            return ERR_NOT_CONNECTED;
-        }
     } else {
         LogMessage("DTB temperature control disabled - experiment will run without temperature control");
     }
@@ -843,7 +834,6 @@ static int SaveExperimentSettings(BaselineExperimentContext *ctx) {
     
     // Device Configuration
     WriteINISection(file, "Device_Configuration");
-    WriteINIValue(file, "Active_DTB_Slave_Address", "%d", ctx->dtbSlaveAddress);
     WriteINIValue(file, "BioLogic_Device_ID", "%d", ctx->biologicID);
     WriteINIValue(file, "TNY_PSB_PIN", "%d", TNY_PSB_PIN);
     WriteINIValue(file, "TNY_BIOLOGIC_PIN", "%d", TNY_BIOLOGIC_PIN);
@@ -856,7 +846,6 @@ static int SaveExperimentSettings(BaselineExperimentContext *ctx) {
     WriteINISection(file, "Safety_Limits");
     WriteINIValue(file, "BASELINE_POWER_LIMIT_W", "%d", BASELINE_POWER_LIMIT);
     WriteINIValue(file, "PSB_BATTERY_POWER_MAX_W", "%d", PSB_BATTERY_POWER_MAX);
-    WriteINIDouble(file, "BASELINE_VOLTAGE_SAFETY_MARGIN_V", BASELINE_VOLTAGE_SAFETY_MARGIN, 3);
     WriteINIValue(file, "BASELINE_MAX_EXPERIMENT_TIME_s", "%d", BASELINE_MAX_EXPERIMENT_TIME);
     WriteINIDouble(file, "BASELINE_SOC_OVERCHARGE_LIMIT_Percent", BASELINE_SOC_OVERCHARGE_LIMIT, 1);
     WriteINIValue(file, "BASELINE_MAX_DYNAMIC_TARGETS", "%d", BASELINE_MAX_DYNAMIC_TARGETS);
@@ -1435,7 +1424,7 @@ static int RunPhase3_EISCharge(BaselineExperimentContext *ctx) {
             
             LogPhaseDataPoint(ctx, "%.3f,%.3f,%.3f,%.3f,%.2f,%.2f,%.2f,%.2f", 
                             elapsedTime, status.voltage, status.current, status.power, ctx->currentSOC,
-                            tempData.dtbTemperature, tempData.tc0Temperature, tempData.tc1Temperature);
+                            tempData.dtbAverageTemperature, tempData.tc0Temperature, tempData.tc1Temperature);
             
             ctx->lastLogTime = currentTime;
         }
@@ -1579,7 +1568,7 @@ static int RunPhase3_EISCharge(BaselineExperimentContext *ctx) {
         for (int i = 0; i < ctx->eisMeasurementCount; i++) {
             BaselineEISMeasurement *m = &ctx->eisMeasurements[i];
             fprintf(ocvFile, "%.2f,%.4f,%.1f,%.2f\n", 
-                    m->actualSOC, m->ocvVoltage, m->timestamp, m->tempData.dtbTemperature);
+                    m->actualSOC, m->ocvVoltage, m->timestamp, m->tempData.dtbAverageTemperature);
         }
         fclose(ocvFile);
         LogMessage("OCV vs SOC data written to: %s", filename);
@@ -1727,14 +1716,14 @@ static int SetupTemperatureControl(BaselineExperimentContext *ctx) {
     LogMessage("Setting up temperature control - target: %.1f °C", ctx->params.targetTemperature);
     
     // Set DTB target temperature
-    result = DTB_SetSetPointQueued(ctx->dtbSlaveAddress, ctx->params.targetTemperature, DEVICE_PRIORITY_NORMAL);
+    result = DTB_SetSetPointAllQueued(ctx->params.targetTemperature, DEVICE_PRIORITY_NORMAL);
     if (result != DTB_SUCCESS) {
         LogError("Failed to set DTB temperature: %s", DTB_GetErrorString(result));
         return result;
     }
     
     // Start DTB controller
-    result = DTB_SetRunStopQueued(ctx->dtbSlaveAddress, 1, DEVICE_PRIORITY_NORMAL);
+    result = DTB_SetRunStopAllQueued(1, DEVICE_PRIORITY_NORMAL);
     if (result != DTB_SUCCESS) {
         LogError("Failed to start DTB: %s", DTB_GetErrorString(result));
         return result;
@@ -1753,7 +1742,7 @@ static int WaitForTargetTemperature(BaselineExperimentContext *ctx) {
     double startTime = Timer();
     double lastCheckTime = startTime;
     
-    LogMessage("Waiting for DTB to reach target temperature: %.1f °C", ctx->params.targetTemperature);
+    LogMessage("Waiting for ALL DTB devices to reach target temperature: %.1f °C", ctx->params.targetTemperature);
     
     while (1) {
         if (CheckCancellation(ctx)) {
@@ -1764,43 +1753,63 @@ static int WaitForTargetTemperature(BaselineExperimentContext *ctx) {
         
         // Check temperature every interval
         if ((currentTime - lastCheckTime) >= BASELINE_TEMP_CHECK_INTERVAL) {
-            DTB_Status status;
-            int result = DTB_GetStatusQueued(ctx->dtbSlaveAddress, &status, DEVICE_PRIORITY_NORMAL);
+            DTB_Status dtbStatuses[MAX_DTB_DEVICES];
+            int numDevices = 0;
+            int result = DTB_GetStatusAllQueued(dtbStatuses, &numDevices, DEVICE_PRIORITY_NORMAL);
             
             if (result == DTB_SUCCESS) {
-                double tempDiff = fabs(status.processValue - ctx->params.targetTemperature);
+                int devicesInTolerance = 0;
+                double tempSum = 0.0;
+                double maxTempDiff = 0.0;
                 
-                LogMessage("DTB temperature: %.1f °C (target: %.1f °C, diff: %.1f °C)", 
-                          status.processValue, ctx->params.targetTemperature, tempDiff);
+                // Check all devices
+                for (int i = 0; i < numDevices; i++) {
+                    double tempDiff = fabs(dtbStatuses[i].processValue - ctx->params.targetTemperature);
+                    tempSum += dtbStatuses[i].processValue;
+                    
+                    if (tempDiff > maxTempDiff) {
+                        maxTempDiff = tempDiff;
+                    }
+                    
+                    if (tempDiff <= BASELINE_TEMP_TOLERANCE) {
+                        devicesInTolerance++;
+                    }
+                    
+                    LogDebug("DTB %d temperature: %.1f °C (diff: %.1f °C)", 
+                            i + 1, dtbStatuses[i].processValue, tempDiff);
+                }
                 
-                if (tempDiff <= BASELINE_TEMP_TOLERANCE) {
-                    LogMessage("DTB reached target temperature: %.1f °C", status.processValue);
+                double avgTemp = tempSum / numDevices;
+                
+                LogMessage("DTB average temperature: %.1f °C (target: %.1f °C, max diff: %.1f °C, %d/%d in tolerance)", 
+                          avgTemp, ctx->params.targetTemperature, maxTempDiff, devicesInTolerance, numDevices);
+                
+                // ALL devices must be within tolerance
+                if (devicesInTolerance == numDevices) {
+                    LogMessage("ALL DTB devices reached target temperature (avg: %.1f °C)", avgTemp);
                     ctx->dtbReady = 1;
                     ctx->temperatureStabilizationStart = currentTime;
                     return SUCCESS;
                 }
                 
-                // Update status display
+                // Update status display with average temperature
                 char statusMsg[MEDIUM_BUFFER_SIZE];
                 snprintf(statusMsg, sizeof(statusMsg), 
-                         "Waiting for temperature: %.1f/%.1f °C", 
-                         status.processValue, ctx->params.targetTemperature);
+                         "Waiting for temperature: %.1f/%.1f °C (%d/%d ready)", 
+                         avgTemp, ctx->params.targetTemperature, devicesInTolerance, numDevices);
                 SetCtrlVal(ctx->tabPanelHandle, ctx->statusControl, statusMsg);
             } else {
-                LogWarning("Failed to read DTB status: %s", DTB_GetErrorString(result));
+                LogError("Failed to read DTB status from all devices: %s", DTB_GetErrorString(result));
+                return result;  // Fail if ANY device fails
             }
             
             lastCheckTime = currentTime;
         }
         
-        // Check timeout
-        if ((currentTime - startTime) > BASELINE_TEMP_TIMEOUT_SEC) {
-            LogWarning("Temperature wait timeout reached - continuing anyway");
-            MessagePopup("Temperature Timeout", 
-                         "DTB did not reach target temperature within timeout.\n"
-                         "Continuing with experiment anyway.");
-            ctx->dtbReady = 1;
-            return SUCCESS;
+        // Check timeout - increased to 45 minutes due to large thermal mass
+        if ((currentTime - startTime) > 2700) {  // 45 minutes
+            LogError("Temperature wait timeout - not all DTB devices reached target temperature");
+            return ERR_TIMEOUT;
         }
         
         ProcessSystemEvents();
@@ -1828,7 +1837,7 @@ static int StabilizeTemperature(BaselineExperimentContext *ctx) {
     double startTime = ctx->temperatureStabilizationStart;
     double lastCheckTime = startTime;
     
-    LogMessage("Stabilizing temperature for %.0f seconds...", BASELINE_TEMP_STABILIZE_TIME);
+    LogMessage("Stabilizing temperature for %.0f seconds - monitoring ALL DTB devices...", BASELINE_TEMP_STABILIZE_TIME);
     
     while (1) {
         if (CheckCancellation(ctx)) {
@@ -1840,22 +1849,41 @@ static int StabilizeTemperature(BaselineExperimentContext *ctx) {
         
         // Check if stabilization time reached
         if (elapsedTime >= BASELINE_TEMP_STABILIZE_TIME) {
-            LogMessage("Temperature stabilization completed");
+            LogMessage("Temperature stabilization completed for all DTB devices");
             ctx->temperatureStable = 1;
             return SUCCESS;
         }
         
         // Periodic temperature monitoring during stabilization
         if ((currentTime - lastCheckTime) >= BASELINE_TEMP_CHECK_INTERVAL) {
-            DTB_Status status;
-            int result = DTB_GetStatusQueued(ctx->dtbSlaveAddress, &status, DEVICE_PRIORITY_NORMAL);
+            DTB_Status dtbStatuses[MAX_DTB_DEVICES];
+            int numDevices = 0;
+            int result = DTB_GetStatusAllQueued(dtbStatuses, &numDevices, DEVICE_PRIORITY_NORMAL);
             
             if (result == DTB_SUCCESS) {
-                double tempDiff = fabs(status.processValue - ctx->params.targetTemperature);
+                int devicesInTolerance = 0;
+                double tempSum = 0.0;
+                double maxTempDiff = 0.0;
                 
-                if (tempDiff > BASELINE_TEMP_TOLERANCE) {
-                    LogWarning("Temperature drifted during stabilization: %.1f °C (diff: %.1f °C)", 
-                              status.processValue, tempDiff);
+                for (int i = 0; i < numDevices; i++) {
+                    double tempDiff = fabs(dtbStatuses[i].processValue - ctx->params.targetTemperature);
+                    tempSum += dtbStatuses[i].processValue;
+                    
+                    if (tempDiff > maxTempDiff) {
+                        maxTempDiff = tempDiff;
+                    }
+                    
+                    if (tempDiff <= BASELINE_TEMP_TOLERANCE) {
+                        devicesInTolerance++;
+                    }
+                }
+                
+                double avgTemp = tempSum / numDevices;
+                
+                // If ANY device drifted out of tolerance, restart stabilization
+                if (devicesInTolerance < numDevices) {
+                    LogWarning("Temperature drift detected during stabilization: avg %.1f °C, max diff: %.1f °C (%d/%d in tolerance)", 
+                              avgTemp, maxTempDiff, devicesInTolerance, numDevices);
                     // Reset stabilization timer
                     startTime = currentTime;
                     ctx->temperatureStabilizationStart = currentTime;
@@ -1867,8 +1895,11 @@ static int StabilizeTemperature(BaselineExperimentContext *ctx) {
                 double remainingTime = BASELINE_TEMP_STABILIZE_TIME - elapsedTime;
                 snprintf(statusMsg, sizeof(statusMsg), 
                          "Stabilizing temperature: %.1f °C (%.0f sec remaining)", 
-                         status.processValue, remainingTime);
+                         avgTemp, remainingTime);
                 SetCtrlVal(ctx->tabPanelHandle, ctx->statusControl, statusMsg);
+            } else {
+                LogError("Failed to read DTB status during stabilization: %s", DTB_GetErrorString(result));
+                return result;  // Fail if ANY device fails
             }
             
             lastCheckTime = currentTime;
@@ -1953,12 +1984,12 @@ static int SafeDisconnectAllDevices(BaselineExperimentContext *ctx) {
     PSB_SetOutputEnableQueued(0, DEVICE_PRIORITY_NORMAL);
     BIO_StopChannelQueued(ctx->biologicID, 0, DEVICE_PRIORITY_NORMAL);
     if (ENABLE_DTB) {
-        DTB_SetRunStopQueued(ctx->dtbSlaveAddress, 0, DEVICE_PRIORITY_NORMAL);
+        DTB_SetRunStopAllQueued(0, DEVICE_PRIORITY_NORMAL);
     }
     
     // Disconnect all relays
     TNY_SetPinQueued(TNY_PSB_PIN, TNY_STATE_DISCONNECTED, DEVICE_PRIORITY_NORMAL);
-	TNY_SetPinQueued(TNY_BIOLOGIC_PIN, TNY_STATE_DISCONNECTED, DEVICE_PRIORITY_NORMAL);
+    TNY_SetPinQueued(TNY_BIOLOGIC_PIN, TNY_STATE_DISCONNECTED, DEVICE_PRIORITY_NORMAL);
     
     LogMessage("Device disconnect completed");
     return SUCCESS;
@@ -2332,7 +2363,7 @@ static int SaveEISMeasurementData(BaselineExperimentContext *ctx, BaselineEISMea
     WriteINIDouble(file, "Target_SOC_Percent", measurement->targetSOC, 1);
     WriteINIDouble(file, "Actual_SOC_Percent", measurement->actualSOC, 1);
     WriteINIDouble(file, "OCV_Voltage_V", measurement->ocvVoltage, 4);
-    WriteINIDouble(file, "DTB_Temperature_C", measurement->tempData.dtbTemperature, 1);
+    WriteINIDouble(file, "DTB_Temperature_C", measurement->tempData.dtbAverageTemperature, 1);
     WriteINIDouble(file, "TC0_Temperature_C", measurement->tempData.tc0Temperature, 1);
     WriteINIDouble(file, "TC1_Temperature_C", measurement->tempData.tc1Temperature, 1);
     WriteINIValue(file, "Retry_Count", "%d", measurement->retryCount);
@@ -2381,19 +2412,36 @@ static int SaveEISMeasurementData(BaselineExperimentContext *ctx, BaselineEISMea
 
 static int ReadAllTemperatures(BaselineExperimentContext *ctx, TemperatureDataPoint *tempData, double timestamp) {
     tempData->timestamp = timestamp;
+    tempData->dtbDeviceCount = 0;
+    tempData->dtbAverageTemperature = 0.0;
     
-    // Read DTB temperature (if enabled)
+    // Initialize all DTB temperatures to 0
+    for (int i = 0; i < DTB_NUM_DEVICES; i++) {
+        tempData->dtbTemperatures[i] = 0.0;
+    }
+    
+    // Read DTB temperatures (if enabled)
     if (ENABLE_DTB) {
-        DTB_Status dtbStatus;
-        if (DTB_GetStatusQueued(ctx->dtbSlaveAddress, &dtbStatus, DEVICE_PRIORITY_NORMAL) == DTB_SUCCESS) {
-            tempData->dtbTemperature = dtbStatus.processValue;
-            snprintf(tempData->status, sizeof(tempData->status), "DTB: %.1f°C", dtbStatus.processValue);
+        DTB_Status dtbStatuses[MAX_DTB_DEVICES];
+        int numDevices = 0;
+        
+        if (DTB_GetStatusAllQueued(dtbStatuses, &numDevices, DEVICE_PRIORITY_NORMAL) == DTB_SUCCESS) {
+            double tempSum = 0.0;
+            tempData->dtbDeviceCount = numDevices;
+            
+            for (int i = 0; i < numDevices && i < DTB_NUM_DEVICES; i++) {
+                tempData->dtbTemperatures[i] = dtbStatuses[i].processValue;
+                tempSum += dtbStatuses[i].processValue;
+            }
+            
+            tempData->dtbAverageTemperature = tempSum / numDevices;
+            
+            snprintf(tempData->status, sizeof(tempData->status), 
+                     "DTB Avg: %.1f°C (%d devices)", tempData->dtbAverageTemperature, numDevices);
         } else {
-            tempData->dtbTemperature = 0.0;
-            strcpy(tempData->status, "DTB: Error");
+            strcpy(tempData->status, "DTB: Error reading devices");
         }
     } else {
-        tempData->dtbTemperature = 0.0;
         strcpy(tempData->status, "DTB: Disabled");
     }
     

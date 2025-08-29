@@ -318,6 +318,8 @@ void DimControlArray(int panel, int arrayID, int dim) {
 			// DTB controls
 			SetCtrlAttribute(panel, PANEL_NUM_DTB_1_SETPOINT, ATTR_DIMMED, dim);
 			SetCtrlAttribute(panel, PANEL_BTN_DTB_1_RUN_STOP, ATTR_DIMMED, dim);
+			SetCtrlAttribute(panel, PANEL_NUM_DTB_2_SETPOINT, ATTR_DIMMED, dim);
+			SetCtrlAttribute(panel, PANEL_BTN_DTB_2_RUN_STOP, ATTR_DIMMED, dim);
 			break;
             
         default:

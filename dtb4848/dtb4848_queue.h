@@ -141,6 +141,21 @@ typedef struct {
     } data;
 } DTBCommandResult;
 
+typedef struct {
+    DTB_Handle handles[MAX_DTB_DEVICES];
+    int slaveAddresses[MAX_DTB_DEVICES];
+    int numDevices;
+    int comPort;
+    int baudRate;
+} DTBDeviceContext;
+
+typedef struct {
+    int comPort;
+    int baudRate;
+    int *slaveAddresses;
+    int numSlaves;
+} DTBConnectionParams;
+
 /******************************************************************************
  * Queue Manager Functions
  ******************************************************************************/
@@ -284,6 +299,15 @@ int DTB_EnableWriteAccessAllQueued(DevicePriority priority);
  * @return DTB_SUCCESS if all devices succeeded, error code of first failure otherwise
  */
 int DTB_SetSetPointAllQueued(double temperature, DevicePriority priority);
+
+/**
+ * Get status from all DTB devices
+ * @param statuses - Array to receive status from each device (must have space for MAX_DTB_DEVICES)
+ * @param numDevices - Pointer to receive the actual number of devices
+ * @param priority - Command priority
+ * @return DTB_SUCCESS if ALL devices responded successfully, error code otherwise
+ */
+int DTB_GetStatusAllQueued(DTB_Status *statuses, int *numDevices, DevicePriority priority);
 
 /******************************************************************************
  * Async Command Functions

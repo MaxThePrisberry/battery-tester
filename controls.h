@@ -47,11 +47,18 @@ int CVICALLBACK RemoteModeToggle(int panel, int control, int event,
                                  void *callbackData, int eventData1, int eventData2);
 
 /**
- * DTB Run/Stop Button Callback
- * Handles starting/stopping temperature control
+ * DTB1 Run/Stop Button Callback
+ * Handles starting/stopping temperature control for DTB device 0
  */
-int CVICALLBACK DTBRunStopCallback(int panel, int control, int event,
-                                   void *callbackData, int eventData1, int eventData2);
+int CVICALLBACK DTB1RunStopCallback(int panel, int control, int event,
+                                    void *callbackData, int eventData1, int eventData2);
+
+/**
+ * DTB2 Run/Stop Button Callback
+ * Handles starting/stopping temperature control for DTB device 1
+ */
+int CVICALLBACK DTB2RunStopCallback(int panel, int control, int event,
+                                    void *callbackData, int eventData1, int eventData2);
 
 /**
  * Check if remote mode change is pending
@@ -60,10 +67,11 @@ int CVICALLBACK DTBRunStopCallback(int panel, int control, int event,
 int Controls_IsRemoteModeChangePending(void);
 
 /**
- * Check if DTB run state change is pending
+ * Check if DTB run state change is pending for a specific device
+ * @param deviceIndex - DTB device index (0-based)
  * @return 1 if pending, 0 otherwise
  */
-int Controls_IsDTBRunStateChangePending(void);
+int Controls_IsDTBRunStateChangePending(int deviceIndex);
 
 /**
  * Notify controls module of PSB remote mode state
@@ -73,14 +81,22 @@ int Controls_IsDTBRunStateChangePending(void);
 void Controls_NotifyRemoteModeState(int remoteMode);
 
 /**
- * Notify controls module of DTB run state
+ * Notify controls module of DTB run state for a specific device
  * Used for state synchronization
+ * @param deviceIndex - DTB device index (0-based)
  * @param isRunning - Current DTB output enabled state (0 or 1)
  * @param setpoint - Current setpoint value (tracked but not displayed)
  * 
  * Note: The setpoint value is tracked internally but NOT written to the 
  *       setpoint control to avoid overwriting user edits
  */
-void Controls_NotifyDTBRunState(int isRunning, double setpoint);
+void Controls_NotifyDTBRunState(int deviceIndex, int isRunning, double setpoint);
+
+/**
+ * Test Teensy Callback
+ * Handles Teensy pin 13 toggle for testing
+ */
+int CVICALLBACK TestTeensyCallback(int panel, int control, int event,
+                                   void *callbackData, int eventData1, int eventData2);
 
 #endif // CONTROLS_H

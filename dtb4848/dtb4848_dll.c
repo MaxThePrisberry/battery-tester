@@ -313,21 +313,6 @@ int DTB_Initialize(DTB_Handle *handle, int comPort, int slaveAddress, int baudRa
     return DTB_SUCCESS;
 }
 
-int DTB_Close(DTB_Handle *handle) {
-    if (!handle || !handle->isConnected) return DTB_ERROR_NOT_CONNECTED;
-    
-    LogMessageEx(LOG_DEVICE_DTB, "Closing connection on COM%d", handle->comPort);
-    
-    // Stop any active operations
-    DTB_SetRunStop(handle, 0);
-    
-    CloseCom(handle->comPort);
-    handle->isConnected = 0;
-    handle->state = DEVICE_STATE_DISCONNECTED;
-    
-    return DTB_SUCCESS;
-}
-
 int DTB_TestConnection(DTB_Handle *handle) {
     if (!handle || !handle->isConnected) return DTB_ERROR_NOT_CONNECTED;
     
