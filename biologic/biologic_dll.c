@@ -1699,7 +1699,7 @@ int BIO_ProcessTechniqueData(BIO_RawDataBuffer *rawData, int techniqueID, int pr
                     
                     // Calculate Re(Z) and Im(Z) from magnitude and phase
                     double magnitude = converted->data[1][i] / converted->data[2][i];  // |Ewe|/|I|
-                    double phase_rad = converted->data[3][i] * M_PI / 180.0;
+                    double phase_rad = converted->data[3][i]; // * M_PI / 180.0; test without the phase correction
                     converted->data[4][i] = magnitude * cos(phase_rad);  // Re(Z)
                     converted->data[5][i] = magnitude * sin(phase_rad);  // Im(Z)
                     
@@ -1798,7 +1798,7 @@ int BIO_ProcessTechniqueData(BIO_RawDataBuffer *rawData, int techniqueID, int pr
                     
                     // Calculate Re(Z) and Im(Z)
                     double magnitude = converted->data[1][i] / converted->data[2][i];
-                    double phase_rad = converted->data[3][i] * M_PI / 180.0;
+                    double phase_rad = converted->data[3][i]; // * M_PI / 180.0; test without phase correction from degree to radian
                     converted->data[4][i] = magnitude * cos(phase_rad);
                     converted->data[5][i] = magnitude * sin(phase_rad);
                     

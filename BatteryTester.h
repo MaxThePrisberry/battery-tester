@@ -61,8 +61,8 @@
 #define  PANEL_NUM_DTB_1_TEMPERATURE      46      /* control type: scale, callback function: (none) */
 #define  PANEL_TOGGLE_TEENSY              47      /* control type: binary, callback function: TestTeensyCallback */
 #define  PANEL_STR_CMD_PROMPT_INPUT       48      /* control type: string, callback function: CmdPromptInputCallback */
-#define  PANEL_NUM_TC1                    49      /* control type: numeric, callback function: (none) */
-#define  PANEL_NUM_TC0                    50      /* control type: numeric, callback function: (none) */
+#define  PANEL_NUM_TC0                    49      /* control type: numeric, callback function: (none) */
+#define  PANEL_NUM_TC1                    50      /* control type: numeric, callback function: (none) */
 #define  PANEL_DEC_TMPCTRL                51      /* control type: deco, callback function: (none) */
 #define  PANEL_DEC_BIO_GRAPH              52      /* control type: deco, callback function: (none) */
 #define  PANEL_DEC_CMDPROMPT              53      /* control type: deco, callback function: (none) */
@@ -85,6 +85,10 @@
 #define  CDC_BTN_CHARGE                   3       /* control type: command, callback function: CDCChargeCallback */
 #define  CDC_NUM_CURRENT_THRESHOLD        4       /* control type: numeric, callback function: (none) */
 #define  CDC_NUM_INTERVAL                 5       /* control type: numeric, callback function: (none) */
+
+     /* tab page panel controls */
+#define  BTN_SINGLE_EIS         		  2       /* control type: command, callback function: StartSingleEISCallback */
+#define  STR_SINGLE_EIS_STATUS			  3       /* control type: string, callback function: (none) */
 
 
      /* Control Arrays: */
@@ -113,6 +117,7 @@ int  CVICALLBACK DTB2RunStopCallback(int panel, int control, int event, void *ca
 int  CVICALLBACK PanelCallback(int panel, int event, void *callbackData, int eventData1, int eventData2);
 int  CVICALLBACK RemoteModeToggle(int panel, int control, int event, void *callbackData, int eventData1, int eventData2);
 int  CVICALLBACK StartBaselineExperimentCallback(int panel, int control, int event, void *callbackData, int eventData1, int eventData2);
+int  CVICALLBACK StartSingleEISCallback(int panel, int control, int event, void *callbackData, int eventData1, int eventData2);
 int  CVICALLBACK TestBiologicCallback(int panel, int control, int event, void *callbackData, int eventData1, int eventData2);
 int  CVICALLBACK TestDeviceQueueCallback(int panel, int control, int event, void *callbackData, int eventData1, int eventData2);
 int  CVICALLBACK TestPSBCallback(int panel, int control, int event, void *callbackData, int eventData1, int eventData2);

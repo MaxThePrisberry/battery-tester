@@ -13,6 +13,7 @@
 #include "teensy_queue.h"
 #include "cdaq_utils.h"
 #include "exp_baseline.h"
+#include "exp_single_eis.h"
 #include "exp_cdc.h"
 #include "logging.h"
 #include "status.h"
@@ -278,6 +279,16 @@ int CVICALLBACK PanelCallback(int panel, int event, void *callbackData,
 			    Delay(0.5);
 			}
 			
+			// Check if Single EIS measurement is running and abort it
+			if (SingleEIS_IsRunning()) {
+    			LogMessage("Aborting running Single EIS measurement...");
+    			SingleEIS_Abort();
+    
+    			// Give it a moment to clean up properly
+    			ProcessSystemEvents();
+    			Delay(0.5);
+			}
+			
 			// Check if Baseline test is running and abort it
 			if (BaselineExperiment_IsRunning()) {
 			    LogMessage("Aborting running Baseline test...");
@@ -356,6 +367,10 @@ int CVICALLBACK PanelCallback(int panel, int event, void *callbackData,
 			// Clean up Baseline test module
 			LogMessage("Cleaning up Baseline experiment module...");
 			BaselineExperiment_Cleanup();
+			
+			// Clean up Single EIS module
+			LogMessage("Cleaning up Single EIS module...");
+			SingleEIS_Cleanup();
             
 			LogMessage("Cleaning up controls module...");
 			Controls_Cleanup();

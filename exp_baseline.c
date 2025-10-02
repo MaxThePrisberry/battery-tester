@@ -1427,7 +1427,7 @@ static int RunPhase3_EISCharge(BaselineExperimentContext *ctx) {
             TemperatureDataPoint tempData;
             ReadAllTemperatures(ctx, &tempData, elapsedTime);
             
-            LogPhaseDataPoint(ctx, "%.3f,%.3f,%.3f,%.3f,%.2f,%.2f,%.2f,%.2f", 
+            LogPhaseDataPoint(ctx, "%.6e,%.6e,%.6e,%.6e,%.6e,%.6e,%.6e,%.6e", 
                             elapsedTime, status.voltage, status.current, status.power, ctx->currentSOC,
                             tempData.dtbAverageTemperature, tempData.tc0Temperature, tempData.tc1Temperature);
             
@@ -1572,7 +1572,7 @@ static int RunPhase3_EISCharge(BaselineExperimentContext *ctx) {
         fprintf(ocvFile, "SOC_Percent,OCV_V,Timestamp_s,Temperature_C\n");
         for (int i = 0; i < ctx->eisMeasurementCount; i++) {
             BaselineEISMeasurement *m = &ctx->eisMeasurements[i];
-            fprintf(ocvFile, "%.2f,%.4f,%.1f,%.2f\n", 
+            fprintf(ocvFile, "%.2e,%.4e,%.1e,%.2e\n", 
                     m->actualSOC, m->ocvVoltage, m->timestamp, m->tempData.dtbAverageTemperature);
         }
         fclose(ocvFile);
@@ -2394,7 +2394,7 @@ static int SaveEISMeasurementData(BaselineExperimentContext *ctx, BaselineEISMea
                                   measurement->zImag[i] * measurement->zImag[i]);
             double phase = atan2(measurement->zImag[i], measurement->zReal[i]) * 180.0 / M_PI;
             
-            fprintf(file, "%.1f,%.6f,%.6f,%.6f,%.2f\n",
+            fprintf(file, "%.3e,%.6e,%.6e,%.6e,%.3e\n",
                     measurement->frequencies[i],
                     measurement->zReal[i],
                     measurement->zImag[i],
@@ -2693,7 +2693,7 @@ static int WriteComprehensiveResults(BaselineExperimentContext *ctx) {
         
         fprintf(file, "OCV_Values=");
         for (int i = 0; i < ctx->eisMeasurementCount; i++) {
-            fprintf(file, "%.3f", ctx->eisMeasurements[i].ocvVoltage);
+            fprintf(file, "%.6e", ctx->eisMeasurements[i].ocvVoltage);
             if (i < ctx->eisMeasurementCount - 1) fprintf(file, ",");
         }
         fprintf(file, "\n");
