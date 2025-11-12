@@ -427,6 +427,7 @@ static int BioLogicCommandManager(CommandContext *ctx) {
 			GEIS_AVERAGE_N,      // average_N
 			GEIS_CORRECTION,     // correction
 			GEIS_WAIT_FOR_STEADY,// wait_for_steady
+			GEIS_I_RANGE,        // i_range (current range)
 			&result,
 			GEIS_TIMEOUT_MS,     // timeout (ms)
 			NULL,                // no progress callback
