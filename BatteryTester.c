@@ -119,10 +119,10 @@ int main (int argc, char *argv[]) {
 	        BIO_Abstract_SetQueueManagers(g_bioQueueMgr, NULL);
 
 	        // Log which mode is active
-	        BIO_ConnectionMode mode = BIO_GetConnectionMode();
+	        BIO_ControlMode mode = BIO_GetConnectionMode();
 	        if (mode == BIO_MODE_DIRECT_DLL) {
 	            LogMessage("Bio-Logic: Direct DLL mode active");
-	        } else if (mode == BIO_MODE_ECLAB) {
+	        } else if (mode == BIO_MODE_ECLAB_OLECOM) {
 	            LogMessage("Bio-Logic: EC-Lab OLE COM mode active");
 	        }
 	    }
