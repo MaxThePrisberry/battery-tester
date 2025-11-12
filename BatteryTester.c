@@ -354,9 +354,15 @@ int CVICALLBACK PanelCallback(int panel, int event, void *callbackData,
 			    PSB_QueueShutdown(tempMgr);  // Then shutdown
 			}
 
-			// Shutdown BioLogic queue manager
+			// Shutdown BioLogic abstraction layer
+			if (BIO_IsAbstractInitialized()) {
+			    LogMessage("Shutting down BioLogic abstraction layer...");
+			    BIO_ShutdownAbstract();
+			}
+
+			// Clean up the redundant queue manager (created before abstraction layer)
 			if (g_bioQueueMgr) {
-			    LogMessage("Shutting down BioLogic queue manager...");
+			    LogMessage("Cleaning up BioLogic queue manager...");
 			    BioQueueManager *tempMgr = g_bioQueueMgr;
 			    g_bioQueueMgr = NULL;  // Clear global pointer FIRST
 			    BIO_SetGlobalQueueManager(NULL);  // Clear global reference

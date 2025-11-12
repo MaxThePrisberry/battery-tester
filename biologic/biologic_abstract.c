@@ -16,6 +16,8 @@
 
 static BIO_Config g_abstractConfig = {0};
 static bool g_abstractInitialized = false;
+static bool g_abstractOwnsQueueMgr = false;   // Track if we created the queue manager
+static bool g_abstractOwnsConnection = false;  // Track if we made the device connection
 
 /******************************************************************************
  * Initialization and Shutdown
@@ -39,31 +41,68 @@ int BIO_InitializeAbstract(const BIO_Config *config) {
             LogMessageEx(LOG_DEVICE_BIO, "Initializing Direct DLL mode");
             LogMessageEx(LOG_DEVICE_BIO, "  Device address: %s", config->dll.deviceAddress);
 
-            // Initialize queue manager
-            g_abstractConfig.dll.queueMgr = BIO_QueueInit(config->dll.deviceAddress);
-            if (!g_abstractConfig.dll.queueMgr) {
-                LogErrorEx(LOG_DEVICE_BIO, "Failed to initialize queue manager");
-                return ERR_NOT_INITIALIZED;
+            // Use provided queue manager if available, otherwise create new one
+            if (config->dll.queueMgr) {
+                LogMessageEx(LOG_DEVICE_BIO, "Using provided queue manager");
+                g_abstractConfig.dll.queueMgr = config->dll.queueMgr;
+                g_abstractOwnsQueueMgr = false;  // External queue manager
+
+                // Check if device is already connected
+                if (config->dll.deviceID > 0) {
+                    LogMessageEx(LOG_DEVICE_BIO, "Device already connected (ID: %d)", config->dll.deviceID);
+                    g_abstractConfig.dll.deviceID = config->dll.deviceID;
+                    g_abstractOwnsConnection = false;  // External connection
+                } else {
+                    // Need to connect to device
+                    LogMessageEx(LOG_DEVICE_BIO, "Connecting to device...");
+                    TDeviceInfos_t deviceInfo;
+                    result = BIO_ConnectQueued(config->dll.deviceAddress,
+                                               config->dll.timeout,
+                                               &g_abstractConfig.dll.deviceID,
+                                               &deviceInfo,
+                                               DEVICE_PRIORITY_HIGH);
+
+                    if (result != SUCCESS) {
+                        LogErrorEx(LOG_DEVICE_BIO, "Failed to connect to device: %s",
+                                  BIO_GetErrorString(result));
+                        return result;
+                    }
+
+                    LogMessageEx(LOG_DEVICE_BIO, "Connected to device ID: %d",
+                                g_abstractConfig.dll.deviceID);
+                    g_abstractOwnsConnection = true;  // We made the connection
+                }
+            } else {
+                // Initialize queue manager
+                LogMessageEx(LOG_DEVICE_BIO, "Creating new queue manager");
+                g_abstractConfig.dll.queueMgr = BIO_QueueInit(config->dll.deviceAddress);
+                if (!g_abstractConfig.dll.queueMgr) {
+                    LogErrorEx(LOG_DEVICE_BIO, "Failed to initialize queue manager");
+                    return ERR_NOT_INITIALIZED;
+                }
+                g_abstractOwnsQueueMgr = true;  // We created it, we own it
+
+                // Connect to device
+                TDeviceInfos_t deviceInfo;
+                result = BIO_ConnectQueued(config->dll.deviceAddress,
+                                           config->dll.timeout,
+                                           &g_abstractConfig.dll.deviceID,
+                                           &deviceInfo,
+                                           DEVICE_PRIORITY_HIGH);
+
+                if (result != SUCCESS) {
+                    LogErrorEx(LOG_DEVICE_BIO, "Failed to connect to device: %s",
+                              BIO_GetErrorString(result));
+                    BIO_QueueShutdown(g_abstractConfig.dll.queueMgr);
+                    g_abstractConfig.dll.queueMgr = NULL;
+                    g_abstractOwnsQueueMgr = false;
+                    return result;
+                }
+
+                LogMessageEx(LOG_DEVICE_BIO, "Connected to device ID: %d",
+                            g_abstractConfig.dll.deviceID);
+                g_abstractOwnsConnection = true;  // We made the connection
             }
-
-            // Connect to device
-            TDeviceInfos_t deviceInfo;
-            result = BIO_ConnectQueued(config->dll.deviceAddress,
-                                       config->dll.timeout,
-                                       &g_abstractConfig.dll.deviceID,
-                                       &deviceInfo,
-                                       DEVICE_PRIORITY_HIGH);
-
-            if (result != SUCCESS) {
-                LogErrorEx(LOG_DEVICE_BIO, "Failed to connect to device: %s",
-                          BIO_GetErrorString(result));
-                BIO_QueueShutdown(g_abstractConfig.dll.queueMgr);
-                g_abstractConfig.dll.queueMgr = NULL;
-                return result;
-            }
-
-            LogMessageEx(LOG_DEVICE_BIO, "Connected to device ID: %d",
-                        g_abstractConfig.dll.deviceID);
             break;
 
         case BIO_MODE_ECLAB_OLECOM:
@@ -107,11 +146,20 @@ void BIO_ShutdownAbstract(void) {
 
     switch (g_abstractConfig.mode) {
         case BIO_MODE_DIRECT_DLL:
-            if (g_abstractConfig.dll.deviceID > 0) {
+            // Disconnect if we made the connection
+            if (g_abstractOwnsConnection && g_abstractConfig.dll.deviceID > 0) {
+                LogMessageEx(LOG_DEVICE_BIO, "Disconnecting device (ID: %d)", g_abstractConfig.dll.deviceID);
                 BIO_DisconnectQueued(g_abstractConfig.dll.deviceID, DEVICE_PRIORITY_HIGH);
             }
-            if (g_abstractConfig.dll.queueMgr) {
+
+            // Shutdown queue manager only if we created it
+            if (g_abstractOwnsQueueMgr && g_abstractConfig.dll.queueMgr) {
+                LogMessageEx(LOG_DEVICE_BIO, "Shutting down queue manager");
                 BIO_QueueShutdown(g_abstractConfig.dll.queueMgr);
+                g_abstractConfig.dll.queueMgr = NULL;
+            } else if (g_abstractConfig.dll.queueMgr) {
+                // External queue manager - just clear our reference
+                LogMessageEx(LOG_DEVICE_BIO, "External queue manager - clearing reference only");
                 g_abstractConfig.dll.queueMgr = NULL;
             }
             break;
@@ -123,6 +171,8 @@ void BIO_ShutdownAbstract(void) {
 
     memset(&g_abstractConfig, 0, sizeof(g_abstractConfig));
     g_abstractInitialized = false;
+    g_abstractOwnsQueueMgr = false;
+    g_abstractOwnsConnection = false;
 
     LogMessageEx(LOG_DEVICE_BIO, "BioLogic abstraction layer shutdown complete");
 }
