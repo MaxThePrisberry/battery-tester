@@ -116,11 +116,24 @@
 // Common Type Definitions
 //==============================================================================
 
-// Boolean type for old C standards
+// Boolean type - use C99 standard if available
 #ifndef __cplusplus
-    typedef int bool;
-    #define true    1
-    #define false   0
+    #ifdef __STDC_VERSION__
+        #if __STDC_VERSION__ >= 199901L
+            // C99 or later - use standard stdbool.h
+            #include <stdbool.h>
+        #else
+            // Pre-C99 - use custom bool typedef
+            typedef int bool;
+            #define true    1
+            #define false   0
+        #endif
+    #else
+        // __STDC_VERSION__ not defined - assume pre-C99
+        typedef int bool;
+        #define true    1
+        #define false   0
+    #endif
 #endif
 
 // Device connection states
