@@ -1,0 +1,81 @@
+Build Status (BatteryTester.prj - Debug)
+ battery_utils.c
+ BatteryTester.c - 4 errors
+  119, 1    error: implicit declaration of function 'BIO_Abstract_SetQueueManagers' is invalid in C99. Make sure that you include the function prototype. 
+  122, 1    error: unknown type name 'BIO_ConnectionMode'; did you mean 'BIO_ControlMode'?
+  "biologic_abstract.h"(39,1)    note: 'BIO_ControlMode' declared here
+  122, 1    error: implicit declaration of function 'BIO_GetConnectionMode' is invalid in C99. Make sure that you include the function prototype. 
+      122, 1    note: did you mean 'BIO_TestConnection'?
+  "biologic_dll.h"(174,1)    note: 'BIO_TestConnection' declared here
+  125, 1    error: use of undeclared identifier 'BIO_MODE_ECLAB'
+ biologic_abstract.c - 1 error, 8 warnings
+      10, 1   In file included from c:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\biologic\biologic_abstract.c:10:
+  "biologic_abstract.h"(27,1)   In file included from c:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\biologic\biologic_abstract.h:27:
+  "biologic_dll.h"(9,1)   In file included from c:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\biologic\biologic_dll.h:9:
+  "common.h"(121,1)    error: cannot combine with previous 'int' declaration specifier
+  "stdbool.h"(31,14)    note: expanded from macro 'bool'
+  92, 1    warning: default label in switch which covers all enumeration values 
+  197, 1    warning: default label in switch which covers all enumeration values 
+  264, 1    warning: default label in switch which covers all enumeration values 
+  333, 1    warning: default label in switch which covers all enumeration values 
+  352, 1    warning: default label in switch which covers all enumeration values 
+  377, 1    warning: default label in switch which covers all enumeration values 
+  393, 1    warning: default label in switch which covers all enumeration values 
+  402, 1    warning: default label in switch which covers all enumeration values 
+ biologic_dll.c
+ biologic_eclab.c - 1 error
+      11, 1   In file included from c:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\biologic\biologic_eclab.c:11:
+  "biologic_eclab.h"(26,1)   In file included from c:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\biologic\biologic_eclab.h:26:
+  "biologic_dll.h"(9,1)   In file included from c:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\biologic\biologic_dll.h:9:
+  "common.h"(121,1)    error: cannot combine with previous 'int' declaration specifier
+  "stdbool.h"(31,14)    note: expanded from macro 'bool'
+ biologic_queue.c
+ biologic_test.c
+ cdaq_utils.c
+ cmd_prompt.c
+ common.c
+ controls.c
+ device_queue.c - 4 warnings
+  438, 1    warning: default label in switch which covers all enumeration values 
+  438, 1    warning: will never be executed 
+  1080, 1    warning: default label in switch which covers all enumeration values 
+  1080, 1    warning: will never be executed 
+ device_queue_test.c
+ dtb4848_dll.c
+ dtb4848_queue.c
+ eclab_olecom.c - 1 error
+      15, 1   In file included from c:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\biologic\eclab_olecom.c:15:
+  "eclab_olecom.h"(26,1)   In file included from c:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\biologic\eclab_olecom.h:26:
+  "common.h"(121,1)    error: cannot combine with previous 'int' declaration specifier
+  "stdbool.h"(31,14)    note: expanded from macro 'bool'
+ exp_baseline.c - 19 warnings
+  173, 1    warning: default label in switch which covers all enumeration values 
+  222, 1    warning: default label in switch which covers all enumeration values 
+  222, 1    warning: will never be executed 
+  242, 1    warning: default label in switch which covers all enumeration values 
+  242, 1    warning: will never be executed 
+  515, 1    warning: will never be executed 
+  512, 1    warning: will never be executed 
+  461, 1    warning: will never be executed 
+  669, 1    warning: will never be executed 
+  869, 1    warning: will never be executed 
+  796, 1    warning: will never be executed 
+  1715, 1    warning: will never be executed 
+  1743, 1    warning: will never be executed 
+  1827, 1    warning: will never be executed 
+  2463, 1    warning: will never be executed 
+  2450, 1    warning: will never be executed 
+  2656, 1    warning: will never be executed 
+  2655, 1    warning: will never be executed 
+  2653, 1    warning: will never be executed 
+ exp_cdc.c
+ logging.c
+ psb10000_dll.c
+ psb10000_queue.c
+ psb10000_test.c
+ status.c - 2 warnings
+  975, 1    warning: default label in switch which covers all enumeration values 
+  975, 1    warning: will never be executed 
+ teensy_dll.c
+ teensy_queue.c
+Build failed.
