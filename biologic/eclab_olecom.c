@@ -19,6 +19,13 @@
 #include <tlhelp32.h>
 #include <string.h>
 
+// Link COM libraries automatically
+#ifdef _WIN32
+    #pragma comment(lib, "ole32.lib")
+    #pragma comment(lib, "oleaut32.lib")
+    #pragma comment(lib, "uuid.lib")
+#endif
+
 /******************************************************************************
  * VARIANT Access Macros for LabWindows/CVI
  ******************************************************************************/
