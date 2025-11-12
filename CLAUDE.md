@@ -181,7 +181,87 @@ Always check return values and clean up resources in error paths.
 5. **Resource cleanup in error paths** - check for memory leaks in experiment threads
 6. **Thread-safe logging** - use `LogMessageEx()` not direct text box updates
 
-## Bio-Logic EIS Techniques
+## Bio-Logic Dual-Mode Integration (EC-Lab + DLL)
+
+The Bio-Logic SP-150e supports **dual-mode operation** with compile-time mode switching:
+
+### Mode Selection
+
+Control mode is set in `common.h`:
+```c
+#define BIOLOGIC_CONTROL_MODE  0  // 0 = Direct DLL, 1 = EC-Lab OLE COM
+```
+
+**Switching modes:**
+1. Change `BIOLOGIC_CONTROL_MODE` in `common.h`
+2. Rebuild project (mode is compile-time)
+3. No code changes needed - abstraction layer handles everything!
+
+### Modes Explained
+
+**Direct DLL Mode (0)** - Production/Automation
+- Direct hardware control via ECLib64.dll
+- Maximum performance
+- No GUI dependency
+- Use for: Production experiments, automated testing
+
+**EC-Lab OLE COM Mode (1)** - Development/Debugging
+- Software control via EC-Lab GUI automation
+- Visual monitoring in EC-Lab interface
+- Parameter changes without recompiling (.mps files)
+- Use for: Development, debugging, validation
+
+### Abstraction Layer
+
+All Bio-Logic functionality routes through the abstraction layer (`biologic/biologic_abstract.h/c`):
+
+**Unified API** - Same functions work in both modes:
+```c
+BIO_Abstract_RunOCV(...)   // Auto-routes to DLL or EC-Lab
+BIO_Abstract_RunGEIS(...)  // Based on BIOLOGIC_CONTROL_MODE
+BIO_Abstract_RunPEIS(...)
+```
+
+**Mode detection:**
+```c
+BIO_ControlMode mode = BIO_GetCurrentMode();  // Returns current mode
+const char* name = BIO_GetModeName(mode);     // "Direct DLL" or "EC-Lab OLE COM"
+```
+
+### BIO Command-Line Interface
+
+Quick testing and verification via command prompt:
+
+```
+BIO MODE   - Show current control mode (DLL/EC-Lab)
+BIO TEST   - Test connection to device
+BIO ID     - Get device ID
+BIO OCV    - Run quick 10s OCV measurement
+BIO GEIS   - Run quick GEIS test (10kHz-0.1Hz, 500mA)
+BIO HELP   - Show command help
+```
+
+Commands work in **both DLL and EC-Lab modes** - no changes needed!
+
+### EC-Lab Setup (One-Time)
+
+**Requirements for EC-Lab mode:**
+1. EC-Lab registered as COM server (admin: `EClab.exe /regserver`)
+2. Directories created:
+   - `eclab_settings/` - .mps template files
+   - `eclab_data/` - .mpr output files
+3. .mps template files created (in EC-Lab GUI or copied)
+4. EC-Lab running before launching application
+
+**Configuration in common.h:**
+```c
+#define ECLAB_SETTINGS_DIR    "C:\\Users\\...\\battery-tester\\eclab_settings"
+#define ECLAB_DATA_DIR        "C:\\Users\\...\\battery-tester\\eclab_data"
+#define ECLAB_DEVICE_NUMBER   0    // EC-Lab device index
+#define ECLAB_CHANNEL_NUMBER  0    // EC-Lab channel index
+```
+
+### Bio-Logic Techniques Supported
 
 The Bio-Logic SP-150e supports multiple electrochemical techniques:
 
@@ -194,6 +274,20 @@ Default GEIS parameters in `common.h`:
 - Frequency range: 10 kHz to 0.1 Hz (logarithmic, 31 points)
 - Amplitude: 500 mA
 - 5 decades × 6 points/decade + 1 final point
+
+### Dual-Mode Benefits
+
+**Development workflow:**
+1. Develop in DLL mode (fast, direct)
+2. Debug in EC-Lab mode (visual validation)
+3. Cross-validate results between modes
+4. Deploy in DLL mode (production)
+
+**Key advantages:**
+- Parameter flexibility (.mps files in EC-Lab mode)
+- Visual debugging (watch measurements in EC-Lab GUI)
+- Cross-mode validation (compare DLL vs EC-Lab results)
+- Zero experiment code changes (abstraction layer handles routing)
 
 ## Important Files Reference
 
