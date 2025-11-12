@@ -325,10 +325,12 @@ static int BioLogicCommandManager(CommandContext *ctx) {
 	char message[1024];
 	int error;
 
-	// Skip 4-char prefix "BIO "
-	char *command = my_strdup(&ctx->command[4]);
-	free(ctx->command);
-	ctx->command = command;
+	// Skip leading space (device prefix "BIO" already stripped by DeviceSelect)
+	if (ctx->command[0] == ' ') {
+		char *command = my_strdup(&ctx->command[1]);
+		free(ctx->command);
+		ctx->command = command;
+	}
 
 	// BIO MODE - Show current control mode
 	if (strcmp(ctx->command, "MODE") == 0) {
