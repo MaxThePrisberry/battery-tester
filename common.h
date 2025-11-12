@@ -38,6 +38,10 @@
 #define ENABLE_TNY         1    // Enable Teensy monitoring
 #define ENABLE_CDAQ        1    // Enable cDAQ 9178
 
+// BioLogic device configuration
+#define BIOLOGIC_DEFAULT_ADDRESS        "USB0"
+#define BIOLOGIC_CONNECTION_TIMEOUT     5       // seconds
+
 #define PSB_COM_PORT            3       // PSB 10000 COM port
 #define PSB_TARGET_SERIAL       "2872380001"  // Target PSB serial number
 #define PSB_SLAVE_ADDRESS       1       // PSB Modbus slave address

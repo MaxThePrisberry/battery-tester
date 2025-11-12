@@ -106,49 +106,36 @@ int main (int argc, char *argv[]) {
 	    }
 	}
 
-	// Initialize BioLogic queue manager if BioLogic monitoring is enabled
+	// Initialize BioLogic using abstraction layer
 	if (ENABLE_BIOLOGIC) {
-	    LogMessage("Initializing BioLogic queue manager...");
-	    g_bioQueueMgr = BIO_QueueInit(BIOLOGIC_DEFAULT_ADDRESS);
+	    LogMessage("Initializing BioLogic abstraction layer...");
 
-	    if (g_bioQueueMgr) {
-	        BIO_SetGlobalQueueManager(g_bioQueueMgr);
-	        LogMessage("BioLogic queue manager initialized");
+	    BIO_Config bioConfig = {0};
 
-	        // Initialize EC-Lab abstraction layer
-	        BIO_Config bioConfig;
-	        memset(&bioConfig, 0, sizeof(bioConfig));
+#if BIOLOGIC_CONTROL_MODE == 1
+	    // EC-Lab OLE COM mode
+	    LogMessage("  Mode: EC-Lab OLE COM");
+	    bioConfig.mode = BIO_MODE_ECLAB_OLECOM;
+	    strncpy(bioConfig.eclab.settingsDir, ECLAB_SETTINGS_DIR, MAX_PATH - 1);
+	    strncpy(bioConfig.eclab.dataDir, ECLAB_DATA_DIR, MAX_PATH - 1);
+	    bioConfig.eclab.deviceNumber = ECLAB_DEVICE_NUMBER;
+	    bioConfig.eclab.channelNumber = ECLAB_CHANNEL_NUMBER;
+	    strncpy(bioConfig.eclab.ocvTemplate, ECLAB_OCV_TEMPLATE, MAX_PATH - 1);
+	    strncpy(bioConfig.eclab.peisTemplate, ECLAB_PEIS_TEMPLATE, MAX_PATH - 1);
+	    strncpy(bioConfig.eclab.geisTemplate, ECLAB_GEIS_TEMPLATE, MAX_PATH - 1);
+#else
+	    // Direct DLL mode
+	    LogMessage("  Mode: Direct DLL");
+	    bioConfig.mode = BIO_MODE_DIRECT_DLL;
+	    strncpy(bioConfig.dll.deviceAddress, BIOLOGIC_DEFAULT_ADDRESS, 63);
+	    bioConfig.dll.timeout = BIOLOGIC_CONNECTION_TIMEOUT;
+#endif
 
-	        // Set mode from compile-time configuration
-	        bioConfig.mode = BIOLOGIC_CONTROL_MODE;
-
-	        // Configure Direct DLL mode settings
-	        bioConfig.dll.queueMgr = g_bioQueueMgr;
-	        strcpy(bioConfig.dll.deviceAddress, BIOLOGIC_DEFAULT_ADDRESS);
-	        bioConfig.dll.timeout = 5;
-	        bioConfig.dll.deviceID = -1;  // Will be set after connection
-
-	        // Configure EC-Lab OLE COM mode settings
-	        strcpy(bioConfig.eclab.settingsDir, ECLAB_SETTINGS_DIR);
-	        strcpy(bioConfig.eclab.dataDir, ECLAB_DATA_DIR);
-	        bioConfig.eclab.deviceNumber = ECLAB_DEVICE_NUMBER;
-	        bioConfig.eclab.channelNumber = ECLAB_CHANNEL_NUMBER;
-	        strcpy(bioConfig.eclab.ocvTemplate, ECLAB_OCV_TEMPLATE);
-	        strcpy(bioConfig.eclab.peisTemplate, ECLAB_PEIS_TEMPLATE);
-	        strcpy(bioConfig.eclab.geisTemplate, ECLAB_GEIS_TEMPLATE);
-
-	        // Initialize abstraction layer
-	        int result = BIO_InitializeAbstract(&bioConfig);
-	        if (result == SUCCESS) {
-	            BIO_ControlMode mode = BIO_GetCurrentMode();
-	            if (mode == BIO_MODE_DIRECT_DLL) {
-	                LogMessage("Bio-Logic: Direct DLL mode active");
-	            } else if (mode == BIO_MODE_ECLAB_OLECOM) {
-	                LogMessage("Bio-Logic: EC-Lab OLE COM mode active");
-	            }
-	        } else {
-	            LogError("Failed to initialize Bio-Logic abstraction layer: error %d", result);
-	        }
+	    int result = BIO_InitializeAbstract(&bioConfig);
+	    if (result == SUCCESS) {
+	        LogMessage("BioLogic abstraction layer initialized successfully");
+	    } else {
+	        LogError("Failed to initialize BioLogic: error %d", result);
 	    }
 	}
 
@@ -355,18 +342,10 @@ int CVICALLBACK PanelCallback(int panel, int event, void *callbackData,
 			}
 
 			// Shutdown BioLogic abstraction layer
+			// The abstraction layer owns and manages the queue manager (if in DLL mode)
 			if (BIO_IsAbstractInitialized()) {
 			    LogMessage("Shutting down BioLogic abstraction layer...");
 			    BIO_ShutdownAbstract();
-			}
-
-			// Clean up the redundant queue manager (created before abstraction layer)
-			if (g_bioQueueMgr) {
-			    LogMessage("Cleaning up BioLogic queue manager...");
-			    BioQueueManager *tempMgr = g_bioQueueMgr;
-			    g_bioQueueMgr = NULL;  // Clear global pointer FIRST
-			    BIO_SetGlobalQueueManager(NULL);  // Clear global reference
-			    BIO_QueueShutdown(tempMgr);  // Then shutdown
 			}
 
 			// Shutdown DTB queue manager

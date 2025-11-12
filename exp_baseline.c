@@ -11,6 +11,7 @@
 #include "logging.h"
 #include "status.h"
 #include "battery_utils.h"
+#include "biologic/biologic_abstract.h"
 #include <ansi_c.h>
 #include <analysis.h>
 #include <utility.h>
@@ -306,7 +307,7 @@ int CVICALLBACK StartBaselineExperimentCallback(int panel, int control, int even
         CmtReleaseLock(g_busyLock);
         
         MessagePopup("Invalid Temperature", 
-                     "Target temperature must be between 5°C and 80°C for safety.");
+                     "Target temperature must be between 5ï¿½C and 80ï¿½C for safety.");
         return 0;
     }
     
@@ -428,7 +429,7 @@ static int BaselineExperimentThread(void *functionData) {
     // Show comprehensive confirmation popup
     char tempSection[256] = "";
     if (ENABLE_DTB) {
-        snprintf(tempSection, sizeof(tempSection), "• Target Temperature: %.1f °C\n", ctx->params.targetTemperature);
+        snprintf(tempSection, sizeof(tempSection), "ï¿½ Target Temperature: %.1f ï¿½C\n", ctx->params.targetTemperature);
     }
 
     snprintf(message, sizeof(message),
@@ -436,13 +437,13 @@ static int BaselineExperimentThread(void *functionData) {
         "=============================\n\n"
         "PARAMETERS:\n"
         "%s"
-        "• EIS Interval: %.1f%% SOC\n"
-        "• Charge Voltage: %.2f V\n"
-        "• Discharge Voltage: %.2f V\n"
-        "• Charge Current: %.2f A\n"
-        "• Discharge Current: %.2f A\n"
-        "• Current Threshold: %.3f A\n"
-        "• Log Interval: %d seconds\n\n"
+        "ï¿½ EIS Interval: %.1f%% SOC\n"
+        "ï¿½ Charge Voltage: %.2f V\n"
+        "ï¿½ Discharge Voltage: %.2f V\n"
+        "ï¿½ Charge Current: %.2f A\n"
+        "ï¿½ Discharge Current: %.2f A\n"
+        "ï¿½ Current Threshold: %.3f A\n"
+        "ï¿½ Log Interval: %d seconds\n\n"
         "EXPERIMENT PHASES:\n"
         "1. Discharge battery%s\n"
         "2. Capacity test (charge ? discharge)\n"
@@ -648,9 +649,10 @@ static int VerifyAllDevicesAndInitialize(BaselineExperimentContext *ctx) {
         return ERR_NOT_CONNECTED;
     }
     
-    ctx->biologicID = BIO_QueueGetDeviceID(bioQueueMgr);
+    // Get device ID from abstraction layer
+    ctx->biologicID = BIO_Abstract_GetDeviceID();
     if (ctx->biologicID < 0) {
-        MessagePopup("BioLogic Not Connected", 
+        MessagePopup("BioLogic Not Connected",
                      "The BioLogic potentiostat is not connected.\n"
                      "Please ensure it is connected before running the baseline experiment.");
         return ERR_NOT_CONNECTED;
@@ -1718,7 +1720,7 @@ static int SetupTemperatureControl(BaselineExperimentContext *ctx) {
     
     int result;
     
-    LogMessage("Setting up temperature control - target: %.1f °C", ctx->params.targetTemperature);
+    LogMessage("Setting up temperature control - target: %.1f ï¿½C", ctx->params.targetTemperature);
     
     // Set DTB target temperature
     result = DTB_SetSetPointAllQueued(ctx->params.targetTemperature, DEVICE_PRIORITY_NORMAL);
@@ -1747,7 +1749,7 @@ static int WaitForTargetTemperature(BaselineExperimentContext *ctx) {
     double startTime = Timer();
     double lastCheckTime = startTime;
     
-    LogMessage("Waiting for ALL DTB devices to reach target temperature: %.1f °C", ctx->params.targetTemperature);
+    LogMessage("Waiting for ALL DTB devices to reach target temperature: %.1f ï¿½C", ctx->params.targetTemperature);
     
     while (1) {
         if (CheckCancellation(ctx)) {
@@ -1780,18 +1782,18 @@ static int WaitForTargetTemperature(BaselineExperimentContext *ctx) {
                         devicesInTolerance++;
                     }
                     
-                    LogDebug("DTB %d temperature: %.1f °C (diff: %.1f °C)", 
+                    LogDebug("DTB %d temperature: %.1f ï¿½C (diff: %.1f ï¿½C)", 
                             i + 1, dtbStatuses[i].processValue, tempDiff);
                 }
                 
                 double avgTemp = tempSum / numDevices;
                 
-                LogMessage("DTB average temperature: %.1f °C (target: %.1f °C, max diff: %.1f °C, %d/%d in tolerance)", 
+                LogMessage("DTB average temperature: %.1f ï¿½C (target: %.1f ï¿½C, max diff: %.1f ï¿½C, %d/%d in tolerance)", 
                           avgTemp, ctx->params.targetTemperature, maxTempDiff, devicesInTolerance, numDevices);
                 
                 // ALL devices must be within tolerance
                 if (devicesInTolerance == numDevices) {
-                    LogMessage("ALL DTB devices reached target temperature (avg: %.1f °C)", avgTemp);
+                    LogMessage("ALL DTB devices reached target temperature (avg: %.1f ï¿½C)", avgTemp);
                     ctx->dtbReady = 1;
                     ctx->temperatureStabilizationStart = currentTime;
                     return SUCCESS;
@@ -1800,7 +1802,7 @@ static int WaitForTargetTemperature(BaselineExperimentContext *ctx) {
                 // Update status display with average temperature
                 char statusMsg[MEDIUM_BUFFER_SIZE];
                 snprintf(statusMsg, sizeof(statusMsg), 
-                         "Waiting for temperature: %.1f/%.1f °C (%d/%d ready)", 
+                         "Waiting for temperature: %.1f/%.1f ï¿½C (%d/%d ready)", 
                          avgTemp, ctx->params.targetTemperature, devicesInTolerance, numDevices);
                 SetCtrlVal(ctx->tabPanelHandle, ctx->statusControl, statusMsg);
             } else {
@@ -1887,7 +1889,7 @@ static int StabilizeTemperature(BaselineExperimentContext *ctx) {
                 
                 // If ANY device drifted out of tolerance, restart stabilization
                 if (devicesInTolerance < numDevices) {
-                    LogWarning("Temperature drift detected during stabilization: avg %.1f °C, max diff: %.1f °C (%d/%d in tolerance)", 
+                    LogWarning("Temperature drift detected during stabilization: avg %.1f ï¿½C, max diff: %.1f ï¿½C (%d/%d in tolerance)", 
                               avgTemp, maxTempDiff, devicesInTolerance, numDevices);
                     // Reset stabilization timer
                     startTime = currentTime;
@@ -1899,7 +1901,7 @@ static int StabilizeTemperature(BaselineExperimentContext *ctx) {
                 char statusMsg[MEDIUM_BUFFER_SIZE];
                 double remainingTime = BASELINE_TEMP_STABILIZE_TIME - elapsedTime;
                 snprintf(statusMsg, sizeof(statusMsg), 
-                         "Stabilizing temperature: %.1f °C (%.0f sec remaining)", 
+                         "Stabilizing temperature: %.1f ï¿½C (%.0f sec remaining)", 
                          avgTemp, remainingTime);
                 SetCtrlVal(ctx->tabPanelHandle, ctx->statusControl, statusMsg);
             } else {
@@ -2210,17 +2212,15 @@ static int RunOCVMeasurement(BaselineExperimentContext *ctx, BaselineEISMeasurem
     LogDebug("Starting OCV measurement...");
     
     measurement->ocvVoltage = 0.0;
-    
-    int result = BIO_RunOCVQueued(ctx->biologicID, 0,
+
+    int result = BIO_Abstract_RunOCV(0,  // channel
                                 OCV_DURATION_S,
                                 OCV_SAMPLE_INTERVAL_S,
                                 OCV_RECORD_EVERY_DE,
                                 OCV_RECORD_EVERY_DT,
                                 OCV_E_RANGE,
-                                true,
                                 &measurement->ocvData,
                                 OCV_TIMEOUT_MS,
-                                DEVICE_PRIORITY_NORMAL,
                                 NULL, NULL, &(ctx->cancelRequested));
     
     if (result != SUCCESS) {
@@ -2250,8 +2250,8 @@ static int RunOCVMeasurement(BaselineExperimentContext *ctx, BaselineEISMeasurem
 
 static int RunGEISMeasurement(BaselineExperimentContext *ctx, BaselineEISMeasurement *measurement) {
     LogDebug("Starting GEIS measurement...");
-    
-    int result = BIO_RunGEISQueued(ctx->biologicID, 0,
+
+    int result = BIO_Abstract_RunGEIS(0,  // channel
                                  GEIS_VS_INITIAL,
                                  GEIS_INITIAL_CURRENT,
                                  GEIS_DURATION_S,
@@ -2266,10 +2266,8 @@ static int RunGEISMeasurement(BaselineExperimentContext *ctx, BaselineEISMeasure
                                  GEIS_CORRECTION,
                                  GEIS_WAIT_FOR_STEADY,
                                  GEIS_I_RANGE,
-                                 true,
                                  &measurement->geisData,
                                  GEIS_TIMEOUT_MS,
-                                 DEVICE_PRIORITY_NORMAL,
                                  NULL, NULL, &(ctx->cancelRequested));
     
     if (result != SUCCESS) {
@@ -2442,7 +2440,7 @@ static int ReadAllTemperatures(BaselineExperimentContext *ctx, TemperatureDataPo
             tempData->dtbAverageTemperature = tempSum / numDevices;
             
             snprintf(tempData->status, sizeof(tempData->status), 
-                     "DTB Avg: %.1f°C (%d devices)", tempData->dtbAverageTemperature, numDevices);
+                     "DTB Avg: %.1fï¿½C (%d devices)", tempData->dtbAverageTemperature, numDevices);
         } else {
             strcpy(tempData->status, "DTB: Error reading devices");
         }
