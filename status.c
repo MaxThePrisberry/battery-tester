@@ -15,6 +15,7 @@
 #include "BatteryTester.h"
 #include "psb10000_queue.h"
 #include "biologic_queue.h"
+#include "biologic/biologic_abstract.h"
 #include "dtb4848_queue.h"
 #include "logging.h"
 #include "controls.h"
@@ -471,13 +472,13 @@ static bool Status_CanSendCommand(int deviceIndex) {
         }
         return false;
     } else if (deviceIndex == DEVICE_BIOLOGIC) {
-        BioQueueManager *mgr = BIO_GetGlobalQueueManager();
-        if (mgr) {
-            BioQueueStats stats;
-            BIO_QueueGetStats(mgr, &stats);
-            return stats.isConnected;
+        // Check via abstraction layer (works in both DLL and EC-Lab modes)
+        if (!BIO_IsAbstractInitialized()) {
+            return false;
         }
-        return false;
+        // Test connection through abstraction layer
+        int result = BIO_Abstract_TestConnection();
+        return (result == SUCCESS);
     } else if (deviceIndex >= DEVICE_DTB_BASE) {
         // All DTB devices share the same queue manager
         DTBQueueManager *mgr = DTB_GetGlobalQueueManager();
@@ -505,30 +506,37 @@ static void PSB_RequestStatusUpdate(void) {
 }
 
 static void BIO_RequestStatusUpdate(void) {
-    // BioLogic has no status functions, so update UI based on queue connection state
+    // BioLogic status update using abstraction layer (works in both DLL and EC-Lab modes)
     g_status.devices[DEVICE_BIOLOGIC].pendingCall = false;
-    
-    BioQueueManager *mgr = BIO_GetGlobalQueueManager();
-    if (mgr) {
-        BioQueueStats stats;
-        BIO_QueueGetStats(mgr, &stats);
-        
-        if (stats.isConnected) {
-            g_status.devices[DEVICE_BIOLOGIC].lastState = CONN_STATE_CONNECTED;
-            UpdateDeviceLED(DEVICE_BIOLOGIC, CONN_STATE_CONNECTED);
-            UpdateDeviceStatus(DEVICE_BIOLOGIC, "BioLogic Connected");
-            LogDebugEx(LOG_DEVICE_BIO, "BioLogic queue connected");
+
+    // Check if abstraction layer is initialized
+    if (!BIO_IsAbstractInitialized()) {
+        g_status.devices[DEVICE_BIOLOGIC].lastState = CONN_STATE_ERROR;
+        UpdateDeviceLED(DEVICE_BIOLOGIC, CONN_STATE_ERROR);
+        UpdateDeviceStatus(DEVICE_BIOLOGIC, "BioLogic Not Initialized");
+        LogDebugEx(LOG_DEVICE_BIO, "BioLogic abstraction layer not initialized");
+        return;
+    }
+
+    // Test connection through abstraction layer
+    int result = BIO_Abstract_TestConnection();
+    if (result == SUCCESS) {
+        g_status.devices[DEVICE_BIOLOGIC].lastState = CONN_STATE_CONNECTED;
+        UpdateDeviceLED(DEVICE_BIOLOGIC, CONN_STATE_CONNECTED);
+
+        // Show mode-specific status
+        BIO_ControlMode mode = BIO_GetCurrentMode();
+        if (mode == BIO_MODE_ECLAB_OLECOM) {
+            UpdateDeviceStatus(DEVICE_BIOLOGIC, "BioLogic Connected (EC-Lab)");
         } else {
-            g_status.devices[DEVICE_BIOLOGIC].lastState = CONN_STATE_ERROR;
-            UpdateDeviceLED(DEVICE_BIOLOGIC, CONN_STATE_ERROR);
-            UpdateDeviceStatus(DEVICE_BIOLOGIC, "BioLogic Not Connected");
-            LogDebugEx(LOG_DEVICE_BIO, "BioLogic queue disconnected");
+            UpdateDeviceStatus(DEVICE_BIOLOGIC, "BioLogic Connected (DLL)");
         }
+        LogDebugEx(LOG_DEVICE_BIO, "BioLogic connected via %s", BIO_GetModeName(mode));
     } else {
         g_status.devices[DEVICE_BIOLOGIC].lastState = CONN_STATE_ERROR;
         UpdateDeviceLED(DEVICE_BIOLOGIC, CONN_STATE_ERROR);
-        UpdateDeviceStatus(DEVICE_BIOLOGIC, "BioLogic Queue Error");
-        LogErrorEx(LOG_DEVICE_BIO, "BioLogic queue manager not available");
+        UpdateDeviceStatus(DEVICE_BIOLOGIC, "BioLogic Connection Error");
+        LogDebugEx(LOG_DEVICE_BIO, "BioLogic connection test failed: %s", GetErrorString(result));
     }
 }
 
@@ -680,7 +688,7 @@ static void DTBStatusCallback(CommandID cmdId, DTBCommandType type,
         const char* statusMsg = status->outputEnabled ? "DTB Running" : "DTB Connected - Stopped";
         UpdateDeviceStatus(deviceIndex, statusMsg);
         
-        LogDebugEx(LOG_DEVICE_DTB, "DTB slave %d status updated: Temp=%.1f°C, Output=%s",
+        LogDebugEx(LOG_DEVICE_DTB, "DTB slave %d status updated: Temp=%.1fï¿½C, Output=%s",
                   slaveAddress, status->processValue, status->outputEnabled ? "ON" : "OFF");
     } else {
         LogErrorEx(LOG_DEVICE_DTB, "Failed to get DTB slave %d status: %s",
