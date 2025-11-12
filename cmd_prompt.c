@@ -326,7 +326,7 @@ static int BioLogicCommandManager(CommandContext *ctx) {
 	int error;
 
 	// Skip 4-char prefix "BIO "
-	char *command = ctx->command + 4;
+	char *command = my_strdup(&ctx->command[4]);
 	free(ctx->command);
 	ctx->command = command;
 
