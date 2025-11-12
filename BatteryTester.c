@@ -6,8 +6,9 @@
  ******************************************************************************/
 
 #include "common.h"
-#include "BatteryTester.h"  
+#include "BatteryTester.h"
 #include "biologic_queue.h"
+#include "biologic_abstract.h"
 #include "psb10000_queue.h"
 #include "dtb4848_queue.h"
 #include "teensy_queue.h"
@@ -109,10 +110,21 @@ int main (int argc, char *argv[]) {
 	if (ENABLE_BIOLOGIC) {
 	    LogMessage("Initializing BioLogic queue manager...");
 	    g_bioQueueMgr = BIO_QueueInit(BIOLOGIC_DEFAULT_ADDRESS);
-	    
+
 	    if (g_bioQueueMgr) {
 	        BIO_SetGlobalQueueManager(g_bioQueueMgr);
 	        LogMessage("BioLogic queue manager initialized");
+
+	        // Initialize EC-Lab abstraction layer
+	        BIO_Abstract_SetQueueManagers(g_bioQueueMgr, NULL);
+
+	        // Log which mode is active
+	        BIO_ConnectionMode mode = BIO_GetConnectionMode();
+	        if (mode == BIO_MODE_DIRECT_DLL) {
+	            LogMessage("Bio-Logic: Direct DLL mode active");
+	        } else if (mode == BIO_MODE_ECLAB) {
+	            LogMessage("Bio-Logic: EC-Lab OLE COM mode active");
+	        }
 	    }
 	}
 

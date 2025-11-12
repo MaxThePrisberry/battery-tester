@@ -446,6 +446,58 @@ void DimExperimentControls(int mainPanel, int tabPanel, int dim, int *controls, 
 #endif
 
 //==============================================================================
+// EC-Lab OLE COM Integration Configuration
+//==============================================================================
+
+// BioLogic control mode selection
+// 0 = Direct DLL mode (default, uses ECLib.dll for direct hardware control)
+// 1 = EC-Lab OLE COM mode (uses EC-Lab GUI automation via Windows COM)
+//
+// Switching modes:
+//   1. Change this define
+//   2. Rebuild project (mode is compile-time)
+//   3. No other code changes needed!
+//
+// Recommendation:
+//   - Use DLL mode (0) for production/automated testing
+//   - Use EC-Lab mode (1) for development/debugging/validation
+#define BIOLOGIC_CONTROL_MODE           0
+
+//------------------------------------------------------------------------------
+// EC-Lab OLE COM Mode Settings (used when BIOLOGIC_CONTROL_MODE == 1)
+//------------------------------------------------------------------------------
+
+// Directory paths (customize for your system)
+// Settings directory: Contains .mps template files for each technique
+// Data directory: Where .mpr output files are saved
+//
+// IMPORTANT: Use double backslashes (\\) in Windows paths
+// IMPORTANT: Create these directories before first use
+#define ECLAB_SETTINGS_DIR              "C:\\Users\\nrasm\\Documents\\battery-tester\\eclab_settings"
+#define ECLAB_DATA_DIR                  "C:\\Users\\nrasm\\Documents\\battery-tester\\eclab_data"
+
+// EC-Lab device and channel configuration
+// These indices depend on your EC-Lab configuration
+//   - DEVICE_NUMBER: Usually 0 for first/only device
+//   - CHANNEL_NUMBER: Usually 0 for single-channel devices
+#define ECLAB_DEVICE_NUMBER             0
+#define ECLAB_CHANNEL_NUMBER            0
+
+// EC-Lab executable path
+// Update this if your EC-Lab is installed in a different location
+#define ECLAB_EXECUTABLE_PATH           "C:\\Program Files (x86)\\EC-Lab\\11.63\\EClab.exe"
+
+//------------------------------------------------------------------------------
+// .mps Template Filenames
+//------------------------------------------------------------------------------
+
+// These files must exist in ECLAB_SETTINGS_DIR
+// Create them in EC-Lab: Configure technique → File → Save Settings
+#define ECLAB_OCV_TEMPLATE              "ocv_default.mps"
+#define ECLAB_PEIS_TEMPLATE             "peis_default.mps"
+#define ECLAB_GEIS_TEMPLATE             "geis_default.mps"
+
+//==============================================================================
 // Disable specific warnings for external headers
 //==============================================================================
 
