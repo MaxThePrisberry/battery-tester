@@ -116,14 +116,38 @@ int main (int argc, char *argv[]) {
 	        LogMessage("BioLogic queue manager initialized");
 
 	        // Initialize EC-Lab abstraction layer
-	        BIO_Abstract_SetQueueManagers(g_bioQueueMgr, NULL);
+	        BIO_Config bioConfig;
+	        memset(&bioConfig, 0, sizeof(bioConfig));
 
-	        // Log which mode is active
-	        BIO_ControlMode mode = BIO_GetConnectionMode();
-	        if (mode == BIO_MODE_DIRECT_DLL) {
-	            LogMessage("Bio-Logic: Direct DLL mode active");
-	        } else if (mode == BIO_MODE_ECLAB_OLECOM) {
-	            LogMessage("Bio-Logic: EC-Lab OLE COM mode active");
+	        // Set mode from compile-time configuration
+	        bioConfig.mode = BIOLOGIC_CONTROL_MODE;
+
+	        // Configure Direct DLL mode settings
+	        bioConfig.dll.queueMgr = g_bioQueueMgr;
+	        strcpy(bioConfig.dll.deviceAddress, BIOLOGIC_DEFAULT_ADDRESS);
+	        bioConfig.dll.timeout = 5;
+	        bioConfig.dll.deviceID = -1;  // Will be set after connection
+
+	        // Configure EC-Lab OLE COM mode settings
+	        strcpy(bioConfig.eclab.settingsDir, ECLAB_SETTINGS_DIR);
+	        strcpy(bioConfig.eclab.dataDir, ECLAB_DATA_DIR);
+	        bioConfig.eclab.deviceNumber = ECLAB_DEVICE_NUMBER;
+	        bioConfig.eclab.channelNumber = ECLAB_CHANNEL_NUMBER;
+	        strcpy(bioConfig.eclab.ocvTemplate, ECLAB_OCV_TEMPLATE);
+	        strcpy(bioConfig.eclab.peisTemplate, ECLAB_PEIS_TEMPLATE);
+	        strcpy(bioConfig.eclab.geisTemplate, ECLAB_GEIS_TEMPLATE);
+
+	        // Initialize abstraction layer
+	        int result = BIO_InitializeAbstract(&bioConfig);
+	        if (result == SUCCESS) {
+	            BIO_ControlMode mode = BIO_GetCurrentMode();
+	            if (mode == BIO_MODE_DIRECT_DLL) {
+	                LogMessage("Bio-Logic: Direct DLL mode active");
+	            } else if (mode == BIO_MODE_ECLAB_OLECOM) {
+	                LogMessage("Bio-Logic: EC-Lab OLE COM mode active");
+	            }
+	        } else {
+	            LogError("Failed to initialize Bio-Logic abstraction layer: error %d", result);
 	        }
 	    }
 	}
