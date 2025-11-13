@@ -49,7 +49,7 @@ Ia                  500.000
 unit  Ia            mA                  
 va pourcent         0.10                
 pw                  0.10                
-Na                  3                   
+Na                  5                   
 corr                0                   
 E range min (V)     -1.000              
 E range max (V)     1.000               

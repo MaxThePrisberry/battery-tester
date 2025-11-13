@@ -476,9 +476,9 @@ void DimExperimentControls(int mainPanel, int tabPanel, int dim, int *controls, 
 //   3. No other code changes needed!
 //
 // Recommendation:
-//   - Use DLL mode (0) for production/automated testing
-//   - Use EC-Lab mode (1) for development/debugging/validation
-#define BIOLOGIC_CONTROL_MODE           0
+//   - Use DLL mode (0)
+//   - Use EC-Lab mode (1)
+#define BIOLOGIC_CONTROL_MODE           1
 
 //------------------------------------------------------------------------------
 // EC-Lab OLE COM Mode Settings (used when BIOLOGIC_CONTROL_MODE == 1)
@@ -490,8 +490,8 @@ void DimExperimentControls(int mainPanel, int tabPanel, int dim, int *controls, 
 //
 // IMPORTANT: Use double backslashes (\\) in Windows paths
 // IMPORTANT: Create these directories before first use
-#define ECLAB_SETTINGS_DIR              "C:\\Users\\nrasm\\Documents\\battery-tester\\eclab_settings"
-#define ECLAB_DATA_DIR                  "C:\\Users\\nrasm\\Documents\\battery-tester\\eclab_data"
+#define ECLAB_SETTINGS_DIR              "C:\\Users\\CV166\\Documents\\LabWindowsCVI\\BatteryApplication\\battery-tester\\eclab_settings"
+#define ECLAB_DATA_DIR                  "C:\\Users\\CV166\\Documents\\LabWindowsCVI\\BatteryApplication\\battery-tester\\eclab_data"
 
 // EC-Lab device and channel configuration
 // These indices depend on your EC-Lab configuration
