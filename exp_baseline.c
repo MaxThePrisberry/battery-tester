@@ -649,12 +649,22 @@ static int VerifyAllDevicesAndInitialize(BaselineExperimentContext *ctx) {
         return ERR_NOT_CONNECTED;
     }
     
-    // Get device ID from abstraction layer
-    ctx->biologicID = BIO_Abstract_GetDeviceID();
-    if (ctx->biologicID < 0) {
+    // Test actual connection through abstraction layer
+    // This properly verifies EC-Lab COM connection in EC-Lab mode
+    int bioTestResult = BIO_Abstract_TestConnection();
+    if (bioTestResult != SUCCESS) {
         MessagePopup("BioLogic Not Connected",
                      "The BioLogic potentiostat is not connected.\n"
                      "Please ensure it is connected before running the baseline experiment.");
+        return ERR_NOT_CONNECTED;
+    }
+
+    // Get device ID from abstraction layer
+    ctx->biologicID = BIO_Abstract_GetDeviceID();
+    if (ctx->biologicID < 0) {
+        MessagePopup("BioLogic Not Initialized",
+                     "The BioLogic potentiostat is not properly initialized.\n"
+                     "Please restart the application.");
         return ERR_NOT_CONNECTED;
     }
     
