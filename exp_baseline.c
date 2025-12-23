@@ -641,32 +641,63 @@ static int VerifyAllDevicesAndInitialize(BaselineExperimentContext *ctx) {
     }
     
     // Check BioLogic connection (REQUIRED)
+    LogMessage("BASELINE: Checking BioLogic connection...");
+
     BioQueueManager *bioQueueMgr = BIO_GetGlobalQueueManager();
+    LogMessageEx(LOG_DEVICE_BIO, "BASELINE: bioQueueMgr = %p", bioQueueMgr);
     if (!bioQueueMgr) {
-        MessagePopup("BioLogic Not Connected", 
-                     "The BioLogic potentiostat is not connected.\n"
-                     "Please ensure it is connected before running the baseline experiment.");
-        return ERR_NOT_CONNECTED;
-    }
-    
-    // Test actual connection through abstraction layer
-    // This properly verifies EC-Lab COM connection in EC-Lab mode
-    int bioTestResult = BIO_Abstract_TestConnection();
-    if (bioTestResult != SUCCESS) {
+        LogError("BASELINE: BioLogic queue manager is NULL");
         MessagePopup("BioLogic Not Connected",
                      "The BioLogic potentiostat is not connected.\n"
                      "Please ensure it is connected before running the baseline experiment.");
         return ERR_NOT_CONNECTED;
     }
 
+    // Check if abstraction layer is initialized
+    int isAbstractInit = BIO_IsAbstractInitialized();
+    LogMessageEx(LOG_DEVICE_BIO, "BASELINE: BIO_IsAbstractInitialized = %d", isAbstractInit);
+    if (!isAbstractInit) {
+        LogError("BASELINE: BioLogic abstraction layer not initialized");
+        MessagePopup("BioLogic Not Initialized",
+                     "The BioLogic abstraction layer is not initialized.\n"
+                     "Please restart the application.");
+        return ERR_NOT_CONNECTED;
+    }
+
+    // Log current mode
+    BIO_ControlMode mode = BIO_GetCurrentMode();
+    const char *modeName = BIO_GetModeName(mode);
+    LogMessageEx(LOG_DEVICE_BIO, "BASELINE: BioLogic mode = %s (%d)", modeName, mode);
+
+    // Test actual connection through abstraction layer
+    // This properly verifies EC-Lab COM connection in EC-Lab mode
+    LogMessage("BASELINE: Testing BioLogic connection...");
+    int bioTestResult = BIO_Abstract_TestConnection();
+    LogMessageEx(LOG_DEVICE_BIO, "BASELINE: BIO_Abstract_TestConnection returned %d (SUCCESS=%d)", bioTestResult, SUCCESS);
+    if (bioTestResult != SUCCESS) {
+        LogErrorEx(LOG_DEVICE_BIO, "BASELINE: BioLogic connection test failed with error %d", bioTestResult);
+        char errorMsg[512];
+        sprintf(errorMsg, "The BioLogic potentiostat connection test failed.\n"
+                         "Error code: %d\n"
+                         "Mode: %s\n"
+                         "Please ensure it is connected before running the baseline experiment.",
+                         bioTestResult, modeName);
+        MessagePopup("BioLogic Not Connected", errorMsg);
+        return ERR_NOT_CONNECTED;
+    }
+
     // Get device ID from abstraction layer
     ctx->biologicID = BIO_Abstract_GetDeviceID();
+    LogMessageEx(LOG_DEVICE_BIO, "BASELINE: BIO_Abstract_GetDeviceID returned %d", ctx->biologicID);
     if (ctx->biologicID < 0) {
+        LogError("BASELINE: BioLogic device ID is invalid");
         MessagePopup("BioLogic Not Initialized",
                      "The BioLogic potentiostat is not properly initialized.\n"
                      "Please restart the application.");
         return ERR_NOT_CONNECTED;
     }
+
+    LogMessageEx(LOG_DEVICE_BIO, "BASELINE: BioLogic connection verified successfully (ID=%d)", ctx->biologicID);
     
     // Check DTB connection (REQUIRED only if ENABLE_DTB is 1)
     if (ENABLE_DTB) {
