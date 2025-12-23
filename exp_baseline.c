@@ -641,19 +641,10 @@ static int VerifyAllDevicesAndInitialize(BaselineExperimentContext *ctx) {
     }
     
     // Check BioLogic connection (REQUIRED)
+    // NOTE: In EC-Lab mode, we don't use the queue manager - only the abstraction layer
     LogMessage("BASELINE: Checking BioLogic connection...");
 
-    BioQueueManager *bioQueueMgr = BIO_GetGlobalQueueManager();
-    LogMessageEx(LOG_DEVICE_BIO, "BASELINE: bioQueueMgr = %p", bioQueueMgr);
-    if (!bioQueueMgr) {
-        LogError("BASELINE: BioLogic queue manager is NULL");
-        MessagePopup("BioLogic Not Connected",
-                     "The BioLogic potentiostat is not connected.\n"
-                     "Please ensure it is connected before running the baseline experiment.");
-        return ERR_NOT_CONNECTED;
-    }
-
-    // Check if abstraction layer is initialized
+    // Check if abstraction layer is initialized (works for both DLL and EC-Lab modes)
     int isAbstractInit = BIO_IsAbstractInitialized();
     LogMessageEx(LOG_DEVICE_BIO, "BASELINE: BIO_IsAbstractInitialized = %d", isAbstractInit);
     if (!isAbstractInit) {
