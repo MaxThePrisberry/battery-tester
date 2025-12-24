@@ -277,4 +277,15 @@ int BIO_ECLAB_TestConnection(void);
  */
 int BIO_ECLAB_StopMeasurement(void);
 
+/**
+ * Reconnect EC-Lab COM interface
+ *
+ * Recreates the EC-Lab COM interface when it becomes invalid (RPC_E_DISCONNECTED).
+ * This is useful for testing the automatic reconnection logic without waiting for
+ * the interface to expire naturally after extended idle periods.
+ *
+ * @return SUCCESS or error code
+ */
+int BIO_ECLAB_Reconnect(void);
+
 #endif // BIOLOGIC_ECLAB_H

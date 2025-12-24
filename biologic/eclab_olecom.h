@@ -267,6 +267,19 @@ int ECLAB_ForceReconnect(ECLabConnection *conn, int deviceNumber);
  */
 int ECLAB_TestConnection(ECLabConnection *conn);
 
+/**
+ * Reconnect COM interface after disconnection
+ *
+ * Recreates the EC-Lab COM interface when it becomes invalid (RPC_E_DISCONNECTED).
+ * This typically happens after extended idle periods or relay switching events.
+ * The function releases the old COM interface, creates a new one, and reconnects
+ * to the device.
+ *
+ * @param conn Connection handle
+ * @return SUCCESS or error code
+ */
+int ECLAB_Reconnect(ECLabConnection *conn);
+
 /******************************************************************************
  * Experiment Control Functions
  *

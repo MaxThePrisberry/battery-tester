@@ -721,3 +721,10 @@ int BIO_ECLAB_StopMeasurement(void) {
 
     return ECLAB_StopChannel(g_config.conn, g_config.deviceNumber, g_config.channelNumber);
 }
+
+int BIO_ECLAB_Reconnect(void) {
+    if (!g_initialized) return ERR_NOT_INITIALIZED;
+    if (!g_config.conn) return ECLAB_ERR_INVALID_CONNECTION;
+
+    return ECLAB_Reconnect(g_config.conn);
+}

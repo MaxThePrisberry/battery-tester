@@ -574,6 +574,68 @@ int ECLAB_TestConnection(ECLabConnection *conn) {
     }
 }
 
+int ECLAB_Reconnect(ECLabConnection *conn) {
+    if (!conn) return ECLAB_ERR_INVALID_CONNECTION;
+
+    LogMessageEx(LOG_DEVICE_BIO, "========================================");
+    LogMessageEx(LOG_DEVICE_BIO, "Reconnecting EC-Lab COM interface");
+    LogMessageEx(LOG_DEVICE_BIO, "========================================");
+    LogMessageEx(LOG_DEVICE_BIO, "This function is called when the COM interface becomes");
+    LogMessageEx(LOG_DEVICE_BIO, "disconnected (RPC_E_DISCONNECTED), typically after extended");
+    LogMessageEx(LOG_DEVICE_BIO, "idle periods or relay switching events.");
+    LogMessageEx(LOG_DEVICE_BIO, "");
+
+    // Save connection parameters
+    int savedDeviceNumber = conn->deviceNumber;
+    char savedWorkingDir[MAX_PATH];
+    strncpy(savedWorkingDir, conn->workingDir, MAX_PATH - 1);
+    savedWorkingDir[MAX_PATH - 1] = '\0';
+
+    // Release old COM interface if it exists
+    if (conn->pInterface) {
+        LogMessageEx(LOG_DEVICE_BIO, "Releasing old COM interface...");
+        conn->pInterface->lpVtbl->Release(conn->pInterface);
+        conn->pInterface = NULL;
+        conn->isConnected = false;
+    }
+
+    // Re-create EC-Lab COM object
+    LogMessageEx(LOG_DEVICE_BIO, "Creating new EC-Lab COM instance...");
+    HRESULT hr = CoCreateInstance(&conn->clsid, NULL, CLSCTX_LOCAL_SERVER,
+                                 &IID_IEClabExe, (void**)&conn->pInterface);
+
+    if (FAILED(hr)) {
+        LogErrorEx(LOG_DEVICE_BIO, "ERROR: CoCreateInstance failed with HRESULT: 0x%08X", hr);
+
+        if (hr == 0x80080005) {  // CO_E_SERVER_EXEC_FAILURE
+            LogErrorEx(LOG_DEVICE_BIO, "EC-Lab server execution failed.");
+            LogErrorEx(LOG_DEVICE_BIO, "Possible causes:");
+            LogErrorEx(LOG_DEVICE_BIO, "  1. EC-Lab crashed or was closed");
+            LogErrorEx(LOG_DEVICE_BIO, "  2. EC-Lab needs to be restarted");
+        }
+
+        return ECLAB_ERR_COM_CREATE_FAILED;
+    }
+
+    LogMessageEx(LOG_DEVICE_BIO, "New COM instance created successfully");
+
+    // Reconnect to device
+    LogMessageEx(LOG_DEVICE_BIO, "Reconnecting to device %d...", savedDeviceNumber);
+    int result = ECLAB_ConnectDevice(conn, savedDeviceNumber);
+
+    if (result == SUCCESS) {
+        LogMessageEx(LOG_DEVICE_BIO, "========================================");
+        LogMessageEx(LOG_DEVICE_BIO, "EC-Lab COM reconnection succeeded!");
+        LogMessageEx(LOG_DEVICE_BIO, "========================================");
+    } else {
+        LogErrorEx(LOG_DEVICE_BIO, "========================================");
+        LogErrorEx(LOG_DEVICE_BIO, "EC-Lab COM reconnection FAILED: %s", ECLAB_GetErrorString(result));
+        LogErrorEx(LOG_DEVICE_BIO, "========================================");
+    }
+
+    return result;
+}
+
 /******************************************************************************
  * Experiment Control
  ******************************************************************************/
@@ -602,26 +664,52 @@ int ECLAB_LoadSettings(ECLabConnection *conn, int device, int channel,
     int retVal = conn->pInterface->lpVtbl->LoadSettings(conn->pInterface,
                                                         device, channel, bstrFilePath);
 
-    SysFreeString(bstrFilePath);
-
     // EC-Lab returns 1 if success, 0 or other values if failed (per manual section 3.2.5)
     if (retVal == 1) {
+        SysFreeString(bstrFilePath);
         LogMessageEx(LOG_DEVICE_BIO, "Settings loaded successfully");
         return SUCCESS;
-    } else {
-        // Log both decimal and hex to understand what EC-Lab is returning
-        LogErrorEx(LOG_DEVICE_BIO, "LoadSettings failed (returned %d / 0x%08X)",
-                  retVal, (unsigned int)retVal);
-        if (retVal == (int)0x8001010E) {
-            LogErrorEx(LOG_DEVICE_BIO, "  Error is RPC_E_DISCONNECTED (0x8001010E)");
-            LogErrorEx(LOG_DEVICE_BIO, "  This typically means EC-Lab has invalidated the interface");
-            LogErrorEx(LOG_DEVICE_BIO, "  Possible causes:");
-            LogErrorEx(LOG_DEVICE_BIO, "    - Device hardware fault detected by EC-Lab");
-            LogErrorEx(LOG_DEVICE_BIO, "    - Voltage transient from relay switching");
-            LogErrorEx(LOG_DEVICE_BIO, "    - Channel in error/fault state");
-        }
-        return ECLAB_ERR_INVALID_MPS_FILE;
     }
+
+    // Check for RPC_E_DISCONNECTED and attempt automatic reconnection
+    if (retVal == (int)0x8001010E) {
+        LogWarningEx(LOG_DEVICE_BIO, "LoadSettings failed (returned %d / 0x%08X)",
+                    retVal, (unsigned int)retVal);
+        LogWarningEx(LOG_DEVICE_BIO, "  Error is RPC_E_DISCONNECTED (0x8001010E)");
+        LogWarningEx(LOG_DEVICE_BIO, "  COM interface has become invalid - attempting automatic reconnection...");
+
+        // Attempt to reconnect the COM interface
+        int reconnectResult = ECLAB_Reconnect(conn);
+
+        if (reconnectResult == SUCCESS) {
+            LogMessageEx(LOG_DEVICE_BIO, "Reconnection successful - retrying LoadSettings...");
+
+            // Retry LoadSettings with the new COM interface
+            retVal = conn->pInterface->lpVtbl->LoadSettings(conn->pInterface,
+                                                           device, channel, bstrFilePath);
+
+            SysFreeString(bstrFilePath);
+
+            if (retVal == 1) {
+                LogMessageEx(LOG_DEVICE_BIO, "Settings loaded successfully after reconnection");
+                return SUCCESS;
+            } else {
+                LogErrorEx(LOG_DEVICE_BIO, "LoadSettings still failed after reconnection (returned %d / 0x%08X)",
+                          retVal, (unsigned int)retVal);
+                return ECLAB_ERR_INVALID_MPS_FILE;
+            }
+        } else {
+            SysFreeString(bstrFilePath);
+            LogErrorEx(LOG_DEVICE_BIO, "Automatic reconnection failed: %s", ECLAB_GetErrorString(reconnectResult));
+            return reconnectResult;
+        }
+    }
+
+    // Other error - log and return
+    SysFreeString(bstrFilePath);
+    LogErrorEx(LOG_DEVICE_BIO, "LoadSettings failed (returned %d / 0x%08X)",
+              retVal, (unsigned int)retVal);
+    return ECLAB_ERR_INVALID_MPS_FILE;
 }
 
 int ECLAB_RunChannel(ECLabConnection *conn, int device, int channel,
@@ -642,16 +730,51 @@ int ECLAB_RunChannel(ECLabConnection *conn, int device, int channel,
     int retVal = conn->pInterface->lpVtbl->RunChannel(conn->pInterface,
                                                       device, channel, bstrOutputPath);
 
-    SysFreeString(bstrOutputPath);
-
     // EC-Lab returns 1 if success, 0 or other values if failed (per manual section 3.2.6)
     if (retVal == 1) {
+        SysFreeString(bstrOutputPath);
         LogMessageEx(LOG_DEVICE_BIO, "Measurement started");
         return SUCCESS;
-    } else {
-        LogErrorEx(LOG_DEVICE_BIO, "RunChannel failed (returned %d)", retVal);
-        return ECLAB_ERR_RUN_FAILED;
     }
+
+    // Check for RPC_E_DISCONNECTED and attempt automatic reconnection
+    if (retVal == (int)0x8001010E) {
+        LogWarningEx(LOG_DEVICE_BIO, "RunChannel failed (returned %d / 0x%08X)",
+                    retVal, (unsigned int)retVal);
+        LogWarningEx(LOG_DEVICE_BIO, "  Error is RPC_E_DISCONNECTED (0x8001010E)");
+        LogWarningEx(LOG_DEVICE_BIO, "  COM interface has become invalid - attempting automatic reconnection...");
+
+        // Attempt to reconnect the COM interface
+        int reconnectResult = ECLAB_Reconnect(conn);
+
+        if (reconnectResult == SUCCESS) {
+            LogMessageEx(LOG_DEVICE_BIO, "Reconnection successful - retrying RunChannel...");
+
+            // Retry RunChannel with the new COM interface
+            retVal = conn->pInterface->lpVtbl->RunChannel(conn->pInterface,
+                                                         device, channel, bstrOutputPath);
+
+            SysFreeString(bstrOutputPath);
+
+            if (retVal == 1) {
+                LogMessageEx(LOG_DEVICE_BIO, "Measurement started successfully after reconnection");
+                return SUCCESS;
+            } else {
+                LogErrorEx(LOG_DEVICE_BIO, "RunChannel still failed after reconnection (returned %d / 0x%08X)",
+                          retVal, (unsigned int)retVal);
+                return ECLAB_ERR_RUN_FAILED;
+            }
+        } else {
+            SysFreeString(bstrOutputPath);
+            LogErrorEx(LOG_DEVICE_BIO, "Automatic reconnection failed: %s", ECLAB_GetErrorString(reconnectResult));
+            return reconnectResult;
+        }
+    }
+
+    // Other error - log and return
+    SysFreeString(bstrOutputPath);
+    LogErrorEx(LOG_DEVICE_BIO, "RunChannel failed (returned %d)", retVal);
+    return ECLAB_ERR_RUN_FAILED;
 }
 
 int ECLAB_StopChannel(ECLabConnection *conn, int device, int channel) {
@@ -667,16 +790,42 @@ int ECLAB_StopChannel(ECLabConnection *conn, int device, int channel) {
     if (retVal == 1) {
         LogMessageEx(LOG_DEVICE_BIO, "Measurement stopped");
         return SUCCESS;
-    } else {
-        // Log both decimal and hex to understand what EC-Lab is returning
+    }
+
+    // Check for RPC_E_DISCONNECTED and attempt automatic reconnection
+    if (retVal == (int)0x8001010E) {
         LogWarningEx(LOG_DEVICE_BIO, "StopChannel failed (returned %d / 0x%08X)",
                     retVal, (unsigned int)retVal);
-        if (retVal == (int)0x8001010E) {
-            LogWarningEx(LOG_DEVICE_BIO, "  Error is RPC_E_DISCONNECTED (0x8001010E)");
-            LogWarningEx(LOG_DEVICE_BIO, "  This typically means EC-Lab has invalidated the interface");
+        LogWarningEx(LOG_DEVICE_BIO, "  Error is RPC_E_DISCONNECTED (0x8001010E)");
+        LogWarningEx(LOG_DEVICE_BIO, "  COM interface has become invalid - attempting automatic reconnection...");
+
+        // Attempt to reconnect the COM interface
+        int reconnectResult = ECLAB_Reconnect(conn);
+
+        if (reconnectResult == SUCCESS) {
+            LogMessageEx(LOG_DEVICE_BIO, "Reconnection successful - retrying StopChannel...");
+
+            // Retry StopChannel with the new COM interface
+            retVal = conn->pInterface->lpVtbl->StopChannel(conn->pInterface, device, channel);
+
+            if (retVal == 1) {
+                LogMessageEx(LOG_DEVICE_BIO, "Measurement stopped successfully after reconnection");
+                return SUCCESS;
+            } else {
+                LogWarningEx(LOG_DEVICE_BIO, "StopChannel still failed after reconnection (returned %d / 0x%08X)",
+                            retVal, (unsigned int)retVal);
+                return ECLAB_ERR_COM_INVOKE_FAILED;
+            }
+        } else {
+            LogErrorEx(LOG_DEVICE_BIO, "Automatic reconnection failed: %s", ECLAB_GetErrorString(reconnectResult));
+            return reconnectResult;
         }
-        return ECLAB_ERR_COM_INVOKE_FAILED;
     }
+
+    // Other error - log and return
+    LogWarningEx(LOG_DEVICE_BIO, "StopChannel failed (returned %d / 0x%08X)",
+                retVal, (unsigned int)retVal);
+    return ECLAB_ERR_COM_INVOKE_FAILED;
 }
 
 /******************************************************************************

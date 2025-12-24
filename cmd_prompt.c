@@ -454,15 +454,49 @@ static int BioLogicCommandManager(CommandContext *ctx) {
 		return 0;
 	}
 
+	// BIO RECONNECT - Test automatic reconnection (EC-Lab mode only)
+	if (strcmp(ctx->command, "RECONNECT") == 0) {
+		BIO_ControlMode mode = BIO_GetCurrentMode();
+
+		if (mode != BIO_CONTROL_MODE_ECLAB) {
+			LogPromptTextbox(CMD_ERROR, "RECONNECT command only works in EC-Lab mode");
+			snprintf(message, sizeof(message), "Current mode: %s", BIO_GetModeName(mode));
+			LogPromptTextbox(CMD_OUTPUT, message);
+			return -1;
+		}
+
+		LogPromptTextbox(CMD_OUTPUT, "Testing EC-Lab COM reconnection...");
+		LogPromptTextbox(CMD_OUTPUT, "This simulates the RPC_E_DISCONNECTED bug by recreating the COM interface");
+
+		// Call the reconnect function directly (requires EC-Lab backend access)
+		#if BIOLOGIC_CONTROL_MODE == 1  // EC-Lab mode
+			extern int BIO_ECLAB_Reconnect(void);
+			error = BIO_ECLAB_Reconnect();
+
+			if (error == SUCCESS) {
+				LogPromptTextbox(CMD_OUTPUT, "Reconnection test: SUCCESS");
+				LogPromptTextbox(CMD_OUTPUT, "COM interface recreated and device reconnected");
+			} else {
+				snprintf(message, sizeof(message), "Reconnection test FAILED: %s", GetErrorString(error));
+				LogPromptTextbox(CMD_ERROR, message);
+			}
+		#else
+			LogPromptTextbox(CMD_ERROR, "Not compiled in EC-Lab mode (BIOLOGIC_CONTROL_MODE != 1)");
+		#endif
+
+		return 0;
+	}
+
 	// BIO HELP - Show help
 	if (strcmp(ctx->command, "HELP") == 0) {
 		LogPromptTextbox(CMD_OUTPUT, "BioLogic Abstraction Commands:");
-		LogPromptTextbox(CMD_OUTPUT, "  BIO MODE  - Show current control mode (DLL/EC-Lab)");
-		LogPromptTextbox(CMD_OUTPUT, "  BIO TEST  - Test connection to device");
-		LogPromptTextbox(CMD_OUTPUT, "  BIO ID    - Get device ID");
-		LogPromptTextbox(CMD_OUTPUT, "  BIO OCV   - Run quick 10s OCV test");
-		LogPromptTextbox(CMD_OUTPUT, "  BIO GEIS  - Run quick GEIS test (10kHz-0.1Hz, 500mA)");
-		LogPromptTextbox(CMD_OUTPUT, "  BIO HELP  - Show this help");
+		LogPromptTextbox(CMD_OUTPUT, "  BIO MODE      - Show current control mode (DLL/EC-Lab)");
+		LogPromptTextbox(CMD_OUTPUT, "  BIO TEST      - Test connection to device");
+		LogPromptTextbox(CMD_OUTPUT, "  BIO ID        - Get device ID");
+		LogPromptTextbox(CMD_OUTPUT, "  BIO OCV       - Run quick 10s OCV test");
+		LogPromptTextbox(CMD_OUTPUT, "  BIO GEIS      - Run quick GEIS test (10kHz-0.1Hz, 500mA)");
+		LogPromptTextbox(CMD_OUTPUT, "  BIO RECONNECT - Test EC-Lab COM reconnection (EC-Lab mode only)");
+		LogPromptTextbox(CMD_OUTPUT, "  BIO HELP      - Show this help");
 		LogPromptTextbox(CMD_OUTPUT, "");
 		LogPromptTextbox(CMD_OUTPUT, "Note: Uses abstraction layer (auto DLL/EC-Lab mode)");
 		return 0;
