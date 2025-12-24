@@ -454,12 +454,12 @@ static int BioLogicCommandManager(CommandContext *ctx) {
 		return 0;
 	}
 
-	// BIO RECONNECT - Test automatic reconnection (EC-Lab mode only)
-	if (strcmp(ctx->command, "RECONNECT") == 0) {
+	// BIO RECON - Test automatic reconnection (EC-Lab mode only)
+	if (strcmp(ctx->command, "RECON") == 0) {
 		BIO_ControlMode mode = BIO_GetCurrentMode();
 
 		if (mode != BIO_MODE_ECLAB_OLECOM) {
-			LogPromptTextbox(CMD_ERROR, "RECONNECT command only works in EC-Lab mode");
+			LogPromptTextbox(CMD_ERROR, "RECON command only works in EC-Lab mode");
 			snprintf(message, sizeof(message), "Current mode: %s", BIO_GetModeName(mode));
 			LogPromptTextbox(CMD_OUTPUT, message);
 			return -1;
@@ -490,13 +490,13 @@ static int BioLogicCommandManager(CommandContext *ctx) {
 	// BIO HELP - Show help
 	if (strcmp(ctx->command, "HELP") == 0) {
 		LogPromptTextbox(CMD_OUTPUT, "BioLogic Abstraction Commands:");
-		LogPromptTextbox(CMD_OUTPUT, "  BIO MODE      - Show current control mode (DLL/EC-Lab)");
-		LogPromptTextbox(CMD_OUTPUT, "  BIO TEST      - Test connection to device");
-		LogPromptTextbox(CMD_OUTPUT, "  BIO ID        - Get device ID");
-		LogPromptTextbox(CMD_OUTPUT, "  BIO OCV       - Run quick 10s OCV test");
-		LogPromptTextbox(CMD_OUTPUT, "  BIO GEIS      - Run quick GEIS test (10kHz-0.1Hz, 500mA)");
-		LogPromptTextbox(CMD_OUTPUT, "  BIO RECONNECT - Test EC-Lab COM reconnection (EC-Lab mode only)");
-		LogPromptTextbox(CMD_OUTPUT, "  BIO HELP      - Show this help");
+		LogPromptTextbox(CMD_OUTPUT, "  BIO MODE  - Show current control mode (DLL/EC-Lab)");
+		LogPromptTextbox(CMD_OUTPUT, "  BIO TEST  - Test connection to device");
+		LogPromptTextbox(CMD_OUTPUT, "  BIO ID    - Get device ID");
+		LogPromptTextbox(CMD_OUTPUT, "  BIO OCV   - Run quick 10s OCV test");
+		LogPromptTextbox(CMD_OUTPUT, "  BIO GEIS  - Run quick GEIS test (10kHz-0.1Hz, 500mA)");
+		LogPromptTextbox(CMD_OUTPUT, "  BIO RECON - Test EC-Lab COM reconnection (EC-Lab mode only)");
+		LogPromptTextbox(CMD_OUTPUT, "  BIO HELP  - Show this help");
 		LogPromptTextbox(CMD_OUTPUT, "");
 		LogPromptTextbox(CMD_OUTPUT, "Note: Uses abstraction layer (auto DLL/EC-Lab mode)");
 		return 0;
