@@ -4,7 +4,9 @@ This guide explains how to add the manual capacity entry controls to the Baselin
 
 ## Overview
 
-The manual capacity entry feature allows users to skip the time-consuming Phases 1 & 2 (initial discharge and capacity measurement) by directly entering a known battery capacity value. This saves several hours when the battery capacity is already known.
+The manual capacity entry feature allows users to skip the time-consuming Phase 2 (capacity measurement) by directly entering a known battery capacity value. This saves 3-6 hours when the battery capacity is already known.
+
+**Important:** Phase 1 (initial discharge) still runs to establish the 0% SOC baseline needed for accurate EIS measurements in Phase 3.
 
 ## Required UI Controls
 
@@ -15,7 +17,7 @@ You need to add **two controls** to the **BASELINE** tab panel:
 - **Control ID:** `BASELINE_CHK_MANUAL_CAPACITY` (ID: 9)
 - **Label:** "Use Manual Capacity"
 - **Default Value:** 0 (unchecked)
-- **Tooltip:** "Check to skip capacity measurement and enter capacity manually"
+- **Tooltip:** "Check to skip Phase 2 capacity measurement and enter capacity manually"
 
 ### 2. Numeric Input: "Battery Capacity (mAh)"
 - **Control Type:** Numeric
@@ -51,7 +53,7 @@ You need to add **two controls** to the **BASELINE** tab panel:
    - **Constant Name:** `BASELINE_CHK_MANUAL_CAPACITY`
    - **Data Type:** Integer
    - **Default Value:** 0
-   - **Tooltip:** "Check to skip capacity measurement and enter capacity manually"
+   - **Tooltip:** "Check to skip Phase 2 capacity measurement and enter capacity manually"
 5. Click **OK**
 
 ### Step 4: Add the Numeric Input Control
@@ -100,17 +102,19 @@ You need to add **two controls** to the **BASELINE** tab panel:
 
 ### When Checkbox is UNCHECKED (default):
 - Experiment runs **all 4 phases** normally:
-  - **Phase 1:** Initial discharge + temperature setup
-  - **Phase 2:** Charge/discharge to measure capacity
+  - **Phase 1:** Initial discharge + temperature setup (~30-60 min)
+  - **Phase 2:** Charge/discharge to measure capacity (~3-6 hours)
   - **Phase 3:** EIS measurements during charge
   - **Phase 4:** Discharge to 50%
 
 ### When Checkbox is CHECKED:
-- Experiment **skips Phases 1 & 2** and goes directly to Phase 3:
-  - **Phase 1:** ~~Initial discharge + temperature setup~~ → **SKIPPED**
-  - **Phase 2:** ~~Charge/discharge to measure capacity~~ → **SKIPPED**
+- Experiment **skips only Phase 2**:
+  - **Phase 1:** Initial discharge + temperature setup (~30-60 min) → **RUNS NORMALLY**
+  - **Phase 2:** ~~Charge/discharge to measure capacity~~ → **SKIPPED** ✓
   - **Phase 3:** EIS measurements during charge (uses manual capacity)
   - **Phase 4:** Discharge to 50% (uses manual capacity)
+
+**Why Phase 1 still runs:** Phase 1 discharges the battery to the minimum voltage (0% SOC), establishing a known baseline for the EIS measurements in Phase 3. Without this, SOC calculations would be inaccurate.
 
 The manually entered capacity value is used for:
 - SOC calculations during Phase 3 (EIS measurements)
@@ -119,9 +123,9 @@ The manually entered capacity value is used for:
 
 ### Time Savings
 
-- **Phase 1:** ~30-60 minutes (discharge + temperature stabilization)
-- **Phase 2:** ~3-6 hours (full charge/discharge cycle)
-- **Total savings:** ~4-7 hours per experiment!
+- **Phase 1:** ~30-60 minutes (discharge + temperature stabilization) → **STILL RUNS**
+- **Phase 2:** ~3-6 hours (full charge/discharge cycle) → **SKIPPED**
+- **Total savings:** ~3-6 hours per experiment!
 
 ## Validation
 
@@ -162,10 +166,13 @@ After adding the controls:
 5. Start the baseline experiment
 6. Verify in the log:
    ```
-   === SKIPPING PHASES 1 & 2: Using manual capacity entry ===
+   === PHASE 1: Initial Discharge and Temperature Setup ===
+   (Phase 1 runs normally...)
+   === SKIPPING PHASE 2: Using manual capacity entry ===
    Manual capacity: 2000.00 mAh
+   === PHASE 3: EIS Measurements During Charge ===
    ```
-7. Confirm the experiment jumps directly to Phase 3
+7. Confirm the experiment runs Phase 1, skips Phase 2, then continues with Phase 3
 
 ## Troubleshooting
 
@@ -192,7 +199,14 @@ After adding the controls:
 
 The following files were modified to implement this feature:
 - `exp_baseline.h` - Added `useManualCapacity` and `manualCapacity_mAh` to parameters struct
-- `exp_baseline.c` - Added logic to skip phases 1 & 2 and use manual capacity
+- `exp_baseline.c` - Added logic to skip Phase 2 and use manual capacity
 - `BatteryTester.h` - Added control ID constants
 
 All modifications are complete - you only need to add the UI controls!
+
+## Important Notes
+
+- **Phase 1 always runs** to establish 0% SOC baseline
+- **Phase 2 is skipped** when manual capacity is used
+- Manual capacity is used for SOC calculations in Phases 3 & 4
+- Time savings: **3-6 hours** (Phase 2 only)

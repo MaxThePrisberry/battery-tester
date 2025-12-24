@@ -511,26 +511,38 @@ static int BaselineExperimentThread(void *functionData) {
         goto cleanup;
     }
     
-    // PHASE 1 & 2: Initial Discharge, Temperature Setup, and Capacity Experiment
+    // PHASE 1: Initial Discharge and Temperature Setup
+    // ALWAYS RUN - needed to establish 0% SOC baseline for Phase 3
+    LogMessage("=== PHASE 1: Initial Discharge%s ===", ENABLE_DTB ? " and Temperature Setup" : "");
+    ctx->currentPhase = BASELINE_PHASE_1;
+    SetCtrlVal(ctx->tabPanelHandle, ctx->statusControl,
+               ENABLE_DTB ? "Phase 1: Discharging and establishing temperature..." : "Phase 1: Discharging battery...");
+
+    result = RunPhase1_DischargeAndTemp(ctx);
+    if (result != SUCCESS || CheckCancellation(ctx)) {
+        if (!CheckCancellation(ctx)) {
+            ctx->state = BASELINE_STATE_ERROR;
+        }
+        goto cleanup;
+    }
+
+    // PHASE 2: Capacity Experiment (Charge → Discharge)
     // Skip if using manual capacity entry
     if (ctx->params.useManualCapacity) {
-        LogMessage("=== SKIPPING PHASES 1 & 2: Using manual capacity entry ===");
+        LogMessage("=== SKIPPING PHASE 2: Using manual capacity entry ===");
         LogMessage("Manual capacity: %.2f mAh", ctx->params.manualCapacity_mAh);
-        SetCtrlVal(ctx->tabPanelHandle, ctx->statusControl, "Using manual capacity entry (skipping phases 1-2)...");
+        SetCtrlVal(ctx->tabPanelHandle, ctx->statusControl, "Using manual capacity entry (skipping phase 2)...");
 
         // Set the measured capacities to the manual value
         ctx->measuredChargeCapacity_mAh = ctx->params.manualCapacity_mAh;
         ctx->measuredDischargeCapacity_mAh = ctx->params.manualCapacity_mAh;
         ctx->estimatedBatteryCapacity_mAh = ctx->params.manualCapacity_mAh;
 
-        // Initialize phase results structures (even though we skipped them)
-        InitializePhaseResults(&ctx->phase1Results, BASELINE_PHASE_1);
+        // Initialize phase results structures (even though we skipped phase 2)
         InitializePhaseResults(&ctx->phase2ChargeResults, BASELINE_PHASE_2);
         InitializePhaseResults(&ctx->phase2DischargeResults, BASELINE_PHASE_2);
 
-        // Mark phase results as skipped
-        snprintf(ctx->phase1Results.completionReason, sizeof(ctx->phase1Results.completionReason),
-                "Skipped - manual capacity entry used");
+        // Mark phase 2 results as skipped
         snprintf(ctx->phase2ChargeResults.completionReason, sizeof(ctx->phase2ChargeResults.completionReason),
                 "Skipped - manual capacity entry used");
         snprintf(ctx->phase2DischargeResults.completionReason, sizeof(ctx->phase2DischargeResults.completionReason),
@@ -539,22 +551,8 @@ static int BaselineExperimentThread(void *functionData) {
         LogMessage("Manual capacity set: Charge=%.2f mAh, Discharge=%.2f mAh",
                   ctx->measuredChargeCapacity_mAh, ctx->measuredDischargeCapacity_mAh);
     } else {
-        // PHASE 1: Initial Discharge and Temperature Setup
-        LogMessage("=== PHASE 1: Initial Discharge%s ===", ENABLE_DTB ? " and Temperature Setup" : "");
-        ctx->currentPhase = BASELINE_PHASE_1;
-        SetCtrlVal(ctx->tabPanelHandle, ctx->statusControl,
-                   ENABLE_DTB ? "Phase 1: Discharging and establishing temperature..." : "Phase 1: Discharging battery...");
-
-        result = RunPhase1_DischargeAndTemp(ctx);
-        if (result != SUCCESS || CheckCancellation(ctx)) {
-            if (!CheckCancellation(ctx)) {
-                ctx->state = BASELINE_STATE_ERROR;
-            }
-            goto cleanup;
-        }
-
-        // PHASE 2: Capacity Experiment (Charge ? Discharge)
-        LogMessage("=== PHASE 2: Capacity Experiment (Charge ? Discharge) ===");
+        // Run normal Phase 2 capacity measurement
+        LogMessage("=== PHASE 2: Capacity Experiment (Charge → Discharge) ===");
         ctx->currentPhase = BASELINE_PHASE_2;
         SetCtrlVal(ctx->tabPanelHandle, ctx->statusControl, "Phase 2: Running capacity experiment...");
         ClearAllExperimentGraphs(ctx);
