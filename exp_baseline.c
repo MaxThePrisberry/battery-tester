@@ -295,6 +295,8 @@ int CVICALLBACK StartBaselineExperimentCallback(int panel, int control, int even
     GetCtrlVal(panel, BASELINE_NUM_EIS_INTERVAL, &g_experimentContext.params.eisInterval);
     GetCtrlVal(panel, BASELINE_NUM_CURRENT_THRESHOLD, &g_experimentContext.params.currentThreshold);
     GetCtrlVal(panel, BASELINE_NUM_INTERVAL, &g_experimentContext.params.logInterval);
+    GetCtrlVal(panel, BASELINE_CHK_MANUAL_CAPACITY, &g_experimentContext.params.useManualCapacity);
+    GetCtrlVal(panel, BASELINE_NUM_MANUAL_CAPACITY, &g_experimentContext.params.manualCapacity_mAh);
     GetCtrlVal(g_mainPanelHandle, PANEL_NUM_SET_CHARGE_V, &g_experimentContext.params.chargeVoltage);
     GetCtrlVal(g_mainPanelHandle, PANEL_NUM_SET_DISCHARGE_V, &g_experimentContext.params.dischargeVoltage);
     GetCtrlVal(g_mainPanelHandle, PANEL_NUM_SET_CHARGE_I, &g_experimentContext.params.chargeCurrent);
@@ -509,32 +511,61 @@ static int BaselineExperimentThread(void *functionData) {
         goto cleanup;
     }
     
-    // PHASE 1: Initial Discharge and Temperature Setup
-    LogMessage("=== PHASE 1: Initial Discharge%s ===", ENABLE_DTB ? " and Temperature Setup" : "");
-    ctx->currentPhase = BASELINE_PHASE_1;
-    SetCtrlVal(ctx->tabPanelHandle, ctx->statusControl, 
-               ENABLE_DTB ? "Phase 1: Discharging and establishing temperature..." : "Phase 1: Discharging battery...");
-    
-    result = RunPhase1_DischargeAndTemp(ctx);
-    if (result != SUCCESS || CheckCancellation(ctx)) {
-        if (!CheckCancellation(ctx)) {
-            ctx->state = BASELINE_STATE_ERROR;
+    // PHASE 1 & 2: Initial Discharge, Temperature Setup, and Capacity Experiment
+    // Skip if using manual capacity entry
+    if (ctx->params.useManualCapacity) {
+        LogMessage("=== SKIPPING PHASES 1 & 2: Using manual capacity entry ===");
+        LogMessage("Manual capacity: %.2f mAh", ctx->params.manualCapacity_mAh);
+        SetCtrlVal(ctx->tabPanelHandle, ctx->statusControl, "Using manual capacity entry (skipping phases 1-2)...");
+
+        // Set the measured capacities to the manual value
+        ctx->measuredChargeCapacity_mAh = ctx->params.manualCapacity_mAh;
+        ctx->measuredDischargeCapacity_mAh = ctx->params.manualCapacity_mAh;
+        ctx->estimatedBatteryCapacity_mAh = ctx->params.manualCapacity_mAh;
+
+        // Initialize phase results structures (even though we skipped them)
+        InitializePhaseResults(&ctx->phase1Results, BASELINE_PHASE_1);
+        InitializePhaseResults(&ctx->phase2ChargeResults, BASELINE_PHASE_2);
+        InitializePhaseResults(&ctx->phase2DischargeResults, BASELINE_PHASE_2);
+
+        // Mark phase results as skipped
+        snprintf(ctx->phase1Results.completionReason, sizeof(ctx->phase1Results.completionReason),
+                "Skipped - manual capacity entry used");
+        snprintf(ctx->phase2ChargeResults.completionReason, sizeof(ctx->phase2ChargeResults.completionReason),
+                "Skipped - manual capacity entry used");
+        snprintf(ctx->phase2DischargeResults.completionReason, sizeof(ctx->phase2DischargeResults.completionReason),
+                "Skipped - manual capacity entry used");
+
+        LogMessage("Manual capacity set: Charge=%.2f mAh, Discharge=%.2f mAh",
+                  ctx->measuredChargeCapacity_mAh, ctx->measuredDischargeCapacity_mAh);
+    } else {
+        // PHASE 1: Initial Discharge and Temperature Setup
+        LogMessage("=== PHASE 1: Initial Discharge%s ===", ENABLE_DTB ? " and Temperature Setup" : "");
+        ctx->currentPhase = BASELINE_PHASE_1;
+        SetCtrlVal(ctx->tabPanelHandle, ctx->statusControl,
+                   ENABLE_DTB ? "Phase 1: Discharging and establishing temperature..." : "Phase 1: Discharging battery...");
+
+        result = RunPhase1_DischargeAndTemp(ctx);
+        if (result != SUCCESS || CheckCancellation(ctx)) {
+            if (!CheckCancellation(ctx)) {
+                ctx->state = BASELINE_STATE_ERROR;
+            }
+            goto cleanup;
         }
-        goto cleanup;
-    }
-    
-    // PHASE 2: Capacity Experiment (Charge ? Discharge)
-    LogMessage("=== PHASE 2: Capacity Experiment (Charge ? Discharge) ===");
-    ctx->currentPhase = BASELINE_PHASE_2;
-    SetCtrlVal(ctx->tabPanelHandle, ctx->statusControl, "Phase 2: Running capacity experiment...");
-    ClearAllExperimentGraphs(ctx);
-    
-    result = RunPhase2_CapacityExperiment(ctx);
-    if (result != SUCCESS || CheckCancellation(ctx)) {
-        if (!CheckCancellation(ctx)) {
-            ctx->state = BASELINE_STATE_ERROR;
+
+        // PHASE 2: Capacity Experiment (Charge ? Discharge)
+        LogMessage("=== PHASE 2: Capacity Experiment (Charge ? Discharge) ===");
+        ctx->currentPhase = BASELINE_PHASE_2;
+        SetCtrlVal(ctx->tabPanelHandle, ctx->statusControl, "Phase 2: Running capacity experiment...");
+        ClearAllExperimentGraphs(ctx);
+
+        result = RunPhase2_CapacityExperiment(ctx);
+        if (result != SUCCESS || CheckCancellation(ctx)) {
+            if (!CheckCancellation(ctx)) {
+                ctx->state = BASELINE_STATE_ERROR;
+            }
+            goto cleanup;
         }
-        goto cleanup;
     }
     
     // PHASE 3: EIS Measurements During Charge

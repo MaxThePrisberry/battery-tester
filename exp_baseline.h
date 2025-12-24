@@ -27,7 +27,7 @@
 #define BASELINE_SETTLING_TIME          60.0    // Seconds to wait for battery relaxation after operations
 
 // Temperature Control Constants (when ENABLE_DTB is 1)
-#define BASELINE_TEMP_TOLERANCE         2.0     // °C tolerance for temperature target
+#define BASELINE_TEMP_TOLERANCE         2.0     // ï¿½C tolerance for temperature target
 #define BASELINE_TEMP_CHECK_INTERVAL    10.0    // Seconds between temperature checks
 #define BASELINE_TEMP_TIMEOUT_SEC       1800    // 30 minutes max wait for temperature
 #define BASELINE_TEMP_STABILIZE_TIME    300     // 5 minutes stabilization after reaching target
@@ -101,7 +101,7 @@ typedef enum {
 
 // Experiment parameters from UI
 typedef struct {
-    double targetTemperature;    // DTB target temperature (°C)
+    double targetTemperature;    // DTB target temperature (ï¿½C)
     double eisInterval;          // SOC percentage between EIS measurements
     double currentThreshold;     // Current threshold for operation completion (A)
     unsigned int logInterval;    // Data logging interval in seconds
@@ -109,16 +109,18 @@ typedef struct {
     double dischargeVoltage;     // Minimum discharge voltage (V)
     double chargeCurrent;        // Maximum charge current (A)
     double dischargeCurrent;     // Maximum discharge current (A)
+    int useManualCapacity;       // If 1, skip phases 1&2 and use manual capacity
+    double manualCapacity_mAh;   // Manually entered battery capacity (mAh)
 } BaselineExperimentParams;
 
 // Temperature data point
 typedef struct {
     double timestamp;                    // Time since experiment start (s)
-    double dtbTemperatures[DTB_NUM_DEVICES]; // All DTB measured temperatures (°C)
-    double dtbAverageTemperature;        // Average DTB temperature (°C)
+    double dtbTemperatures[DTB_NUM_DEVICES]; // All DTB measured temperatures (ï¿½C)
+    double dtbAverageTemperature;        // Average DTB temperature (ï¿½C)
     int dtbDeviceCount;                  // Number of DTB devices that responded
-    double tc0Temperature;               // Thermocouple 0 temperature (°C)
-    double tc1Temperature;               // Thermocouple 1 temperature (°C)
+    double tc0Temperature;               // Thermocouple 0 temperature (ï¿½C)
+    double tc1Temperature;               // Thermocouple 1 temperature (ï¿½C)
     char status[128];                    // Temperature controller status
 } TemperatureDataPoint;
 
@@ -165,9 +167,9 @@ typedef struct {
     double endVoltage;           // Ending voltage (V)
     double avgCurrent;           // Average current magnitude (A)
     double avgVoltage;           // Average voltage (V)
-    double avgTemperature_dtb;   // Average DTB temperature (°C)
-    double avgTemperature_tc0;   // Average TC0 temperature (°C)
-    double avgTemperature_tc1;   // Average TC1 temperature (°C)
+    double avgTemperature_dtb;   // Average DTB temperature (ï¿½C)
+    double avgTemperature_tc0;   // Average TC0 temperature (ï¿½C)
+    double avgTemperature_tc1;   // Average TC1 temperature (ï¿½C)
     int dataPointCount;          // Number of data points collected
     double peakCurrent;          // Peak current observed (A)
     char completionReason[128];  // Why the phase ended
