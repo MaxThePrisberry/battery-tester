@@ -458,7 +458,7 @@ static int BioLogicCommandManager(CommandContext *ctx) {
 	if (strcmp(ctx->command, "RECONNECT") == 0) {
 		BIO_ControlMode mode = BIO_GetCurrentMode();
 
-		if (mode != BIO_CONTROL_MODE_ECLAB) {
+		if (mode != BIO_MODE_ECLAB_OLECOM) {
 			LogPromptTextbox(CMD_ERROR, "RECONNECT command only works in EC-Lab mode");
 			snprintf(message, sizeof(message), "Current mode: %s", BIO_GetModeName(mode));
 			LogPromptTextbox(CMD_OUTPUT, message);
