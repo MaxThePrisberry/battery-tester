@@ -416,7 +416,15 @@ static int BaselineExperimentThread(void *functionData) {
     BaselineExperimentContext *ctx = (BaselineExperimentContext*)functionData;
     char message[LARGE_BUFFER_SIZE];
     int result = SUCCESS;
-    
+
+    // Initialize COM for this thread (required for EC-Lab OLE COM mode)
+    // Use COINIT_MULTITHREADED to match the apartment model used in eclab_olecom.c
+    HRESULT hrCom = CoInitializeEx(NULL, COINIT_MULTITHREADED);
+    if (FAILED(hrCom) && hrCom != RPC_E_CHANGED_MODE && hrCom != S_FALSE) {
+        LogError("Failed to initialize COM for baseline experiment thread (HRESULT: 0x%08X)", hrCom);
+        // Continue anyway - might work in Direct DLL mode
+    }
+
     LogMessage("=== Starting Baseline Battery Experiment ===");
     
     // Record experiment start time
@@ -640,10 +648,13 @@ cleanup:
     CmtGetLock(g_busyLock);
     g_systemBusy = 0;
     CmtReleaseLock(g_busyLock);
-    
+
     // Clear thread ID
     g_experimentThreadId = 0;
-    
+
+    // Uninitialize COM (matches CoInitializeEx at thread start)
+    CoUninitialize();
+
     return 0;
 }
 
