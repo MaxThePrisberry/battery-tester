@@ -79,8 +79,8 @@
 #define  BASELINE_BTN_BASELINE            6       /* control type: command, callback function: StartBaselineExperimentCallback */
 #define  BASELINE_NUM_OUTPUT              7       /* control type: numeric, callback function: (none) */
 #define  BASELINE_STR_BASELINE_STATUS     8       /* control type: string, callback function: (none) */
-#define  BASELINE_CHK_MANUAL_CAPACITY     9       /* control type: radioButton, callback function: (none) */
-#define  BASELINE_NUM_MANUAL_CAPACITY     10      /* control type: numeric, callback function: (none) */
+#define  BASELINE_CHK_MANUAL_C            9       /* control type: radioButton, callback function: (none) */
+#define  BASELINE_NUM_MANUAL_C            10      /* control type: numeric, callback function: (none) */
 
      /* tab page panel controls */
 #define  CDC_BTN_DISCHARGE                2       /* control type: command, callback function: CDCDischargeCallback */

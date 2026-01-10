@@ -1,0 +1,1447 @@
+
+=== Battery Tester Log Started: 2026-01-09 09:37:26 ===
+Log file location: c:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\BatteryTester.log
+2026-01-09 09:37:26 [INFO] Initializing cDAQ module...
+2026-01-09 09:37:26 [INFO] Initializing cDAQ thermocouple slots 2 and 3...
+2026-01-09 09:37:28 [INFO] cDAQ slot 2 initialized with 16 thermocouples
+2026-01-09 09:37:29 [INFO] cDAQ slot 3 initialized with 16 thermocouples
+2026-01-09 09:37:29 [INFO] cDAQ module initialized successfully
+2026-01-09 09:37:29 [INFO] cDAQ module initialized successfully
+2026-01-09 09:37:29 [INFO] Initializing PSB queue manager on COM3...
+2026-01-09 09:37:29 [INFO] Attempting to connect to PSB 10000...
+2026-01-09 09:37:29 [INFO] [PSB] Connecting to PSB on COM3...
+2026-01-09 09:37:29 [INFO] [PSB] Initializing on COM3, slave 1, 9600 baud
+2026-01-09 09:37:29 [INFO] [PSB] Successfully initialized
+2026-01-09 09:37:29 [INFO] [PSB] Setting remote mode: ON
+2026-01-09 09:37:29 [INFO] [PSB] Setting output: OFF
+2026-01-09 09:37:29 [INFO] Successfully connected to PSB 10000
+2026-01-09 09:37:29 [INFO] PSB 10000 queue manager initialized
+2026-01-09 09:37:29 [INFO] PSB 10000 queue processing thread started
+2026-01-09 09:37:29 [INFO] PSB queue manager initialized and connected on COM3
+2026-01-09 09:37:29 [INFO] Initializing PSB to safe state...
+2026-01-09 09:37:29 [INFO] [PSB] Setting PSB safe limits...
+2026-01-09 09:37:29 [INFO] [PSB] Setting min voltage: 0.00V
+2026-01-09 09:37:29 [INFO] [PSB] Setting max voltage: 61.20V
+2026-01-09 09:37:29 [INFO] [PSB] Setting min current: 0.00A
+2026-01-09 09:37:30 [INFO] [PSB] Setting max current: 61.20A
+2026-01-09 09:37:30 [INFO] [PSB] Setting sink max current: 61.20A
+2026-01-09 09:37:30 [INFO] [PSB] Setting sink min current: 0.00A
+2026-01-09 09:37:30 [INFO] [PSB] Setting max power: 1224.00W
+2026-01-09 09:37:30 [INFO] [PSB] Setting sink max power: 1224.00W
+2026-01-09 09:37:30 [INFO] [PSB] PSB safe limits set successfully
+2026-01-09 09:37:30 [INFO] [PSB] Zeroing all PSB values...
+2026-01-09 09:37:30 [INFO] [PSB] Setting output: OFF
+2026-01-09 09:37:31 [INFO] [PSB] Setting voltage: 0.00V (0x0000)
+2026-01-09 09:37:31 [INFO] [PSB] Setting current: 0.00A (0x0000)
+2026-01-09 09:37:31 [INFO] [PSB] Setting power: 0.00W (0x0000)
+2026-01-09 09:37:32 [INFO] [PSB] Setting sink current: 0.00A (0x0000)
+2026-01-09 09:37:32 [INFO] [PSB] Setting sink power: 0.00W (0x0000)
+2026-01-09 09:37:32 [INFO] [PSB] All PSB values zeroed successfully
+2026-01-09 09:37:32 [INFO] PSB initialization complete
+2026-01-09 09:37:32 [INFO] Initializing BioLogic abstraction layer...
+2026-01-09 09:37:32 [INFO]   Mode: EC-Lab OLE COM
+2026-01-09 09:37:32 [INFO] [BIO] Initializing BioLogic abstraction layer
+2026-01-09 09:37:32 [INFO] [BIO]   Mode: EC-Lab OLE COM
+2026-01-09 09:37:32 [INFO] [BIO] Initializing EC-Lab OLE COM mode
+2026-01-09 09:37:32 [INFO] [BIO]   Settings dir: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_settings
+2026-01-09 09:37:32 [INFO] [BIO]   Data dir: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data
+2026-01-09 09:37:32 [INFO] [BIO] Initializing EC-Lab backend
+2026-01-09 09:37:32 [INFO] [BIO]   Settings dir: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_settings
+2026-01-09 09:37:32 [INFO] [BIO]   Data dir: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data
+2026-01-09 09:37:32 [INFO] [BIO]   Device: 0, Channel: 0
+2026-01-09 09:37:32 [INFO] [BIO] ========================================
+2026-01-09 09:37:32 [INFO] [BIO] Initializing EC-Lab OLE COM connection
+2026-01-09 09:37:32 [INFO] [BIO] ========================================
+2026-01-09 09:37:32 [INFO] [BIO] Working directory: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data
+2026-01-09 09:37:32 [INFO] [BIO] Step 1: Initializing COM (MTA mode)...
+2026-01-09 09:37:32 [INFO] [BIO] COM initialized successfully (MTA mode)
+2026-01-09 09:37:32 [INFO] [BIO] Step 2: Resolving ProgID 'EClabCOM.EClabExe'...
+2026-01-09 09:37:32 [INFO] [BIO] ProgID resolved successfully. EC-Lab is registered.
+2026-01-09 09:37:32 [INFO] [BIO] Step 3: Checking if EC-Lab is running...
+2026-01-09 09:37:32 [INFO] [BIO] EC-Lab process detected - proceeding with COM connection
+2026-01-09 09:37:32 [INFO] [BIO] Step 4: Creating EC-Lab COM instance...
+2026-01-09 09:37:32 [INFO] [BIO] NOTE: This will connect to the running EC-Lab application.
+2026-01-09 09:37:32 [INFO] [BIO] NOTE: Using custom IEClabExe interface (NOT IDispatch)
+2026-01-09 09:37:32 [INFO] [BIO] Requesting IEClabExe interface...
+2026-01-09 09:37:32 [INFO] [BIO] EC-Lab COM instance created successfully!
+2026-01-09 09:37:32 [INFO] [BIO] ========================================
+2026-01-09 09:37:32 [INFO] [BIO] EC-Lab OLE COM connection initialized
+2026-01-09 09:37:32 [INFO] [BIO] ========================================
+2026-01-09 09:37:32 [INFO] [BIO] Connecting to EC-Lab device 0
+2026-01-09 09:37:32 [INFO] [BIO] Connected to EC-Lab device 0 successfully
+2026-01-09 09:37:32 [INFO] [BIO] Running connection diagnostic (5 tests over ~5 seconds)...
+2026-01-09 09:37:32 [INFO] [BIO]   [Test 1 @ 0.0s] Connection: OK
+2026-01-09 09:37:33 [INFO] [BIO]   [Test 2 @ 1.0s] Connection: OK
+2026-01-09 09:37:34 [INFO] [BIO]   [Test 3 @ 2.0s] Connection: OK
+2026-01-09 09:37:35 [INFO] [BIO]   [Test 4 @ 3.0s] Connection: OK
+2026-01-09 09:37:36 [INFO] [BIO]   [Test 5 @ 4.0s] Connection: OK
+2026-01-09 09:37:36 [INFO] [BIO] Connection diagnostic complete: 5/5 tests passed
+2026-01-09 09:37:36 [INFO] [BIO] EC-Lab backend initialized successfully
+2026-01-09 09:37:36 [INFO] [BIO] BioLogic abstraction layer initialized successfully
+2026-01-09 09:37:36 [INFO] BioLogic abstraction layer initialized successfully
+2026-01-09 09:37:36 [INFO] Initializing DTB queue manager on COM5 with 2 devices...
+2026-01-09 09:37:36 [INFO] [DTB] DTB_QueueInit: Will initialize slave address 2
+2026-01-09 09:37:36 [INFO] [DTB] DTB_QueueInit: Will initialize slave address 3
+2026-01-09 09:37:36 [INFO] Attempting to connect to DTB 4848...
+2026-01-09 09:37:36 [INFO] [DTB] Connecting to DTB slave 2 on COM5...
+2026-01-09 09:37:36 [INFO] [DTB] Initializing on COM5, slave 2, 9600 baud
+2026-01-09 09:37:36 [INFO] [DTB] Successfully initialized
+2026-01-09 09:37:36 [INFO] [DTB] Successfully connected to DTB slave 2
+2026-01-09 09:37:36 [INFO] [DTB] Connecting to DTB slave 3 on COM5...
+2026-01-09 09:37:36 [INFO] [DTB] Initializing on COM5, slave 3, 9600 baud
+2026-01-09 09:37:36 [INFO] [DTB] Successfully initialized
+2026-01-09 09:37:36 [INFO] [DTB] Successfully connected to DTB slave 3
+2026-01-09 09:37:36 [INFO] [DTB] Connected to 2 of 2 DTB devices
+2026-01-09 09:37:37 [INFO] Successfully connected to DTB 4848
+2026-01-09 09:37:37 [INFO] DTB 4848 queue manager initialized
+2026-01-09 09:37:37 [INFO] DTB 4848 queue processing thread started
+2026-01-09 09:37:37 [INFO] [DTB] DTB_QueueInit: Successfully created queue manager for 2 devices
+2026-01-09 09:37:37 [INFO] DTB queue manager initialized and connected on COM5
+2026-01-09 09:37:37 [INFO] Enabling DTB write access for all devices...
+2026-01-09 09:37:37 [INFO] [DTB] Enabling write access for all 2 DTB devices...
+2026-01-09 09:37:37 [INFO] [DTB] Enabling write access...
+2026-01-09 09:37:37 [INFO] [DTB] Write access enabled
+2026-01-09 09:37:37 [INFO] [DTB] Enabling write access...
+2026-01-09 09:37:37 [INFO] [DTB] Write access enabled
+2026-01-09 09:37:37 [INFO] [DTB] Successfully enabled write access for all DTB devices
+2026-01-09 09:37:37 [INFO] DTB write access enabled successfully for all devices
+2026-01-09 09:37:37 [INFO] Configuring all DTB4848 devices for K-type thermocouple with PID control...
+2026-01-09 09:37:37 [INFO] [DTB] Write access status: ENABLED
+2026-01-09 09:37:37 [INFO] DTB slave 2 write access currently: ENABLED
+2026-01-09 09:37:37 [INFO] [DTB] Configuring DTB4848...
+2026-01-09 09:37:37 [INFO] [DTB] Setting sensor type: 0
+2026-01-09 09:37:37 [INFO] [DTB] Setting heating/cooling mode: 0
+2026-01-09 09:37:38 [INFO] [DTB] Setting control method: 0
+2026-01-09 09:37:38 [INFO] [DTB] Setting PID mode: 4 (AUTO)
+2026-01-09 09:37:38 [INFO] [DTB] Configuration complete
+2026-01-09 09:37:38 [INFO] DTB4848 slave 2 configured successfully
+2026-01-09 09:37:39 [INFO] [DTB] Write access status: ENABLED
+2026-01-09 09:37:39 [INFO] DTB slave 3 write access currently: ENABLED
+2026-01-09 09:37:39 [INFO] [DTB] Configuring DTB4848...
+2026-01-09 09:37:39 [INFO] [DTB] Setting sensor type: 0
+2026-01-09 09:37:39 [INFO] [DTB] Setting heating/cooling mode: 0
+2026-01-09 09:37:39 [INFO] [DTB] Setting control method: 0
+2026-01-09 09:37:40 [INFO] [DTB] Setting PID mode: 4 (AUTO)
+2026-01-09 09:37:40 [INFO] [DTB] Configuration complete
+2026-01-09 09:37:40 [INFO] DTB4848 slave 3 configured successfully
+2026-01-09 09:37:40 [INFO] DTB initialization complete
+2026-01-09 09:37:40 [INFO] Initializing Teensy queue manager on COM6...
+2026-01-09 09:37:40 [INFO] Attempting to connect to Teensy...
+2026-01-09 09:37:40 [INFO] [TNY] Connecting to Teensy on COM6...
+2026-01-09 09:37:40 [INFO] [TNY] Initializing Teensy on COM6 at 9600 baud
+2026-01-09 09:37:40 [INFO] [TNY] Successfully connected to Teensy on COM6
+2026-01-09 09:37:40 [INFO] Successfully connected to Teensy
+2026-01-09 09:37:40 [INFO] Teensy queue manager initialized
+2026-01-09 09:37:40 [INFO] Teensy queue processing thread started
+2026-01-09 09:37:40 [INFO] Teensy queue manager initialized and connected on COM6
+2026-01-09 09:37:40 [INFO] [TNY] Initializing 2 pins (2 low, 0 high)
+2026-01-09 09:37:40 [INFO] Committed transaction 1 with 2 commands to normal priority queue
+2026-01-09 09:37:40 [INFO] [TNY] Pin initialization transaction committed
+2026-01-09 09:37:40 [INFO] [TNY] Starting transaction 1 with 2 commands
+2026-01-09 09:37:40 [INFO] Status module state: UNINITIALIZED -> INITIALIZING
+2026-01-09 09:37:40 [INFO] Device states initialized (DTB devices: 2)
+2026-01-09 09:37:40 [INFO] Status monitoring module initialized
+2026-01-09 09:37:40 [INFO] Controls module initialized with 2 DTB devices
+2026-01-09 09:37:40 [INFO] Starting device status monitoring...
+2026-01-09 09:37:40 [INFO] Status module state: INITIALIZING -> RUNNING
+2026-01-09 09:37:40 [INFO] Status timer thread started
+2026-01-09 09:37:40 [INFO] Status monitoring started successfully
+2026-01-09 09:37:40 [INFO] Starting controls module - syncing with device states...
+2026-01-09 09:37:40 [INFO] [TNY] Completed transaction 1
+2026-01-09 09:37:40 [INFO] PSB remote mode: ON
+2026-01-09 09:37:43 [INFO] Controls module started
+2026-01-09 09:38:40 [INFO] BASELINE: Checking BioLogic connection...
+2026-01-09 09:38:40 [INFO] [BIO] BASELINE: BIO_IsAbstractInitialized = 1
+2026-01-09 09:38:40 [INFO] [BIO] BASELINE: BioLogic mode = EC-Lab OLE COM (1)
+2026-01-09 09:38:40 [INFO] BASELINE: Testing BioLogic connection...
+2026-01-09 09:38:40 [INFO] [BIO] BASELINE: BIO_Abstract_TestConnection returned 0 (SUCCESS=0)
+2026-01-09 09:38:40 [INFO] [BIO] BASELINE: BIO_Abstract_GetDeviceID returned 0
+2026-01-09 09:38:40 [INFO] [BIO] BASELINE: BioLogic connection verified successfully (ID=0)
+2026-01-09 09:38:40 [INFO] All required devices verified and initialized successfully
+2026-01-09 09:38:40 [INFO] === Starting Baseline Battery Experiment ===
+2026-01-09 09:38:42 [INFO] Created experiment file system: c:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\data\baseline_20260109_093842
+2026-01-09 09:38:42 [INFO] Experiment settings saved to: c:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\data\baseline_20260109_093842\experiment_settings.ini
+2026-01-09 09:38:42 [INFO] Initializing relay states...
+2026-01-09 09:38:43 [INFO] EIS target SOC points initialized:
+2026-01-09 09:38:43 [INFO]   0.0%
+2026-01-09 09:38:43 [INFO]   10.0%
+2026-01-09 09:38:43 [INFO]   20.0%
+2026-01-09 09:38:43 [INFO]   30.0%
+2026-01-09 09:38:43 [INFO]   40.0%
+2026-01-09 09:38:43 [INFO]   50.0%
+2026-01-09 09:38:43 [INFO]   60.0%
+2026-01-09 09:38:43 [INFO]   70.0%
+2026-01-09 09:38:43 [INFO]   80.0%
+2026-01-09 09:38:43 [INFO]   90.0%
+2026-01-09 09:38:43 [INFO]   100.0%
+2026-01-09 09:38:43 [INFO] === PHASE 1: Initial Discharge and Temperature Setup ===
+2026-01-09 09:38:43 [INFO] Setting up temperature control - target: 30.0  C
+2026-01-09 09:38:43 [INFO] [DTB] Setting setpoint to 30.0 C for all 2 DTB devices...
+2026-01-09 09:38:44 [INFO] [DTB] Setting setpoint: 30.0 C
+2026-01-09 09:38:44 [INFO] [DTB] Setting setpoint: 30.0 C
+2026-01-09 09:38:44 [INFO] [DTB] Successfully set setpoint for all DTB devices
+2026-01-09 09:38:44 [INFO] [DTB] Setting run/stop to RUN for all 2 DTB devices...
+2026-01-09 09:38:45 [INFO] [DTB] Setting Run/Stop: RUN
+2026-01-09 09:38:45 [INFO] [DTB] Setting Run/Stop: RUN
+2026-01-09 09:38:45 [INFO] [DTB] Successfully set run/stop for all DTB devices
+2026-01-09 09:38:45 [INFO] DTB temperature controller started
+2026-01-09 09:38:45 [INFO] Switching to PSB...
+2026-01-09 09:38:45 [INFO] [PSB] Setting output: OFF
+2026-01-09 09:38:46 [INFO] Successfully switched to PSB
+2026-01-09 09:38:46 [INFO] Discharging battery to 2.70 V
+2026-01-09 09:38:47 [INFO] Battery voltage: 2.946 V, Target: 2.700 V - Will DISCHARGE
+2026-01-09 09:38:47 [INFO] [PSB] Setting voltage: 2.70V (0x0937)
+2026-01-09 09:38:47 [INFO] [PSB] Setting sink current: 5.00A (0x1110)
+2026-01-09 09:38:47 [INFO] [PSB] Setting power: 30.00W (0x051E)
+2026-01-09 09:38:47 [INFO] [PSB] Setting sink power: 30.00W (0x051E)
+2026-01-09 09:38:48 [INFO] [PSB] Setting output: ON
+2026-01-09 09:38:48 [INFO] Waiting for output to stabilize...
+2026-01-09 09:38:50 [INFO] Discharging...
+2026-01-09 09:41:20 [INFO] Target voltage reached (2.696 V) and current below threshold (0.238 A < 0.250 A)
+2026-01-09 09:41:20 [INFO] [PSB] Setting output: OFF
+2026-01-09 09:41:20 [INFO] Discharge complete: 29.42 mAh, 0.08 Wh in 2.5 minutes
+2026-01-09 09:41:20 [INFO] Phase 1 discharge completed: 29.42 mAh in 2.5 minutes
+2026-01-09 09:41:20 [INFO] Waiting 60 seconds for battery relaxation...
+2026-01-09 09:42:26 [INFO] Waiting for ALL DTB devices to reach target temperature: 30.0  C
+2026-01-09 09:42:41 [INFO] DTB average temperature: 31.9  C (target: 30.0  C, max diff: 2.0  C, 2/2 in tolerance)
+2026-01-09 09:42:41 [INFO] ALL DTB devices reached target temperature (avg: 31.9  C)
+2026-01-09 09:42:41 [INFO] Stabilizing temperature for 0 seconds - monitoring ALL DTB devices...
+2026-01-09 09:47:39 [INFO] Temperature stabilization completed for all DTB devices
+2026-01-09 09:47:39 [INFO] Phase 1 completed successfully
+2026-01-09 09:47:39 [INFO] === PHASE 2: Capacity Experiment (Charge → Discharge) ===
+2026-01-09 09:47:39 [INFO] Running Phase 2 charge phase...
+2026-01-09 09:47:39 [INFO] Battery voltage: 2.747 V, Target: 4.200 V - Will CHARGE
+2026-01-09 09:47:39 [INFO] [PSB] Setting voltage: 4.20V (0x0E55)
+2026-01-09 09:47:39 [INFO] [PSB] Setting current: 3.30A (0x0B43)
+2026-01-09 09:47:40 [INFO] [PSB] Setting power: 30.00W (0x051E)
+2026-01-09 09:47:40 [INFO] [PSB] Setting sink power: 30.00W (0x051E)
+2026-01-09 09:47:40 [INFO] [PSB] Setting output: ON
+2026-01-09 09:47:40 [INFO] Waiting for output to stabilize...
+2026-01-09 09:47:42 [INFO] Charging...
+2026-01-09 12:04:06 [INFO] Target voltage reached (4.195 V) and current below threshold (0.249 A < 0.250 A)
+2026-01-09 12:04:06 [INFO] [PSB] Setting output: OFF
+2026-01-09 12:04:06 [INFO] Charge complete: 4915.63 mAh, 19.53 Wh in 136.4 minutes
+2026-01-09 12:04:06 [INFO] Phase 2 charge completed: 4915.63 mAh, 19.53 Wh in 136.4 minutes
+2026-01-09 12:04:06 [INFO] Waiting 60 seconds for battery relaxation after charge...
+2026-01-09 12:05:12 [INFO] Running Phase 2 discharge phase...
+2026-01-09 12:05:12 [INFO] Battery voltage: 4.177 V, Target: 2.700 V - Will DISCHARGE
+2026-01-09 12:05:12 [INFO] [PSB] Setting voltage: 2.70V (0x0937)
+2026-01-09 12:05:13 [INFO] [PSB] Setting sink current: 5.00A (0x1110)
+2026-01-09 12:05:13 [INFO] [PSB] Setting power: 30.00W (0x051E)
+2026-01-09 12:05:13 [INFO] [PSB] Setting sink power: 30.00W (0x051E)
+2026-01-09 12:05:13 [INFO] [PSB] Setting output: ON
+2026-01-09 12:05:13 [INFO] Waiting for output to stabilize...
+2026-01-09 12:05:15 [INFO] Discharging...
+2026-01-09 13:06:02 [INFO] Target voltage reached (2.696 V) and current below threshold (0.245 A < 0.250 A)
+2026-01-09 13:06:02 [INFO] [PSB] Setting output: OFF
+2026-01-09 13:06:02 [INFO] Discharge complete: 4809.21 mAh, 16.04 Wh in 60.8 minutes
+2026-01-09 13:06:02 [INFO] Phase 2 discharge completed: 4809.21 mAh, 16.04 Wh in 60.8 minutes
+2026-01-09 13:06:02 [INFO] Waiting 60 seconds for battery relaxation after discharge...
+2026-01-09 13:07:08 [INFO] Phase 2 completed successfully
+2026-01-09 13:07:08 [INFO] === PHASE 3: EIS Measurements During Charge ===
+2026-01-09 13:07:08 [INFO] Performing initial EIS measurement at 0% SOC...
+2026-01-09 13:07:14 [INFO] Waiting 60 seconds for battery relaxation before EIS measurement...
+2026-01-09 13:08:21 [INFO] Switching to BioLogic...
+2026-01-09 13:08:21 [INFO] [PSB] Setting output: OFF
+2026-01-09 13:08:22 [INFO] Successfully switched to BioLogic
+2026-01-09 13:08:22 [INFO] [BIO] Starting OCV measurement via EC-Lab
+2026-01-09 13:08:22 [INFO] [BIO]   Settings: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_settings\ocv_default.mps
+2026-01-09 13:08:22 [INFO] [BIO]   Output: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260109_130822_C01.mpr
+2026-01-09 13:08:22 [INFO] [BIO] Loading settings from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_settings\ocv_default.mps
+2026-01-09 13:08:22 [WARN] [BIO] LoadSettings failed (returned -2147417842 / 0x8001010E)
+2026-01-09 13:08:22 [WARN] [BIO]   Error is RPC_E_DISCONNECTED (0x8001010E)
+2026-01-09 13:08:22 [WARN] [BIO]   COM interface has become invalid - attempting automatic reconnection...
+2026-01-09 13:08:22 [INFO] [BIO] ========================================
+2026-01-09 13:08:22 [INFO] [BIO] Reconnecting EC-Lab COM interface
+2026-01-09 13:08:22 [INFO] [BIO] ========================================
+2026-01-09 13:08:22 [INFO] [BIO] This function is called when the COM interface becomes
+2026-01-09 13:08:22 [INFO] [BIO] disconnected (RPC_E_DISCONNECTED), typically after extended
+2026-01-09 13:08:22 [INFO] [BIO] idle periods or relay switching events.
+2026-01-09 13:08:22 [INFO] [BIO] 
+2026-01-09 13:08:22 [INFO] [BIO] Releasing old COM interface...
+2026-01-09 13:08:22 [INFO] [BIO] Creating new EC-Lab COM instance...
+2026-01-09 13:08:22 [INFO] [BIO] New COM instance created successfully
+2026-01-09 13:08:22 [INFO] [BIO] Reconnecting to device 0...
+2026-01-09 13:08:22 [INFO] [BIO] Connecting to EC-Lab device 0
+2026-01-09 13:08:22 [INFO] [BIO] Connected to EC-Lab device 0 successfully
+2026-01-09 13:08:22 [INFO] [BIO] ========================================
+2026-01-09 13:08:22 [INFO] [BIO] EC-Lab COM reconnection succeeded!
+2026-01-09 13:08:22 [INFO] [BIO] ========================================
+2026-01-09 13:08:22 [INFO] [BIO] Reconnection successful - retrying LoadSettings...
+2026-01-09 13:08:22 [INFO] [BIO] Settings loaded successfully after reconnection
+2026-01-09 13:08:22 [INFO] [BIO] Starting measurement, output: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260109_130822_C01.mpr
+2026-01-09 13:08:22 [INFO] [BIO] Measurement started
+2026-01-09 13:08:22 [INFO] [BIO] Monitoring measurement (timeout: 60000 ms)
+2026-01-09 13:08:22 [INFO] [BIO] Status: 0, Technique: 11, Time: 71.3 s, Points: 31
+2026-01-09 13:08:22 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:08:24 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:08:25 [INFO] [BIO] Measurement started running
+2026-01-09 13:08:26 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:08:27 [INFO] [BIO] Status: 1, Technique: 11, Time: 2.4 s, Points: 31
+2026-01-09 13:08:28 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:08:30 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:08:32 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:08:33 [INFO] [BIO] Status: 1, Technique: 11, Time: 7.9 s, Points: 31
+2026-01-09 13:08:34 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:08:35 [INFO] [BIO] Measurement completed (10.0 s, 31 points)
+2026-01-09 13:08:36 [INFO] [BIO] Converting .mpr file to BIO_TechniqueData: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260109_130822_C01.mpr
+2026-01-09 13:08:36 [INFO] [BIO] Reading number of points from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260109_130822_C01.mpr
+2026-01-09 13:08:36 [INFO] [BIO] File contains 10 data points
+2026-01-09 13:08:36 [INFO] [BIO] Reading 10 data points from .mpr file
+2026-01-09 13:08:36 [INFO] [BIO] Reading DC value at index 0 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260109_130822_C01.mpr
+2026-01-09 13:08:36 [INFO] [BIO] DC data: t=1.000 s, V=2.760540 V, I=0.000000 mA
+2026-01-09 13:08:36 [INFO] [BIO] Reading DC value at index 1 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260109_130822_C01.mpr
+2026-01-09 13:08:36 [INFO] [BIO] DC data: t=2.000 s, V=2.760605 V, I=0.000000 mA
+2026-01-09 13:08:36 [INFO] [BIO] Reading DC value at index 2 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260109_130822_C01.mpr
+2026-01-09 13:08:36 [INFO] [BIO] DC data: t=3.000 s, V=2.760764 V, I=0.000000 mA
+2026-01-09 13:08:36 [INFO] [BIO] Reading DC value at index 3 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260109_130822_C01.mpr
+2026-01-09 13:08:36 [INFO] [BIO] DC data: t=4.000 s, V=2.760933 V, I=0.000000 mA
+2026-01-09 13:08:36 [INFO] [BIO] Reading DC value at index 4 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260109_130822_C01.mpr
+2026-01-09 13:08:36 [INFO] [BIO] DC data: t=5.000 s, V=2.761101 V, I=0.000000 mA
+2026-01-09 13:08:36 [INFO] [BIO] Reading DC value at index 5 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260109_130822_C01.mpr
+2026-01-09 13:08:36 [INFO] [BIO] DC data: t=6.000 s, V=2.761270 V, I=0.000000 mA
+2026-01-09 13:08:36 [INFO] [BIO] Reading DC value at index 6 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260109_130822_C01.mpr
+2026-01-09 13:08:36 [INFO] [BIO] DC data: t=7.000 s, V=2.761443 V, I=0.000000 mA
+2026-01-09 13:08:36 [INFO] [BIO] Reading DC value at index 7 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260109_130822_C01.mpr
+2026-01-09 13:08:36 [INFO] [BIO] DC data: t=8.000 s, V=2.761614 V, I=0.000000 mA
+2026-01-09 13:08:36 [INFO] [BIO] Reading DC value at index 8 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260109_130822_C01.mpr
+2026-01-09 13:08:36 [INFO] [BIO] DC data: t=9.000 s, V=2.761787 V, I=0.000000 mA
+2026-01-09 13:08:36 [INFO] [BIO] Reading DC value at index 9 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260109_130822_C01.mpr
+2026-01-09 13:08:36 [INFO] [BIO] DC data: t=10.000 s, V=2.761960 V, I=0.000000 mA
+2026-01-09 13:08:36 [INFO] [BIO] Successfully converted 10 data points
+2026-01-09 13:08:36 [INFO] [BIO] OCV measurement completed successfully
+2026-01-09 13:08:36 [INFO] [BIO] Starting GEIS measurement via EC-Lab
+2026-01-09 13:08:36 [INFO] [BIO]   Settings: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_settings\geis_default.mps
+2026-01-09 13:08:36 [INFO] [BIO]   Output: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_130836_C01.mpr
+2026-01-09 13:08:36 [INFO] [BIO] Loading settings from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_settings\geis_default.mps
+2026-01-09 13:08:36 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:08:36 [INFO] [BIO] Settings loaded successfully
+2026-01-09 13:08:36 [INFO] [BIO] Starting measurement, output: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_130836_C01.mpr
+2026-01-09 13:08:36 [INFO] [BIO] Measurement started
+2026-01-09 13:08:36 [INFO] [BIO] Monitoring measurement (timeout: 300000 ms)
+2026-01-09 13:08:37 [INFO] [BIO] Status: 0, Technique: 30, Time: 10.0 s, Points: 31
+2026-01-09 13:08:38 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:08:40 [INFO] [BIO] Measurement started running
+2026-01-09 13:08:40 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:08:42 [INFO] [BIO] Status: 1, Technique: 30, Time: 2.5 s, Points: 31
+2026-01-09 13:08:42 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:08:44 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:08:46 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:08:47 [INFO] [BIO] Status: 1, Technique: 30, Time: 7.9 s, Points: 31
+2026-01-09 13:08:48 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:08:50 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:08:52 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:08:53 [INFO] [BIO] Status: 1, Technique: 30, Time: 13.3 s, Points: 31
+2026-01-09 13:08:54 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:08:56 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:08:58 [INFO] [BIO] Status: 1, Technique: 30, Time: 18.8 s, Points: 31
+2026-01-09 13:08:58 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:09:00 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:09:02 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:09:04 [INFO] [BIO] Status: 1, Technique: 30, Time: 24.2 s, Points: 31
+2026-01-09 13:09:04 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:09:06 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:09:08 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:09:09 [INFO] [BIO] Status: 1, Technique: 30, Time: 29.6 s, Points: 31
+2026-01-09 13:09:10 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:09:12 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:09:14 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:09:14 [INFO] [BIO] Status: 1, Technique: 30, Time: 35.0 s, Points: 31
+2026-01-09 13:09:16 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:09:18 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:09:20 [INFO] [BIO] Status: 1, Technique: 30, Time: 40.6 s, Points: 31
+2026-01-09 13:09:20 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:09:22 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:09:24 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:09:25 [INFO] [BIO] Status: 1, Technique: 30, Time: 45.9 s, Points: 31
+2026-01-09 13:09:26 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:09:28 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:09:30 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:09:31 [INFO] [BIO] Status: 1, Technique: 30, Time: 51.3 s, Points: 31
+2026-01-09 13:09:32 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:09:34 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:09:36 [INFO] [BIO] Status: 1, Technique: 30, Time: 56.7 s, Points: 31
+2026-01-09 13:09:36 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:09:38 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:09:40 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:09:42 [INFO] [BIO] Status: 1, Technique: 30, Time: 62.1 s, Points: 31
+2026-01-09 13:09:42 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:09:44 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:09:46 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:09:47 [INFO] [BIO] Status: 1, Technique: 30, Time: 67.5 s, Points: 31
+2026-01-09 13:09:48 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:09:50 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:09:51 [INFO] [BIO] Measurement completed (71.4 s, 31 points)
+2026-01-09 13:09:52 [INFO] [BIO] Converting .mpr file to BIO_TechniqueData: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_130836_C01.mpr
+2026-01-09 13:09:52 [INFO] [BIO] Reading number of points from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_130836_C01.mpr
+2026-01-09 13:09:52 [INFO] [BIO] File contains 30 data points
+2026-01-09 13:09:52 [INFO] [BIO] Reading 30 data points from .mpr file
+2026-01-09 13:09:52 [INFO] [BIO] Reading EIS value at index 0 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_130836_C01.mpr
+2026-01-09 13:09:52 [INFO] [BIO] EIS data: t=1.122 s, f=10002.226 Hz, Re(Z)=0.040845 Ohm, -Im(Z)=-0.030680 Ohm
+2026-01-09 13:09:52 [INFO] [BIO] Reading EIS value at index 1 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_130836_C01.mpr
+2026-01-09 13:09:52 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:09:52 [INFO] [BIO] EIS data: t=2.017 s, f=6811.067 Hz, Re(Z)=0.040163 Ohm, -Im(Z)=-0.021038 Ohm
+2026-01-09 13:09:52 [INFO] [BIO] Reading EIS value at index 2 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_130836_C01.mpr
+2026-01-09 13:09:52 [INFO] [BIO] EIS data: t=3.148 s, f=4641.485 Hz, Re(Z)=0.039764 Ohm, -Im(Z)=-0.014315 Ohm
+2026-01-09 13:09:52 [INFO] [BIO] Reading EIS value at index 3 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_130836_C01.mpr
+2026-01-09 13:09:52 [INFO] [BIO] EIS data: t=4.280 s, f=3161.012 Hz, Re(Z)=0.039607 Ohm, -Im(Z)=-0.009611 Ohm
+2026-01-09 13:09:52 [INFO] [BIO] Reading EIS value at index 4 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_130836_C01.mpr
+2026-01-09 13:09:52 [INFO] [BIO] EIS data: t=5.411 s, f=2155.690 Hz, Re(Z)=0.039552 Ohm, -Im(Z)=-0.006321 Ohm
+2026-01-09 13:09:52 [INFO] [BIO] Reading EIS value at index 5 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_130836_C01.mpr
+2026-01-09 13:09:52 [INFO] [BIO] EIS data: t=6.543 s, f=1468.590 Hz, Re(Z)=0.039667 Ohm, -Im(Z)=-0.004008 Ohm
+2026-01-09 13:09:52 [INFO] [BIO] Reading EIS value at index 6 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_130836_C01.mpr
+2026-01-09 13:09:52 [INFO] [BIO] EIS data: t=7.674 s, f=1000.320 Hz, Re(Z)=0.039832 Ohm, -Im(Z)=-0.002409 Ohm
+2026-01-09 13:09:52 [INFO] [BIO] Reading EIS value at index 7 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_130836_C01.mpr
+2026-01-09 13:09:52 [INFO] [BIO] EIS data: t=8.803 s, f=681.090 Hz, Re(Z)=0.040024 Ohm, -Im(Z)=-0.001220 Ohm
+2026-01-09 13:09:52 [INFO] [BIO] Reading EIS value at index 8 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_130836_C01.mpr
+2026-01-09 13:09:52 [INFO] [BIO] EIS data: t=9.935 s, f=463.961 Hz, Re(Z)=0.040263 Ohm, -Im(Z)=-0.000524 Ohm
+2026-01-09 13:09:52 [INFO] [BIO] Reading EIS value at index 9 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_130836_C01.mpr
+2026-01-09 13:09:52 [INFO] [BIO] EIS data: t=11.061 s, f=316.316 Hz, Re(Z)=0.040517 Ohm, -Im(Z)=0.000073 Ohm
+2026-01-09 13:09:52 [INFO] [BIO] Reading EIS value at index 10 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_130836_C01.mpr
+2026-01-09 13:09:52 [INFO] [BIO] EIS data: t=12.192 s, f=215.345 Hz, Re(Z)=0.040810 Ohm, -Im(Z)=0.000472 Ohm
+2026-01-09 13:09:52 [INFO] [BIO] Reading EIS value at index 11 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_130836_C01.mpr
+2026-01-09 13:09:52 [INFO] [BIO] EIS data: t=13.312 s, f=146.737 Hz, Re(Z)=0.041135 Ohm, -Im(Z)=0.000755 Ohm
+2026-01-09 13:09:52 [INFO] [BIO] Reading EIS value at index 12 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_130836_C01.mpr
+2026-01-09 13:09:52 [INFO] [BIO] EIS data: t=14.443 s, f=100.032 Hz, Re(Z)=0.041433 Ohm, -Im(Z)=0.000967 Ohm
+2026-01-09 13:09:52 [INFO] [BIO] Reading EIS value at index 13 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_130836_C01.mpr
+2026-01-09 13:09:52 [INFO] [BIO] EIS data: t=15.602 s, f=68.104 Hz, Re(Z)=0.041743 Ohm, -Im(Z)=0.001068 Ohm
+2026-01-09 13:09:52 [INFO] [BIO] Reading EIS value at index 14 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_130836_C01.mpr
+2026-01-09 13:09:52 [INFO] [BIO] EIS data: t=16.702 s, f=46.442 Hz, Re(Z)=0.042027 Ohm, -Im(Z)=0.001239 Ohm
+2026-01-09 13:09:52 [INFO] [BIO] Reading EIS value at index 15 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_130836_C01.mpr
+2026-01-09 13:09:52 [INFO] [BIO] EIS data: t=17.783 s, f=31.630 Hz, Re(Z)=0.042376 Ohm, -Im(Z)=0.001311 Ohm
+2026-01-09 13:09:52 [INFO] [BIO] Reading EIS value at index 16 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_130836_C01.mpr
+2026-01-09 13:09:52 [INFO] [BIO] EIS data: t=18.844 s, f=21.552 Hz, Re(Z)=0.042652 Ohm, -Im(Z)=0.001497 Ohm
+2026-01-09 13:09:52 [INFO] [BIO] Reading EIS value at index 17 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_130836_C01.mpr
+2026-01-09 13:09:52 [INFO] [BIO] EIS data: t=19.996 s, f=14.685 Hz, Re(Z)=0.043011 Ohm, -Im(Z)=0.001638 Ohm
+2026-01-09 13:09:52 [INFO] [BIO] Reading EIS value at index 18 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_130836_C01.mpr
+2026-01-09 13:09:52 [INFO] [BIO] EIS data: t=71.400 s, f=9.973 Hz, Re(Z)=0.043396 Ohm, -Im(Z)=0.001852 Ohm
+2026-01-09 13:09:52 [INFO] [BIO] Reading EIS value at index 19 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_130836_C01.mpr
+2026-01-09 13:09:52 [INFO] [BIO] EIS data: t=71.400 s, f=6.782 Hz, Re(Z)=0.043826 Ohm, -Im(Z)=0.002141 Ohm
+2026-01-09 13:09:52 [INFO] [BIO] Reading EIS value at index 20 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_130836_C01.mpr
+2026-01-09 13:09:52 [INFO] [BIO] EIS data: t=71.400 s, f=4.687 Hz, Re(Z)=0.044314 Ohm, -Im(Z)=0.002405 Ohm
+2026-01-09 13:09:52 [INFO] [BIO] Reading EIS value at index 21 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_130836_C01.mpr
+2026-01-09 13:09:52 [INFO] [BIO] EIS data: t=71.400 s, f=3.191 Hz, Re(Z)=0.044883 Ohm, -Im(Z)=0.002721 Ohm
+2026-01-09 13:09:52 [INFO] [BIO] Reading EIS value at index 22 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_130836_C01.mpr
+2026-01-09 13:09:52 [INFO] [BIO] EIS data: t=71.400 s, f=2.194 Hz, Re(Z)=0.045433 Ohm, -Im(Z)=0.003065 Ohm
+2026-01-09 13:09:52 [INFO] [BIO] Reading EIS value at index 23 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_130836_C01.mpr
+2026-01-09 13:09:52 [INFO] [BIO] EIS data: t=71.400 s, f=1.496 Hz, Re(Z)=0.046136 Ohm, -Im(Z)=0.003699 Ohm
+2026-01-09 13:09:52 [INFO] [BIO] Reading EIS value at index 24 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_130836_C01.mpr
+2026-01-09 13:09:52 [INFO] [BIO] EIS data: t=71.400 s, f=0.997 Hz, Re(Z)=0.047629 Ohm, -Im(Z)=0.003380 Ohm
+2026-01-09 13:09:52 [INFO] [BIO] Reading EIS value at index 25 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_130836_C01.mpr
+2026-01-09 13:09:52 [INFO] [BIO] EIS data: t=71.400 s, f=0.698 Hz, Re(Z)=0.047259 Ohm, -Im(Z)=0.004192 Ohm
+2026-01-09 13:09:52 [INFO] [BIO] Reading EIS value at index 26 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_130836_C01.mpr
+2026-01-09 13:09:52 [INFO] [BIO] EIS data: t=71.400 s, f=0.499 Hz, Re(Z)=0.047893 Ohm, -Im(Z)=0.003910 Ohm
+2026-01-09 13:09:52 [INFO] [BIO] Reading EIS value at index 27 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_130836_C01.mpr
+2026-01-09 13:09:52 [INFO] [BIO] EIS data: t=71.400 s, f=0.299 Hz, Re(Z)=0.048933 Ohm, -Im(Z)=0.006925 Ohm
+2026-01-09 13:09:52 [INFO] [BIO] Reading EIS value at index 28 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_130836_C01.mpr
+2026-01-09 13:09:52 [INFO] [BIO] EIS data: t=71.400 s, f=0.199 Hz, Re(Z)=0.051500 Ohm, -Im(Z)=0.009336 Ohm
+2026-01-09 13:09:52 [INFO] [BIO] Reading EIS value at index 29 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_130836_C01.mpr
+2026-01-09 13:09:52 [INFO] [BIO] EIS data: t=71.400 s, f=0.100 Hz, Re(Z)=0.048522 Ohm, -Im(Z)=0.004217 Ohm
+2026-01-09 13:09:52 [INFO] [BIO] Successfully converted 30 data points
+2026-01-09 13:09:52 [INFO] [BIO] GEIS measurement completed successfully
+2026-01-09 13:09:52 [INFO] EIS measurement 1 completed at 0.0% SOC (OCV: 2.762 V)
+2026-01-09 13:09:52 [INFO] Starting Phase 3 charging with EIS measurements...
+2026-01-09 13:09:52 [INFO] Switching to PSB...
+2026-01-09 13:09:53 [INFO] [PSB] Setting output: OFF
+2026-01-09 13:09:54 [INFO] Successfully switched to PSB
+2026-01-09 13:09:54 [INFO] [PSB] Setting voltage: 4.20V (0x0E55)
+2026-01-09 13:09:54 [INFO] [PSB] Setting current: 3.30A (0x0B43)
+2026-01-09 13:09:54 [INFO] [PSB] Setting power: 30.00W (0x051E)
+2026-01-09 13:09:54 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:09:54 [INFO] [PSB] Setting output: ON
+2026-01-09 13:09:55 [INFO] Waiting for PSB output to stabilize...
+2026-01-09 13:09:56 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:09:57 [INFO] Phase 3 charging started with EIS interruptions at 10.0% SOC intervals
+2026-01-09 13:09:58 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:10:00 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:10:02 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:10:04 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:10:06 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:10:10 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:10:12 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:10:15 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:10:18 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:10:20 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:10:24 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:10:26 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:10:29 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:10:32 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:10:34 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:10:36 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:10:40 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:10:42 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:10:45 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:10:48 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:10:50 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:10:54 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:10:56 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:10:59 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:11:02 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:11:04 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:11:08 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:11:10 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:11:13 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:11:16 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:11:18 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:11:22 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:11:24 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:11:27 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:11:30 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:11:32 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:11:36 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:11:38 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:11:41 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:11:44 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:11:46 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:11:50 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:11:52 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:11:55 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:11:58 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:12:00 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:12:04 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:12:06 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:12:09 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:12:12 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:12:14 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:12:18 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:12:20 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:12:23 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:12:26 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:12:28 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:12:31 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:12:33 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:12:36 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:12:39 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:12:41 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:12:45 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:12:47 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:12:50 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:12:53 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:12:55 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:12:59 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:13:01 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:13:04 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:13:07 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:13:09 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:13:13 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:13:15 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:13:18 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:13:21 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:13:23 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:13:27 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:13:29 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:13:32 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:13:35 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:13:37 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:13:41 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:13:43 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:13:46 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:13:49 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:13:51 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:13:55 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:13:57 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:14:00 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:14:03 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:14:05 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:14:07 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:14:11 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:14:13 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:14:16 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:14:19 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:14:21 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:14:25 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:14:27 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:14:30 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:14:33 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:14:35 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:14:37 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:14:41 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:14:43 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:14:46 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:14:49 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:14:51 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:14:55 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:14:57 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:15:00 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:15:03 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:15:05 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:15:09 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:15:11 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:15:14 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:15:17 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:15:19 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:15:23 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:15:25 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:15:28 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:15:30 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:15:32 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:15:36 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:15:38 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:15:41 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:15:44 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:15:46 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:15:50 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:15:52 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:15:55 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:15:58 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:16:00 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:16:04 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:16:06 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:16:09 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:16:12 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:16:14 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:16:18 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:16:20 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:16:23 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:16:26 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:16:28 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:16:32 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:16:34 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:16:37 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:16:40 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:16:42 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:16:46 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:16:48 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:16:51 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:16:54 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:16:56 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:17:00 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:17:02 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:17:05 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:17:08 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:17:10 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:17:14 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:17:16 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:17:19 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:17:22 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:17:24 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:17:28 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:17:30 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:17:33 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:17:36 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:17:38 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:17:42 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:17:44 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:17:47 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:17:50 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:17:52 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:17:56 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:17:58 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:18:01 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:18:04 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:18:06 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:18:10 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:18:12 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:18:15 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:18:18 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:18:20 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:18:24 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:18:26 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:18:29 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:18:32 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:18:34 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:18:37 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:18:39 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:18:42 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:18:45 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:18:47 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:18:51 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:18:53 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:18:56 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:18:59 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:19:01 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:19:04 [INFO] EIS target SOC 10.0% reached (actual: 10.1%)
+2026-01-09 13:19:04 [INFO] [PSB] Setting output: OFF
+2026-01-09 13:19:05 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:19:07 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:19:10 [INFO] Waiting 60 seconds for battery relaxation before EIS measurement...
+2026-01-09 13:19:11 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:19:13 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:19:15 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:19:17 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:19:19 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:19:21 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:19:23 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:19:25 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:19:27 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:19:29 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:19:31 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:19:33 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:19:35 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:19:37 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:19:39 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:19:41 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:19:43 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:19:45 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:19:47 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:19:49 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:19:51 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:19:53 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:19:55 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:19:57 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:19:59 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:20:01 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:20:03 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:20:05 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:20:07 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:20:09 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:20:11 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:20:13 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:20:15 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:20:16 [INFO] Switching to BioLogic...
+2026-01-09 13:20:16 [INFO] [PSB] Setting output: OFF
+2026-01-09 13:20:17 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:20:17 [INFO] Successfully switched to BioLogic
+2026-01-09 13:20:17 [INFO] [BIO] Starting OCV measurement via EC-Lab
+2026-01-09 13:20:17 [INFO] [BIO]   Settings: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_settings\ocv_default.mps
+2026-01-09 13:20:17 [INFO] [BIO]   Output: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260109_132017_C01.mpr
+2026-01-09 13:20:17 [INFO] [BIO] Loading settings from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_settings\ocv_default.mps
+2026-01-09 13:20:18 [INFO] [BIO] Settings loaded successfully
+2026-01-09 13:20:18 [INFO] [BIO] Starting measurement, output: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260109_132017_C01.mpr
+2026-01-09 13:20:18 [INFO] [BIO] Measurement started
+2026-01-09 13:20:18 [INFO] [BIO] Monitoring measurement (timeout: 60000 ms)
+2026-01-09 13:20:18 [INFO] [BIO] Status: 0, Technique: 11, Time: 71.4 s, Points: 31
+2026-01-09 13:20:19 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:20:21 [INFO] [BIO] Measurement started running
+2026-01-09 13:20:21 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:20:23 [INFO] [BIO] Status: 1, Technique: 11, Time: 2.4 s, Points: 31
+2026-01-09 13:20:23 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:20:25 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:20:27 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:20:29 [INFO] [BIO] Status: 1, Technique: 11, Time: 7.8 s, Points: 31
+2026-01-09 13:20:29 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:20:31 [INFO] [BIO] Measurement completed (10.0 s, 31 points)
+2026-01-09 13:20:31 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:20:32 [INFO] [BIO] Converting .mpr file to BIO_TechniqueData: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260109_132017_C01.mpr
+2026-01-09 13:20:32 [INFO] [BIO] Reading number of points from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260109_132017_C01.mpr
+2026-01-09 13:20:32 [INFO] [BIO] File contains 10 data points
+2026-01-09 13:20:32 [INFO] [BIO] Reading 10 data points from .mpr file
+2026-01-09 13:20:32 [INFO] [BIO] Reading DC value at index 0 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260109_132017_C01.mpr
+2026-01-09 13:20:32 [INFO] [BIO] DC data: t=1.000 s, V=3.421127 V, I=0.000000 mA
+2026-01-09 13:20:32 [INFO] [BIO] Reading DC value at index 1 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260109_132017_C01.mpr
+2026-01-09 13:20:32 [INFO] [BIO] DC data: t=2.000 s, V=3.420943 V, I=0.000000 mA
+2026-01-09 13:20:32 [INFO] [BIO] Reading DC value at index 2 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260109_132017_C01.mpr
+2026-01-09 13:20:32 [INFO] [BIO] DC data: t=3.000 s, V=3.420768 V, I=0.000000 mA
+2026-01-09 13:20:32 [INFO] [BIO] Reading DC value at index 3 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260109_132017_C01.mpr
+2026-01-09 13:20:32 [INFO] [BIO] DC data: t=4.000 s, V=3.420604 V, I=0.000000 mA
+2026-01-09 13:20:32 [INFO] [BIO] Reading DC value at index 4 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260109_132017_C01.mpr
+2026-01-09 13:20:32 [INFO] [BIO] DC data: t=5.000 s, V=3.420444 V, I=0.000000 mA
+2026-01-09 13:20:32 [INFO] [BIO] Reading DC value at index 5 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260109_132017_C01.mpr
+2026-01-09 13:20:32 [INFO] [BIO] DC data: t=6.000 s, V=3.420281 V, I=0.000000 mA
+2026-01-09 13:20:32 [INFO] [BIO] Reading DC value at index 6 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260109_132017_C01.mpr
+2026-01-09 13:20:32 [INFO] [BIO] DC data: t=7.000 s, V=3.420135 V, I=0.000000 mA
+2026-01-09 13:20:32 [INFO] [BIO] Reading DC value at index 7 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260109_132017_C01.mpr
+2026-01-09 13:20:32 [INFO] [BIO] DC data: t=8.000 s, V=3.419986 V, I=0.000000 mA
+2026-01-09 13:20:32 [INFO] [BIO] Reading DC value at index 8 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260109_132017_C01.mpr
+2026-01-09 13:20:32 [INFO] [BIO] DC data: t=9.000 s, V=3.419837 V, I=0.000000 mA
+2026-01-09 13:20:32 [INFO] [BIO] Reading DC value at index 9 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260109_132017_C01.mpr
+2026-01-09 13:20:32 [INFO] [BIO] DC data: t=10.000 s, V=3.419694 V, I=0.000000 mA
+2026-01-09 13:20:32 [INFO] [BIO] Successfully converted 10 data points
+2026-01-09 13:20:32 [INFO] [BIO] OCV measurement completed successfully
+2026-01-09 13:20:32 [INFO] [BIO] Starting GEIS measurement via EC-Lab
+2026-01-09 13:20:32 [INFO] [BIO]   Settings: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_settings\geis_default.mps
+2026-01-09 13:20:32 [INFO] [BIO]   Output: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_132032_C01.mpr
+2026-01-09 13:20:32 [INFO] [BIO] Loading settings from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_settings\geis_default.mps
+2026-01-09 13:20:32 [INFO] [BIO] Settings loaded successfully
+2026-01-09 13:20:32 [INFO] [BIO] Starting measurement, output: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_132032_C01.mpr
+2026-01-09 13:20:33 [INFO] [BIO] Measurement started
+2026-01-09 13:20:33 [INFO] [BIO] Monitoring measurement (timeout: 300000 ms)
+2026-01-09 13:20:33 [INFO] [BIO] Status: 0, Technique: 30, Time: 10.0 s, Points: 31
+2026-01-09 13:20:33 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:20:35 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:20:36 [INFO] [BIO] Measurement started running
+2026-01-09 13:20:37 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:20:38 [INFO] [BIO] Status: 1, Technique: 30, Time: 2.5 s, Points: 31
+2026-01-09 13:20:39 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:20:41 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:20:43 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:20:43 [INFO] [BIO] Status: 1, Technique: 30, Time: 7.8 s, Points: 31
+2026-01-09 13:20:45 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:20:47 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:20:49 [INFO] [BIO] Status: 1, Technique: 30, Time: 13.3 s, Points: 31
+2026-01-09 13:20:49 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:20:51 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:20:53 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:20:54 [INFO] [BIO] Status: 1, Technique: 30, Time: 18.7 s, Points: 31
+2026-01-09 13:20:55 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:20:57 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:20:59 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:21:00 [INFO] [BIO] Status: 1, Technique: 30, Time: 24.0 s, Points: 31
+2026-01-09 13:21:01 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:21:03 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:21:05 [INFO] [BIO] Status: 1, Technique: 30, Time: 29.4 s, Points: 31
+2026-01-09 13:21:05 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:21:07 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:21:09 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:21:10 [INFO] [BIO] Status: 1, Technique: 30, Time: 34.8 s, Points: 31
+2026-01-09 13:21:11 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:21:13 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:21:15 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:21:16 [INFO] [BIO] Status: 1, Technique: 30, Time: 40.1 s, Points: 31
+2026-01-09 13:21:17 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:21:19 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:21:21 [INFO] [BIO] Status: 1, Technique: 30, Time: 45.6 s, Points: 31
+2026-01-09 13:21:21 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:21:23 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:21:25 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:21:27 [INFO] [BIO] Status: 1, Technique: 30, Time: 51.0 s, Points: 31
+2026-01-09 13:21:27 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:21:29 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:21:31 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:21:32 [INFO] [BIO] Status: 1, Technique: 30, Time: 56.3 s, Points: 31
+2026-01-09 13:21:33 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:21:35 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:21:37 [INFO] [BIO] Status: 1, Technique: 30, Time: 61.7 s, Points: 31
+2026-01-09 13:21:37 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:21:39 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:21:41 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:21:43 [INFO] [BIO] Status: 1, Technique: 30, Time: 67.0 s, Points: 31
+2026-01-09 13:21:43 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:21:45 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:21:47 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:21:47 [INFO] [BIO] Measurement completed (71.5 s, 31 points)
+2026-01-09 13:21:48 [INFO] [BIO] Converting .mpr file to BIO_TechniqueData: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_132032_C01.mpr
+2026-01-09 13:21:48 [INFO] [BIO] Reading number of points from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_132032_C01.mpr
+2026-01-09 13:21:48 [INFO] [BIO] File contains 30 data points
+2026-01-09 13:21:48 [INFO] [BIO] Reading 30 data points from .mpr file
+2026-01-09 13:21:48 [INFO] [BIO] Reading EIS value at index 0 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_132032_C01.mpr
+2026-01-09 13:21:48 [INFO] [BIO] EIS data: t=1.123 s, f=10002.226 Hz, Re(Z)=0.040671 Ohm, -Im(Z)=-0.030691 Ohm
+2026-01-09 13:21:48 [INFO] [BIO] Reading EIS value at index 1 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_132032_C01.mpr
+2026-01-09 13:21:48 [INFO] [BIO] EIS data: t=2.019 s, f=6811.067 Hz, Re(Z)=0.039974 Ohm, -Im(Z)=-0.021093 Ohm
+2026-01-09 13:21:48 [INFO] [BIO] Reading EIS value at index 2 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_132032_C01.mpr
+2026-01-09 13:21:48 [INFO] [BIO] EIS data: t=3.150 s, f=4641.485 Hz, Re(Z)=0.039573 Ohm, -Im(Z)=-0.014359 Ohm
+2026-01-09 13:21:48 [INFO] [BIO] Reading EIS value at index 3 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_132032_C01.mpr
+2026-01-09 13:21:48 [INFO] [BIO] EIS data: t=4.282 s, f=3161.012 Hz, Re(Z)=0.039426 Ohm, -Im(Z)=-0.009664 Ohm
+2026-01-09 13:21:48 [INFO] [BIO] Reading EIS value at index 4 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_132032_C01.mpr
+2026-01-09 13:21:48 [INFO] [BIO] EIS data: t=5.414 s, f=2155.690 Hz, Re(Z)=0.039398 Ohm, -Im(Z)=-0.006337 Ohm
+2026-01-09 13:21:48 [INFO] [BIO] Reading EIS value at index 5 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_132032_C01.mpr
+2026-01-09 13:21:48 [INFO] [BIO] EIS data: t=6.546 s, f=1468.590 Hz, Re(Z)=0.039447 Ohm, -Im(Z)=-0.004093 Ohm
+2026-01-09 13:21:48 [INFO] [BIO] Reading EIS value at index 6 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_132032_C01.mpr
+2026-01-09 13:21:48 [INFO] [BIO] EIS data: t=7.678 s, f=1000.320 Hz, Re(Z)=0.039597 Ohm, -Im(Z)=-0.002506 Ohm
+2026-01-09 13:21:48 [INFO] [BIO] Reading EIS value at index 7 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_132032_C01.mpr
+2026-01-09 13:21:48 [INFO] [BIO] EIS data: t=8.809 s, f=681.090 Hz, Re(Z)=0.039784 Ohm, -Im(Z)=-0.001431 Ohm
+2026-01-09 13:21:48 [INFO] [BIO] Reading EIS value at index 8 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_132032_C01.mpr
+2026-01-09 13:21:48 [INFO] [BIO] EIS data: t=9.941 s, f=463.961 Hz, Re(Z)=0.039980 Ohm, -Im(Z)=-0.000660 Ohm
+2026-01-09 13:21:48 [INFO] [BIO] Reading EIS value at index 9 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_132032_C01.mpr
+2026-01-09 13:21:49 [INFO] [BIO] EIS data: t=11.067 s, f=316.316 Hz, Re(Z)=0.040188 Ohm, -Im(Z)=-0.000229 Ohm
+2026-01-09 13:21:49 [INFO] [BIO] Reading EIS value at index 10 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_132032_C01.mpr
+2026-01-09 13:21:49 [INFO] [BIO] EIS data: t=12.197 s, f=215.345 Hz, Re(Z)=0.040405 Ohm, -Im(Z)=0.000082 Ohm
+2026-01-09 13:21:49 [INFO] [BIO] Reading EIS value at index 11 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_132032_C01.mpr
+2026-01-09 13:21:49 [INFO] [BIO] EIS data: t=13.317 s, f=146.737 Hz, Re(Z)=0.040635 Ohm, -Im(Z)=0.000293 Ohm
+2026-01-09 13:21:49 [INFO] [BIO] Reading EIS value at index 12 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_132032_C01.mpr
+2026-01-09 13:21:49 [INFO] [BIO] EIS data: t=14.448 s, f=100.032 Hz, Re(Z)=0.040830 Ohm, -Im(Z)=0.000470 Ohm
+2026-01-09 13:21:49 [INFO] [BIO] Reading EIS value at index 13 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_132032_C01.mpr
+2026-01-09 13:21:49 [INFO] [BIO] EIS data: t=15.607 s, f=68.104 Hz, Re(Z)=0.041008 Ohm, -Im(Z)=0.000512 Ohm
+2026-01-09 13:21:49 [INFO] [BIO] Reading EIS value at index 14 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_132032_C01.mpr
+2026-01-09 13:21:49 [INFO] [BIO] EIS data: t=16.707 s, f=46.442 Hz, Re(Z)=0.041188 Ohm, -Im(Z)=0.000480 Ohm
+2026-01-09 13:21:49 [INFO] [BIO] Reading EIS value at index 15 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_132032_C01.mpr
+2026-01-09 13:21:49 [INFO] [BIO] EIS data: t=17.788 s, f=31.630 Hz, Re(Z)=0.041345 Ohm, -Im(Z)=0.000494 Ohm
+2026-01-09 13:21:49 [INFO] [BIO] Reading EIS value at index 16 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_132032_C01.mpr
+2026-01-09 13:21:49 [INFO] [BIO] EIS data: t=18.849 s, f=21.552 Hz, Re(Z)=0.041495 Ohm, -Im(Z)=0.000499 Ohm
+2026-01-09 13:21:49 [INFO] [BIO] Reading EIS value at index 17 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_132032_C01.mpr
+2026-01-09 13:21:49 [INFO] [BIO] EIS data: t=20.001 s, f=14.685 Hz, Re(Z)=0.041614 Ohm, -Im(Z)=0.000438 Ohm
+2026-01-09 13:21:49 [INFO] [BIO] Reading EIS value at index 18 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_132032_C01.mpr
+2026-01-09 13:21:49 [INFO] [BIO] EIS data: t=71.405 s, f=9.973 Hz, Re(Z)=0.041733 Ohm, -Im(Z)=0.000460 Ohm
+2026-01-09 13:21:49 [INFO] [BIO] Reading EIS value at index 19 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_132032_C01.mpr
+2026-01-09 13:21:49 [INFO] [BIO] EIS data: t=71.405 s, f=6.782 Hz, Re(Z)=0.041827 Ohm, -Im(Z)=0.000438 Ohm
+2026-01-09 13:21:49 [INFO] [BIO] Reading EIS value at index 20 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_132032_C01.mpr
+2026-01-09 13:21:49 [INFO] [BIO] EIS data: t=71.405 s, f=4.687 Hz, Re(Z)=0.041913 Ohm, -Im(Z)=0.000447 Ohm
+2026-01-09 13:21:49 [INFO] [BIO] Reading EIS value at index 21 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_132032_C01.mpr
+2026-01-09 13:21:49 [INFO] [BIO] EIS data: t=71.405 s, f=3.191 Hz, Re(Z)=0.042030 Ohm, -Im(Z)=0.000459 Ohm
+2026-01-09 13:21:49 [INFO] [BIO] Reading EIS value at index 22 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_132032_C01.mpr
+2026-01-09 13:21:49 [INFO] [BIO] EIS data: t=71.405 s, f=2.194 Hz, Re(Z)=0.042175 Ohm, -Im(Z)=0.000463 Ohm
+2026-01-09 13:21:49 [INFO] [BIO] Reading EIS value at index 23 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_132032_C01.mpr
+2026-01-09 13:21:49 [INFO] [BIO] EIS data: t=71.405 s, f=1.496 Hz, Re(Z)=0.042303 Ohm, -Im(Z)=0.000395 Ohm
+2026-01-09 13:21:49 [INFO] [BIO] Reading EIS value at index 24 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_132032_C01.mpr
+2026-01-09 13:21:49 [INFO] [BIO] EIS data: t=71.405 s, f=0.997 Hz, Re(Z)=0.042119 Ohm, -Im(Z)=0.000781 Ohm
+2026-01-09 13:21:49 [INFO] [BIO] Reading EIS value at index 25 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_132032_C01.mpr
+2026-01-09 13:21:49 [INFO] [BIO] EIS data: t=71.405 s, f=0.698 Hz, Re(Z)=0.042837 Ohm, -Im(Z)=0.000657 Ohm
+2026-01-09 13:21:49 [INFO] [BIO] Reading EIS value at index 26 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_132032_C01.mpr
+2026-01-09 13:21:49 [INFO] [BIO] EIS data: t=71.405 s, f=0.499 Hz, Re(Z)=0.043018 Ohm, -Im(Z)=0.001079 Ohm
+2026-01-09 13:21:49 [INFO] [BIO] Reading EIS value at index 27 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_132032_C01.mpr
+2026-01-09 13:21:49 [INFO] [BIO] EIS data: t=71.405 s, f=0.299 Hz, Re(Z)=0.043360 Ohm, -Im(Z)=0.000158 Ohm
+2026-01-09 13:21:49 [INFO] [BIO] Reading EIS value at index 28 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_132032_C01.mpr
+2026-01-09 13:21:49 [INFO] [BIO] EIS data: t=71.405 s, f=0.199 Hz, Re(Z)=0.042827 Ohm, -Im(Z)=-0.000382 Ohm
+2026-01-09 13:21:49 [INFO] [BIO] Reading EIS value at index 29 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_132032_C01.mpr
+2026-01-09 13:21:49 [INFO] [BIO] EIS data: t=71.405 s, f=0.100 Hz, Re(Z)=0.045624 Ohm, -Im(Z)=0.003637 Ohm
+2026-01-09 13:21:49 [INFO] [BIO] Successfully converted 30 data points
+2026-01-09 13:21:49 [INFO] [BIO] GEIS measurement completed successfully
+2026-01-09 13:21:49 [INFO] EIS measurement 2 completed at 10.1% SOC (OCV: 3.420 V)
+2026-01-09 13:21:49 [INFO] Resuming charging after EIS measurement...
+2026-01-09 13:21:49 [INFO] Switching to PSB...
+2026-01-09 13:21:49 [INFO] [PSB] Setting output: OFF
+2026-01-09 13:21:49 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:21:50 [INFO] Successfully switched to PSB
+2026-01-09 13:21:50 [INFO] [PSB] Setting output: ON
+2026-01-09 13:21:51 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:21:53 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:21:55 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:21:58 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:22:01 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:22:03 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:22:07 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:22:09 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:22:12 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:22:15 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:22:17 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:22:21 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:22:23 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:22:26 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:22:27 [INFO] Phase 3 charging completed - current below threshold for 5 consecutive readings
+2026-01-09 13:22:27 [INFO] Final SOC: 10.1%, Final current: 0.000 A
+2026-01-09 13:22:27 [INFO] [PSB] Setting output: OFF
+2026-01-09 13:22:27 [INFO] Taking final EIS measurement at 10.1% SOC
+2026-01-09 13:22:27 [INFO] Added dynamic EIS target: 10.1% SOC
+2026-01-09 13:22:29 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:22:31 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:22:34 [INFO] Waiting 60 seconds for battery relaxation before EIS measurement...
+2026-01-09 13:22:35 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:22:37 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:22:39 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:22:41 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:22:43 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:22:45 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:22:47 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:22:49 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:22:51 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:22:53 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:22:55 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:22:57 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:22:59 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:23:01 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:23:03 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:23:05 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:23:07 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:23:09 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:23:11 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:23:13 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:23:15 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:23:17 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:23:19 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:23:21 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:23:23 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:23:25 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:23:27 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:23:29 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:23:31 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:23:33 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:23:35 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:23:37 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:23:39 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:23:40 [INFO] Switching to BioLogic...
+2026-01-09 13:23:40 [INFO] [PSB] Setting output: OFF
+2026-01-09 13:23:41 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:23:41 [INFO] Successfully switched to BioLogic
+2026-01-09 13:23:41 [INFO] [BIO] Starting OCV measurement via EC-Lab
+2026-01-09 13:23:41 [INFO] [BIO]   Settings: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_settings\ocv_default.mps
+2026-01-09 13:23:41 [INFO] [BIO]   Output: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260109_132341_C01.mpr
+2026-01-09 13:23:41 [INFO] [BIO] Loading settings from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_settings\ocv_default.mps
+2026-01-09 13:23:42 [INFO] [BIO] Settings loaded successfully
+2026-01-09 13:23:42 [INFO] [BIO] Starting measurement, output: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260109_132341_C01.mpr
+2026-01-09 13:23:42 [INFO] [BIO] Measurement started
+2026-01-09 13:23:42 [INFO] [BIO] Monitoring measurement (timeout: 60000 ms)
+2026-01-09 13:23:42 [INFO] [BIO] Status: 0, Technique: 11, Time: 71.5 s, Points: 31
+2026-01-09 13:23:43 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:23:45 [INFO] [BIO] Measurement started running
+2026-01-09 13:23:45 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:23:47 [INFO] [BIO] Status: 1, Technique: 11, Time: 2.4 s, Points: 31
+2026-01-09 13:23:47 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:23:49 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:23:51 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:23:52 [INFO] [BIO] Status: 1, Technique: 11, Time: 7.8 s, Points: 31
+2026-01-09 13:23:53 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:23:55 [INFO] [BIO] Measurement completed (10.0 s, 31 points)
+2026-01-09 13:23:55 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:23:56 [INFO] [BIO] Converting .mpr file to BIO_TechniqueData: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260109_132341_C01.mpr
+2026-01-09 13:23:56 [INFO] [BIO] Reading number of points from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260109_132341_C01.mpr
+2026-01-09 13:23:56 [INFO] [BIO] File contains 10 data points
+2026-01-09 13:23:56 [INFO] [BIO] Reading 10 data points from .mpr file
+2026-01-09 13:23:56 [INFO] [BIO] Reading DC value at index 0 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260109_132341_C01.mpr
+2026-01-09 13:23:56 [INFO] [BIO] DC data: t=1.000 s, V=3.409203 V, I=0.000000 mA
+2026-01-09 13:23:56 [INFO] [BIO] Reading DC value at index 1 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260109_132341_C01.mpr
+2026-01-09 13:23:56 [INFO] [BIO] DC data: t=2.000 s, V=3.409033 V, I=0.000000 mA
+2026-01-09 13:23:56 [INFO] [BIO] Reading DC value at index 2 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260109_132341_C01.mpr
+2026-01-09 13:23:56 [INFO] [BIO] DC data: t=3.000 s, V=3.408997 V, I=0.000000 mA
+2026-01-09 13:23:56 [INFO] [BIO] Reading DC value at index 3 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260109_132341_C01.mpr
+2026-01-09 13:23:56 [INFO] [BIO] DC data: t=4.000 s, V=3.408974 V, I=0.000000 mA
+2026-01-09 13:23:56 [INFO] [BIO] Reading DC value at index 4 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260109_132341_C01.mpr
+2026-01-09 13:23:56 [INFO] [BIO] DC data: t=5.000 s, V=3.408949 V, I=0.000000 mA
+2026-01-09 13:23:56 [INFO] [BIO] Reading DC value at index 5 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260109_132341_C01.mpr
+2026-01-09 13:23:56 [INFO] [BIO] DC data: t=6.000 s, V=3.408927 V, I=0.000000 mA
+2026-01-09 13:23:56 [INFO] [BIO] Reading DC value at index 6 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260109_132341_C01.mpr
+2026-01-09 13:23:56 [INFO] [BIO] DC data: t=7.000 s, V=3.408905 V, I=0.000000 mA
+2026-01-09 13:23:56 [INFO] [BIO] Reading DC value at index 7 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260109_132341_C01.mpr
+2026-01-09 13:23:56 [INFO] [BIO] DC data: t=8.000 s, V=3.408890 V, I=0.000000 mA
+2026-01-09 13:23:56 [INFO] [BIO] Reading DC value at index 8 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260109_132341_C01.mpr
+2026-01-09 13:23:56 [INFO] [BIO] DC data: t=9.000 s, V=3.408875 V, I=0.000000 mA
+2026-01-09 13:23:56 [INFO] [BIO] Reading DC value at index 9 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260109_132341_C01.mpr
+2026-01-09 13:23:56 [INFO] [BIO] DC data: t=10.000 s, V=3.408856 V, I=0.000000 mA
+2026-01-09 13:23:56 [INFO] [BIO] Successfully converted 10 data points
+2026-01-09 13:23:56 [INFO] [BIO] OCV measurement completed successfully
+2026-01-09 13:23:56 [INFO] [BIO] Starting GEIS measurement via EC-Lab
+2026-01-09 13:23:56 [INFO] [BIO]   Settings: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_settings\geis_default.mps
+2026-01-09 13:23:56 [INFO] [BIO]   Output: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_132356_C01.mpr
+2026-01-09 13:23:56 [INFO] [BIO] Loading settings from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_settings\geis_default.mps
+2026-01-09 13:23:56 [INFO] [BIO] Settings loaded successfully
+2026-01-09 13:23:56 [INFO] [BIO] Starting measurement, output: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_132356_C01.mpr
+2026-01-09 13:23:57 [INFO] [BIO] Measurement started
+2026-01-09 13:23:57 [INFO] [BIO] Monitoring measurement (timeout: 300000 ms)
+2026-01-09 13:23:57 [INFO] [BIO] Status: 0, Technique: 30, Time: 10.0 s, Points: 31
+2026-01-09 13:23:57 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:23:59 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:24:00 [INFO] [BIO] Measurement started running
+2026-01-09 13:24:01 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:24:02 [INFO] [BIO] Status: 1, Technique: 30, Time: 2.5 s, Points: 31
+2026-01-09 13:24:03 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:24:05 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:24:07 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:24:07 [INFO] [BIO] Status: 1, Technique: 30, Time: 7.9 s, Points: 31
+2026-01-09 13:24:09 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:24:11 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:24:13 [INFO] [BIO] Status: 1, Technique: 30, Time: 13.2 s, Points: 31
+2026-01-09 13:24:13 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:24:15 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:24:17 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:24:18 [INFO] [BIO] Status: 1, Technique: 30, Time: 18.7 s, Points: 31
+2026-01-09 13:24:19 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:24:21 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:24:23 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:24:24 [INFO] [BIO] Status: 1, Technique: 30, Time: 24.1 s, Points: 31
+2026-01-09 13:24:25 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:24:27 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:24:29 [INFO] [BIO] Status: 1, Technique: 30, Time: 29.4 s, Points: 31
+2026-01-09 13:24:29 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:24:31 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:24:33 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:24:34 [INFO] [BIO] Status: 1, Technique: 30, Time: 34.8 s, Points: 31
+2026-01-09 13:24:35 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:24:37 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:24:39 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:24:40 [INFO] [BIO] Status: 1, Technique: 30, Time: 40.2 s, Points: 31
+2026-01-09 13:24:41 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:24:43 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:24:45 [INFO] [BIO] Status: 1, Technique: 30, Time: 45.6 s, Points: 31
+2026-01-09 13:24:45 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:24:47 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:24:49 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:24:51 [INFO] [BIO] Status: 1, Technique: 30, Time: 51.0 s, Points: 31
+2026-01-09 13:24:51 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:24:53 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:24:55 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:24:56 [INFO] [BIO] Status: 1, Technique: 30, Time: 56.3 s, Points: 31
+2026-01-09 13:24:57 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:24:59 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:25:01 [INFO] [BIO] Status: 1, Technique: 30, Time: 61.7 s, Points: 31
+2026-01-09 13:25:01 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:25:03 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:25:05 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:25:07 [INFO] [BIO] Status: 1, Technique: 30, Time: 67.1 s, Points: 31
+2026-01-09 13:25:07 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:25:09 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:25:11 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:25:11 [INFO] [BIO] Measurement completed (71.4 s, 31 points)
+2026-01-09 13:25:12 [INFO] [BIO] Converting .mpr file to BIO_TechniqueData: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_132356_C01.mpr
+2026-01-09 13:25:12 [INFO] [BIO] Reading number of points from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_132356_C01.mpr
+2026-01-09 13:25:12 [INFO] [BIO] File contains 30 data points
+2026-01-09 13:25:12 [INFO] [BIO] Reading 30 data points from .mpr file
+2026-01-09 13:25:12 [INFO] [BIO] Reading EIS value at index 0 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_132356_C01.mpr
+2026-01-09 13:25:12 [INFO] [BIO] EIS data: t=1.122 s, f=10002.226 Hz, Re(Z)=0.040545 Ohm, -Im(Z)=-0.030584 Ohm
+2026-01-09 13:25:12 [INFO] [BIO] Reading EIS value at index 1 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_132356_C01.mpr
+2026-01-09 13:25:12 [INFO] [BIO] EIS data: t=2.018 s, f=6811.067 Hz, Re(Z)=0.039910 Ohm, -Im(Z)=-0.021022 Ohm
+2026-01-09 13:25:12 [INFO] [BIO] Reading EIS value at index 2 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_132356_C01.mpr
+2026-01-09 13:25:12 [INFO] [BIO] EIS data: t=3.149 s, f=4641.485 Hz, Re(Z)=0.039526 Ohm, -Im(Z)=-0.014288 Ohm
+2026-01-09 13:25:12 [INFO] [BIO] Reading EIS value at index 3 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_132356_C01.mpr
+2026-01-09 13:25:12 [INFO] [BIO] EIS data: t=4.281 s, f=3161.012 Hz, Re(Z)=0.039353 Ohm, -Im(Z)=-0.009602 Ohm
+2026-01-09 13:25:12 [INFO] [BIO] Reading EIS value at index 4 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_132356_C01.mpr
+2026-01-09 13:25:12 [INFO] [BIO] EIS data: t=5.413 s, f=2155.690 Hz, Re(Z)=0.039353 Ohm, -Im(Z)=-0.006329 Ohm
+2026-01-09 13:25:12 [INFO] [BIO] Reading EIS value at index 5 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_132356_C01.mpr
+2026-01-09 13:25:12 [INFO] [BIO] EIS data: t=6.545 s, f=1468.590 Hz, Re(Z)=0.039412 Ohm, -Im(Z)=-0.004097 Ohm
+2026-01-09 13:25:12 [INFO] [BIO] Reading EIS value at index 6 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_132356_C01.mpr
+2026-01-09 13:25:12 [INFO] [BIO] EIS data: t=7.677 s, f=1000.320 Hz, Re(Z)=0.039602 Ohm, -Im(Z)=-0.002489 Ohm
+2026-01-09 13:25:12 [INFO] [BIO] Reading EIS value at index 7 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_132356_C01.mpr
+2026-01-09 13:25:12 [INFO] [BIO] EIS data: t=8.808 s, f=681.090 Hz, Re(Z)=0.039799 Ohm, -Im(Z)=-0.001411 Ohm
+2026-01-09 13:25:12 [INFO] [BIO] Reading EIS value at index 8 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_132356_C01.mpr
+2026-01-09 13:25:12 [INFO] [BIO] EIS data: t=9.940 s, f=463.961 Hz, Re(Z)=0.039991 Ohm, -Im(Z)=-0.000703 Ohm
+2026-01-09 13:25:12 [INFO] [BIO] Reading EIS value at index 9 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_132356_C01.mpr
+2026-01-09 13:25:12 [INFO] [BIO] EIS data: t=11.066 s, f=316.316 Hz, Re(Z)=0.040190 Ohm, -Im(Z)=-0.000188 Ohm
+2026-01-09 13:25:12 [INFO] [BIO] Reading EIS value at index 10 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_132356_C01.mpr
+2026-01-09 13:25:12 [INFO] [BIO] EIS data: t=12.197 s, f=215.345 Hz, Re(Z)=0.040434 Ohm, -Im(Z)=0.000114 Ohm
+2026-01-09 13:25:12 [INFO] [BIO] Reading EIS value at index 11 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_132356_C01.mpr
+2026-01-09 13:25:12 [INFO] [BIO] EIS data: t=13.316 s, f=146.737 Hz, Re(Z)=0.040667 Ohm, -Im(Z)=0.000367 Ohm
+2026-01-09 13:25:12 [INFO] [BIO] Reading EIS value at index 12 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_132356_C01.mpr
+2026-01-09 13:25:12 [INFO] [BIO] EIS data: t=14.447 s, f=100.032 Hz, Re(Z)=0.040862 Ohm, -Im(Z)=0.000493 Ohm
+2026-01-09 13:25:12 [INFO] [BIO] Reading EIS value at index 13 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_132356_C01.mpr
+2026-01-09 13:25:12 [INFO] [BIO] EIS data: t=15.605 s, f=68.104 Hz, Re(Z)=0.041071 Ohm, -Im(Z)=0.000550 Ohm
+2026-01-09 13:25:12 [INFO] [BIO] Reading EIS value at index 14 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_132356_C01.mpr
+2026-01-09 13:25:12 [INFO] [BIO] EIS data: t=16.705 s, f=46.442 Hz, Re(Z)=0.041239 Ohm, -Im(Z)=0.000551 Ohm
+2026-01-09 13:25:12 [INFO] [BIO] Reading EIS value at index 15 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_132356_C01.mpr
+2026-01-09 13:25:12 [INFO] [BIO] EIS data: t=17.786 s, f=31.630 Hz, Re(Z)=0.041400 Ohm, -Im(Z)=0.000468 Ohm
+2026-01-09 13:25:12 [INFO] [BIO] Reading EIS value at index 16 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_132356_C01.mpr
+2026-01-09 13:25:12 [INFO] [BIO] EIS data: t=18.846 s, f=21.552 Hz, Re(Z)=0.041583 Ohm, -Im(Z)=0.000557 Ohm
+2026-01-09 13:25:12 [INFO] [BIO] Reading EIS value at index 17 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_132356_C01.mpr
+2026-01-09 13:25:12 [INFO] [BIO] EIS data: t=19.998 s, f=14.685 Hz, Re(Z)=0.041701 Ohm, -Im(Z)=0.000551 Ohm
+2026-01-09 13:25:12 [INFO] [BIO] Reading EIS value at index 18 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_132356_C01.mpr
+2026-01-09 13:25:12 [INFO] [BIO] EIS data: t=71.402 s, f=9.973 Hz, Re(Z)=0.041872 Ohm, -Im(Z)=0.000519 Ohm
+2026-01-09 13:25:12 [INFO] [BIO] Reading EIS value at index 19 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_132356_C01.mpr
+2026-01-09 13:25:12 [INFO] [BIO] EIS data: t=71.402 s, f=6.782 Hz, Re(Z)=0.041995 Ohm, -Im(Z)=0.000491 Ohm
+2026-01-09 13:25:12 [INFO] [BIO] Reading EIS value at index 20 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_132356_C01.mpr
+2026-01-09 13:25:12 [INFO] [BIO] EIS data: t=71.402 s, f=4.687 Hz, Re(Z)=0.042088 Ohm, -Im(Z)=0.000491 Ohm
+2026-01-09 13:25:12 [INFO] [BIO] Reading EIS value at index 21 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_132356_C01.mpr
+2026-01-09 13:25:12 [INFO] [BIO] EIS data: t=71.402 s, f=3.191 Hz, Re(Z)=0.042203 Ohm, -Im(Z)=0.000490 Ohm
+2026-01-09 13:25:12 [INFO] [BIO] Reading EIS value at index 22 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_132356_C01.mpr
+2026-01-09 13:25:12 [INFO] [BIO] EIS data: t=71.402 s, f=2.194 Hz, Re(Z)=0.042303 Ohm, -Im(Z)=0.000514 Ohm
+2026-01-09 13:25:12 [INFO] [BIO] Reading EIS value at index 23 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_132356_C01.mpr
+2026-01-09 13:25:12 [INFO] [BIO] EIS data: t=71.402 s, f=1.496 Hz, Re(Z)=0.042418 Ohm, -Im(Z)=0.000535 Ohm
+2026-01-09 13:25:12 [INFO] [BIO] Reading EIS value at index 24 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_132356_C01.mpr
+2026-01-09 13:25:12 [INFO] [BIO] EIS data: t=71.402 s, f=0.997 Hz, Re(Z)=0.042467 Ohm, -Im(Z)=0.000630 Ohm
+2026-01-09 13:25:12 [INFO] [BIO] Reading EIS value at index 25 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_132356_C01.mpr
+2026-01-09 13:25:12 [INFO] [BIO] EIS data: t=71.402 s, f=0.698 Hz, Re(Z)=0.042689 Ohm, -Im(Z)=0.000692 Ohm
+2026-01-09 13:25:12 [INFO] [BIO] Reading EIS value at index 26 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_132356_C01.mpr
+2026-01-09 13:25:12 [INFO] [BIO] EIS data: t=71.402 s, f=0.499 Hz, Re(Z)=0.042815 Ohm, -Im(Z)=0.000852 Ohm
+2026-01-09 13:25:12 [INFO] [BIO] Reading EIS value at index 27 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_132356_C01.mpr
+2026-01-09 13:25:12 [INFO] [BIO] EIS data: t=71.402 s, f=0.299 Hz, Re(Z)=0.043068 Ohm, -Im(Z)=0.000850 Ohm
+2026-01-09 13:25:12 [INFO] [BIO] Reading EIS value at index 28 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_132356_C01.mpr
+2026-01-09 13:25:12 [INFO] [BIO] EIS data: t=71.403 s, f=0.199 Hz, Re(Z)=0.043168 Ohm, -Im(Z)=0.000932 Ohm
+2026-01-09 13:25:12 [INFO] [BIO] Reading EIS value at index 29 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260109_132356_C01.mpr
+2026-01-09 13:25:12 [INFO] [BIO] EIS data: t=71.403 s, f=0.100 Hz, Re(Z)=0.043969 Ohm, -Im(Z)=0.002040 Ohm
+2026-01-09 13:25:12 [INFO] [BIO] Successfully converted 30 data points
+2026-01-09 13:25:12 [INFO] [BIO] GEIS measurement completed successfully
+2026-01-09 13:25:12 [INFO] EIS measurement 3 completed at 10.1% SOC (OCV: 3.409 V)
+2026-01-09 13:25:13 [INFO] [PSB] Setting output: OFF
+2026-01-09 13:25:13 [INFO] Waiting 60 seconds for battery relaxation after charge...
+2026-01-09 13:25:13 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:25:15 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:25:17 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:25:19 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:25:21 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:25:23 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:25:25 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:25:27 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:25:29 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:25:31 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:25:33 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:25:35 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:25:37 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:25:39 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:25:41 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:25:43 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:25:45 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:25:47 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:25:49 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:25:51 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:25:53 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:25:55 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:25:57 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:25:59 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:26:01 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:26:03 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:26:05 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:26:07 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:26:09 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:26:11 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:26:13 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:26:15 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:26:17 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:26:19 [INFO] OCV vs SOC data written to: c:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\data\baseline_20260109_093842\phase_3\ocv_vs_soc.csv
+2026-01-09 13:26:19 [INFO] Phase 3 completed successfully
+2026-01-09 13:26:19 [INFO] === PHASE 4: Discharge to 50% Capacity ===
+2026-01-09 13:26:19 [INFO] === Phase 4: Discharging battery to 50% capacity ===
+2026-01-09 13:26:19 [INFO] Target discharge: 2404.61 mAh (50% of 4809.21 mAh usable capacity)
+2026-01-09 13:26:19 [INFO] Switching to PSB...
+2026-01-09 13:26:19 [INFO] [PSB] Setting output: OFF
+2026-01-09 13:26:19 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:26:20 [INFO] Successfully switched to PSB
+2026-01-09 13:26:20 [INFO] Starting discharge of 2404.61 mAh at 5.00 A
+2026-01-09 13:26:20 [INFO] [PSB] Setting voltage: 2.70V (0x0937)
+2026-01-09 13:26:20 [INFO] [PSB] Setting sink current: 5.00A (0x1110)
+2026-01-09 13:26:20 [INFO] [PSB] Setting power: 30.00W (0x051E)
+2026-01-09 13:26:21 [INFO] [PSB] Setting sink power: 30.00W (0x051E)
+2026-01-09 13:26:21 [INFO] [PSB] Setting output: ON
+2026-01-09 13:26:21 [INFO] Waiting for output to stabilize...
+2026-01-09 13:26:21 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:26:23 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:26:25 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:26:27 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:26:29 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:26:31 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:26:33 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:26:35 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:26:37 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:26:41 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:26:43 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:26:46 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:26:49 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:26:51 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:26:55 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:26:57 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:27:00 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:27:03 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:27:05 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:27:09 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:27:11 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:27:14 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:27:17 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:27:19 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:27:23 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:27:25 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:27:28 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:27:31 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:27:33 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:27:37 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:27:39 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:27:42 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:27:45 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:27:47 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:27:51 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:27:53 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:27:56 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:27:59 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:28:01 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:28:05 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:28:07 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:28:10 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:28:13 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:28:15 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:28:19 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:28:21 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:28:24 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:28:27 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:28:29 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:28:33 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:28:35 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:28:38 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:28:40 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:28:42 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:28:46 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:28:48 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:28:51 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:28:54 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:28:56 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:29:00 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:29:02 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:29:05 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:29:08 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:29:10 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:29:14 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:29:16 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:29:19 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:29:22 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:29:24 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:29:28 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:29:30 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:29:33 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:29:36 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:29:38 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:29:42 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:29:44 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:29:46 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:29:50 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:29:52 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:29:55 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:29:58 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:30:00 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:30:04 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:30:06 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:30:09 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:30:12 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:30:14 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:30:18 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:30:20 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:30:23 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:30:26 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:30:28 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:30:32 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:30:34 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:30:37 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:30:40 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:30:42 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:30:46 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:30:48 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:30:51 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:30:54 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:30:56 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:31:00 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:31:02 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:31:05 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:31:08 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:31:10 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:31:14 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:31:16 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:31:19 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:31:22 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:31:24 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:31:28 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:31:30 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:31:33 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:31:36 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:31:38 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:31:41 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:31:43 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:31:46 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:31:49 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:31:51 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:31:55 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:31:57 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:31:59 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:32:03 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:32:05 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:32:08 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:32:11 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:32:13 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:32:17 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:32:19 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:32:22 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:32:25 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:32:27 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:32:31 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:32:33 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:32:36 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:32:39 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:32:41 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:32:45 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:32:47 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:32:50 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:32:53 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:32:55 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:32:59 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:33:01 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:33:04 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:33:07 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:33:09 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:33:13 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:33:15 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:33:18 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:33:21 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:33:23 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:33:27 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:33:29 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:33:32 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:33:35 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:33:37 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:33:41 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:33:43 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:33:46 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:33:49 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:33:51 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:33:55 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:33:57 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:34:00 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:34:03 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:34:05 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:34:09 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:34:11 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:34:14 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:34:17 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:34:19 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:34:23 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:34:25 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:34:28 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:34:31 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:34:33 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:34:37 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:34:39 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:34:42 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:34:45 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:34:47 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:34:50 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:34:52 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:34:55 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:34:58 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:35:00 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:35:03 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:35:06 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:35:08 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:35:10 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:35:14 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:35:16 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:35:19 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:35:22 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:35:24 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:35:28 [INFO] discharge stopped - current below threshold (0.247 A < 0.250 A)
+2026-01-09 13:35:28 [INFO] [PSB] Setting output: OFF
+2026-01-09 13:35:28 [INFO] Discharge complete: 491.94 mAh in 9.1 minutes
+2026-01-09 13:35:28 [WARN] Phase 4 incomplete - failed to discharge to exactly 50% of usable capacity
+2026-01-09 13:35:28 [INFO]   Discharged: 491.94 mAh (target: 2404.61 mAh)
+2026-01-09 13:35:28 [INFO]   Percentage of usable capacity: 10.2%
+2026-01-09 13:35:28 [INFO] Phase 4 completed
+2026-01-09 13:35:28 [INFO] === BASELINE EXPERIMENT COMPLETED SUCCESSFULLY ===
+2026-01-09 13:35:28 [INFO] Total experiment time: 3.9 hours
+2026-01-09 13:35:28 [INFO] Comprehensive results written to: c:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\data\baseline_20260109_093842\summary.txt
+2026-01-09 13:35:28 [INFO] Cleaning up baseline experiment...
+2026-01-09 13:35:28 [INFO] Safely disconnecting all devices...
+2026-01-09 13:35:28 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:35:28 [INFO] [PSB] Setting output: OFF
+2026-01-09 13:35:28 [INFO] [DTB] Setting run/stop to STOP for all 2 DTB devices...
+2026-01-09 13:35:30 [INFO] [DTB] Setting Run/Stop: STOP
+2026-01-09 13:35:30 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 13:35:30 [INFO] [DTB] Setting Run/Stop: STOP
+2026-01-09 13:35:31 [INFO] [DTB] Successfully set run/stop for all DTB devices
+2026-01-09 13:35:31 [INFO] Device disconnect completed
+2026-01-09 13:35:31 [INFO] Baseline experiment cleanup completed
+2026-01-09 13:35:32 [WARN] [BIO] TestConnection: Device 0 is not connected
+[...]
+2026-01-09 17:29:01 [WARN] [BIO] TestConnection: Device 0 is not connected
+2026-01-09 17:29:01 [INFO] ========================================
+2026-01-09 17:29:01 [INFO] Shutting down Battery Tester application
+2026-01-09 17:29:01 [INFO] ========================================
+2026-01-09 17:29:01 [INFO] [TNY] Setting 2 pins
+2026-01-09 17:29:02 [INFO] Stopping status monitoring...
+2026-01-09 17:29:02 [INFO] Stopping device status monitoring...
+2026-01-09 17:29:02 [INFO] Status module state: RUNNING -> STOPPING
+2026-01-09 17:29:03 [INFO] Status timer thread stopped
+2026-01-09 17:29:03 [INFO] Status module state: STOPPING -> STOPPED
+2026-01-09 17:29:03 [INFO] Status monitoring stopped
+2026-01-09 17:29:03 [INFO] Cleaning up cDAQ module...
+2026-01-09 17:29:03 [INFO] Cleaning up cDAQ module...
+2026-01-09 17:29:04 [INFO] Cleaned up cDAQ slot 2 task
+2026-01-09 17:29:05 [INFO] Cleaned up cDAQ slot 3 task
+2026-01-09 17:29:05 [INFO] cDAQ module cleaned up
+2026-01-09 17:29:05 [INFO] Shutting down PSB queue manager...
+2026-01-09 17:29:05 [INFO] [PSB] Shutting down PSB 10000 queue manager...
+2026-01-09 17:29:05 [INFO] [PSB] Waiting for processing thread to complete...
+2026-01-09 17:29:05 [INFO] [PSB] All queues empty, processing thread exiting
+2026-01-09 17:29:05 [INFO] [PSB] PSB 10000 queue processing thread stopped
+2026-01-09 17:29:05 [INFO] [PSB] Setting output: OFF
+2026-01-09 17:29:06 [INFO] [PSB] Setting remote mode: OFF
+2026-01-09 17:29:06 [INFO] [PSB] Closing connection on COM3
+2026-01-09 17:29:06 [INFO] [PSB] Disconnected from PSB 10000
+2026-01-09 17:29:06 [INFO] Device queue manager shut down
+2026-01-09 17:29:06 [INFO] Shutting down BioLogic abstraction layer...
+2026-01-09 17:29:06 [INFO] [BIO] Shutting down BioLogic abstraction layer
+2026-01-09 17:29:06 [INFO] [BIO] Shutting down EC-Lab backend
+2026-01-09 17:29:06 [INFO] [BIO] Shutting down EC-Lab OLE COM connection
+2026-01-09 17:29:06 [INFO] [BIO] EC-Lab OLE COM connection shutdown complete
+2026-01-09 17:29:06 [INFO] [BIO] EC-Lab backend shutdown complete
+2026-01-09 17:29:06 [INFO] [BIO] BioLogic abstraction layer shutdown complete
+2026-01-09 17:29:06 [INFO] Shutting down DTB queue manager...
+2026-01-09 17:29:06 [INFO] [DTB] Shutting down DTB 4848 queue manager...
+2026-01-09 17:29:06 [INFO] [DTB] Waiting for processing thread to complete...
+2026-01-09 17:29:06 [INFO] [DTB] All queues empty, processing thread exiting
+2026-01-09 17:29:06 [INFO] [DTB] DTB 4848 queue processing thread stopped
+2026-01-09 17:29:06 [INFO] [DTB] Stopping DTB slave 2...
+2026-01-09 17:29:06 [INFO] [DTB] Setting Run/Stop: STOP
+2026-01-09 17:29:06 [INFO] [DTB] Stopping DTB slave 3...
+2026-01-09 17:29:06 [INFO] [DTB] Setting Run/Stop: STOP
+2026-01-09 17:29:06 [INFO] [DTB] Closing COM5
+2026-01-09 17:29:06 [INFO] [DTB] Disconnected all DTB devices from COM5
+2026-01-09 17:29:06 [INFO] [DTB] Disconnected from DTB 4848
+2026-01-09 17:29:06 [INFO] Device queue manager shut down
+2026-01-09 17:29:06 [INFO] Shutting down Teensy queue manager...
+2026-01-09 17:29:06 [INFO] [TNY] Shutting down Teensy queue manager...
+2026-01-09 17:29:06 [INFO] [TNY] Waiting for processing thread to complete...
+2026-01-09 17:29:06 [INFO] [TNY] All queues empty, processing thread exiting
+2026-01-09 17:29:06 [INFO] [TNY] Teensy queue processing thread stopped
+2026-01-09 17:29:06 [INFO] [TNY] Closing connection on COM6
+2026-01-09 17:29:06 [INFO] [TNY] Disconnected from Teensy
+2026-01-09 17:29:06 [INFO] Device queue manager shut down
+2026-01-09 17:29:06 [INFO] Cleaning up CDC experiment module...
+2026-01-09 17:29:06 [INFO] Cleaning up Baseline experiment module...
+2026-01-09 17:29:06 [INFO] Cleaning up controls module...
+2026-01-09 17:29:06 [INFO] Controls module cleaned up
+2026-01-09 17:29:06 [INFO] Cleaning up status monitoring...
+2026-01-09 17:29:06 [INFO] Status module state: STOPPED -> UNINITIALIZED
+2026-01-09 17:29:06 [INFO] Status module cleaned up
+2026-01-09 17:29:06 [INFO] Shutting down thread pool...
+2026-01-09 17:29:07 [INFO] Cleanup complete. Exiting application.
+2026-01-09 17:29:07 [INFO] ========================================
+=== Battery Tester Log Ended: 2026-01-09 17:29:07 ===

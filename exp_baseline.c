@@ -295,8 +295,8 @@ int CVICALLBACK StartBaselineExperimentCallback(int panel, int control, int even
     GetCtrlVal(panel, BASELINE_NUM_EIS_INTERVAL, &g_experimentContext.params.eisInterval);
     GetCtrlVal(panel, BASELINE_NUM_CURRENT_THRESHOLD, &g_experimentContext.params.currentThreshold);
     GetCtrlVal(panel, BASELINE_NUM_INTERVAL, &g_experimentContext.params.logInterval);
-    GetCtrlVal(panel, BASELINE_CHK_MANUAL_CAPACITY, &g_experimentContext.params.useManualCapacity);
-    GetCtrlVal(panel, BASELINE_NUM_MANUAL_CAPACITY, &g_experimentContext.params.manualCapacity_mAh);
+    GetCtrlVal(panel, BASELINE_CHK_MANUAL_C, &g_experimentContext.params.useManualCapacity);
+    GetCtrlVal(panel, BASELINE_NUM_MANUAL_C, &g_experimentContext.params.manualCapacity_mAh);
     GetCtrlVal(g_mainPanelHandle, PANEL_NUM_SET_CHARGE_V, &g_experimentContext.params.chargeVoltage);
     GetCtrlVal(g_mainPanelHandle, PANEL_NUM_SET_DISCHARGE_V, &g_experimentContext.params.dischargeVoltage);
     GetCtrlVal(g_mainPanelHandle, PANEL_NUM_SET_CHARGE_I, &g_experimentContext.params.chargeCurrent);
