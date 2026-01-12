@@ -426,41 +426,44 @@ static int RunOperation(CDCExperimentContext *ctx) {
     GetCtrlVal(g_mainPanelHandle, PANEL_NUM_SET_CHARGE_I, &chargeCurrent);
     GetCtrlVal(g_mainPanelHandle, PANEL_NUM_SET_DISCHARGE_I, &dischargeCurrent);
     
-    // Set both source and sink current values to allow backflow
+    // IMPORTANT: Set limits first, then voltage setpoint last to enter voltage-controlled mode
+    // (PSB control mode is determined by which setpoint register is written last)
+
+    // Set both source and sink current limits to allow backflow
     result = PSB_SetCurrentQueued(chargeCurrent, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
-        LogError("Failed to set source current: %s", PSB_GetErrorString(result));
+        LogError("Failed to set source current limit: %s", PSB_GetErrorString(result));
         return result;
     }
-    
+
     result = PSB_SetSinkCurrentQueued(dischargeCurrent, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
-        LogError("Failed to set sink current: %s", PSB_GetErrorString(result));
+        LogError("Failed to set sink current limit: %s", PSB_GetErrorString(result));
         return result;
     }
-    
-    LogMessage("Current values set - Source: %.2fA, Sink: %.2fA", chargeCurrent, dischargeCurrent);
-    
-    // Set the target voltage from context (already read in StartCDCOperation)
+
+    LogMessage("Current limits set - Source: %.2fA, Sink: %.2fA", chargeCurrent, dischargeCurrent);
+
+    // Set power limits high enough to avoid CP mode
+    result = PSB_SetPowerQueued(CDC_POWER_LIMIT_W, DEVICE_PRIORITY_NORMAL);
+    if (result != PSB_SUCCESS) {
+        LogWarning("Failed to set power limit: %s", PSB_GetErrorString(result));
+    }
+
+    result = PSB_SetSinkPowerQueued(CDC_POWER_LIMIT_W, DEVICE_PRIORITY_NORMAL);
+    if (result != PSB_SUCCESS) {
+        LogWarning("Failed to set sink power limit: %s", PSB_GetErrorString(result));
+    }
+
+    // Set voltage setpoint last to enter voltage-controlled mode
     result = PSB_SetVoltageQueued(ctx->params.targetVoltage, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         LogError("Failed to set target voltage: %s", PSB_GetErrorString(result));
         return result;
     }
-    
+
     LogMessage("Target voltage set to %.2fV", ctx->params.targetVoltage);
-    
-    // Set power values high enough to avoid CP mode
-    result = PSB_SetPowerQueued(CDC_POWER_LIMIT_W, DEVICE_PRIORITY_NORMAL);
-    if (result != PSB_SUCCESS) {
-        LogWarning("Failed to set power: %s", PSB_GetErrorString(result));
-    }
-    
-    result = PSB_SetSinkPowerQueued(CDC_POWER_LIMIT_W, DEVICE_PRIORITY_NORMAL);
-    if (result != PSB_SUCCESS) {
-        LogWarning("Failed to set sink power: %s", PSB_GetErrorString(result));
-    }
-	
+
 	// Connect PSB to battery using Teensy relay
 	result = TNY_SetPinQueued(TNY_PSB_PIN, TNY_STATE_CONNECTED, DEVICE_PRIORITY_NORMAL);
     if (result != SUCCESS) {

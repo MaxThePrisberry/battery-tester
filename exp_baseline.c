@@ -1398,6 +1398,27 @@ static int RunPhase3_EISCharge(BaselineExperimentContext *ctx) {
     }
     
     // Configure PSB for charging
+    // IMPORTANT: Set limits first, then voltage setpoint last to enter voltage-controlled mode
+    // (PSB control mode is determined by which setpoint register is written last)
+
+    // Set current limit (acts as constraint in voltage mode)
+    result = PSB_SetCurrentQueued(ctx->params.chargeCurrent, DEVICE_PRIORITY_NORMAL);
+    if (result != PSB_SUCCESS) {
+        LogError("Failed to set charge current limit: %s", PSB_GetErrorString(result));
+        if (ctx->currentPhaseLogFile) {
+            fclose(ctx->currentPhaseLogFile);
+            ctx->currentPhaseLogFile = NULL;
+        }
+        return result;
+    }
+
+    // Set power limit (acts as constraint in voltage mode)
+    result = PSB_SetPowerQueued(BASELINE_POWER_LIMIT, DEVICE_PRIORITY_NORMAL);
+    if (result != PSB_SUCCESS) {
+        LogWarning("Failed to set power limit: %s", PSB_GetErrorString(result));
+    }
+
+    // Set voltage setpoint last to enter voltage-controlled mode
     result = PSB_SetVoltageQueued(ctx->params.chargeVoltage, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         LogError("Failed to set charge voltage: %s", PSB_GetErrorString(result));
@@ -1406,21 +1427,6 @@ static int RunPhase3_EISCharge(BaselineExperimentContext *ctx) {
             ctx->currentPhaseLogFile = NULL;
         }
         return result;
-    }
-    
-    result = PSB_SetCurrentQueued(ctx->params.chargeCurrent, DEVICE_PRIORITY_NORMAL);
-    if (result != PSB_SUCCESS) {
-        LogError("Failed to set charge current: %s", PSB_GetErrorString(result));
-        if (ctx->currentPhaseLogFile) {
-            fclose(ctx->currentPhaseLogFile);
-            ctx->currentPhaseLogFile = NULL;
-        }
-        return result;
-    }
-    
-    result = PSB_SetPowerQueued(BASELINE_POWER_LIMIT, DEVICE_PRIORITY_NORMAL);
-    if (result != PSB_SUCCESS) {
-        LogWarning("Failed to set power: %s", PSB_GetErrorString(result));
     }
     
     // Enable PSB output

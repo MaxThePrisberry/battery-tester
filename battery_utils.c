@@ -116,35 +116,39 @@ int Battery_GoToVoltage(VoltageTargetParams *params) {
     
     // Update status
     if (params->statusCallback) {
-        params->statusCallback(params->wasCharging ? "Configuring charge parameters..." : 
+        params->statusCallback(params->wasCharging ? "Configuring charge parameters..." :
                                                      "Configuring discharge parameters...");
     }
-    
-    // Set voltage
-    result = PSB_SetVoltageQueued(params->targetVoltage_V, DEVICE_PRIORITY_NORMAL);
-    if (result != PSB_SUCCESS) {
-        LogError("Failed to set voltage: %s", PSB_GetErrorString(result));
-        return result;
-    }
-    
-    // Set current based on direction
+
+    // IMPORTANT: Set limits first, then voltage setpoint last to enter voltage-controlled mode
+    // (PSB control mode is determined by which setpoint register is written last)
+
+    // Set current limit based on direction
     if (params->wasCharging) {
         result = PSB_SetCurrentQueued(params->maxCurrent_A, DEVICE_PRIORITY_NORMAL);
     } else {
         result = PSB_SetSinkCurrentQueued(params->maxCurrent_A, DEVICE_PRIORITY_NORMAL);
     }
     if (result != PSB_SUCCESS) {
-        LogError("Failed to set current: %s", PSB_GetErrorString(result));
+        LogError("Failed to set current limit: %s", PSB_GetErrorString(result));
         return result;
     }
-	
+
+	// Set power limits
 	result = PSB_SetPowerQueued(PSB_BATTERY_POWER_MAX, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
-        LogWarning("Failed to set power: %s", PSB_GetErrorString(result));
+        LogWarning("Failed to set power limit: %s", PSB_GetErrorString(result));
     }
 	result = PSB_SetSinkPowerQueued(PSB_BATTERY_POWER_MAX, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
-        LogWarning("Failed to set sink power: %s", PSB_GetErrorString(result));
+        LogWarning("Failed to set sink power limit: %s", PSB_GetErrorString(result));
+    }
+
+    // Set voltage setpoint last to enter voltage-controlled mode
+    result = PSB_SetVoltageQueued(params->targetVoltage_V, DEVICE_PRIORITY_NORMAL);
+    if (result != PSB_SUCCESS) {
+        LogError("Failed to set voltage: %s", PSB_GetErrorString(result));
+        return result;
     }
     
     // Enable output
@@ -357,14 +361,29 @@ int Battery_TransferCapacity(CapacityTransferParams *params) {
         SetCtrlVal(params->panelHandle, params->statusControl, statusMsg);
     }
     
-    // Set voltage (as limit/target)
+    // IMPORTANT: For constant current mode, set voltage/power limits first,
+    // then current setpoint last to enter current-controlled mode
+    // (PSB control mode is determined by which setpoint register is written last)
+
+    // Set voltage limit (upper bound for charging)
     result = PSB_SetVoltageQueued(params->voltage_V, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
-        LogError("Failed to set voltage: %s", PSB_GetErrorString(result));
+        LogError("Failed to set voltage limit: %s", PSB_GetErrorString(result));
         return result;
     }
-    
-    // Set current based on mode
+
+    // Set power limits
+    result = PSB_SetPowerQueued(PSB_BATTERY_POWER_MAX, DEVICE_PRIORITY_NORMAL);
+    if (result != PSB_SUCCESS) {
+        LogWarning("Failed to set power limit: %s", PSB_GetErrorString(result));
+    }
+
+    result = PSB_SetSinkPowerQueued(PSB_BATTERY_POWER_MAX, DEVICE_PRIORITY_NORMAL);
+    if (result != PSB_SUCCESS) {
+        LogWarning("Failed to set sink power limit: %s", PSB_GetErrorString(result));
+    }
+
+    // Set current setpoint last to enter current-controlled mode
     if (params->mode == BATTERY_MODE_CHARGE) {
         result = PSB_SetCurrentQueued(params->current_A, DEVICE_PRIORITY_NORMAL);
     } else {
@@ -373,17 +392,6 @@ int Battery_TransferCapacity(CapacityTransferParams *params) {
     if (result != PSB_SUCCESS) {
         LogError("Failed to set current: %s", PSB_GetErrorString(result));
         return result;
-    }
-    
-    // Set power limits (like GoToVoltage does)
-    result = PSB_SetPowerQueued(PSB_BATTERY_POWER_MAX, DEVICE_PRIORITY_NORMAL);
-    if (result != PSB_SUCCESS) {
-        LogWarning("Failed to set power: %s", PSB_GetErrorString(result));
-    }
-    
-    result = PSB_SetSinkPowerQueued(PSB_BATTERY_POWER_MAX, DEVICE_PRIORITY_NORMAL);
-    if (result != PSB_SUCCESS) {
-        LogWarning("Failed to set sink power: %s", PSB_GetErrorString(result));
     }
     
     // Enable output
