@@ -1419,8 +1419,9 @@ static int RunPhase3_EISCharge(BaselineExperimentContext *ctx) {
     Delay(0.2);  // Brief delay to ensure command completes
 
     // Set power limit (acts as constraint in voltage mode)
-    LogMessage("DIAGNOSTIC: [2/3] Setting power LIMIT to %.1f W (REG 502)", BASELINE_POWER_LIMIT);
-    result = PSB_SetPowerQueued(BASELINE_POWER_LIMIT, DEVICE_PRIORITY_NORMAL);
+    // Use LIMIT register (REG 9004), not setpoint register (REG 502)
+    LogMessage("DIAGNOSTIC: [2/3] Setting power LIMIT to %.1f W (REG 9004)", BASELINE_POWER_LIMIT);
+    result = PSB_SetPowerLimitQueued(BASELINE_POWER_LIMIT, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         LogWarning("Failed to set power limit: %s", PSB_GetErrorString(result));
     }

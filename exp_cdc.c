@@ -444,13 +444,14 @@ static int RunOperation(CDCExperimentContext *ctx) {
 
     LogMessage("Current limits set - Source: %.2fA, Sink: %.2fA", chargeCurrent, dischargeCurrent);
 
-    // Set power limits high enough to avoid CP mode
-    result = PSB_SetPowerQueued(CDC_POWER_LIMIT_W, DEVICE_PRIORITY_NORMAL);
+    // Set power LIMITS (not setpoints) to avoid triggering CP mode
+    // Use limit registers (REG 9004/9005), not setpoint registers (REG 502/498)
+    result = PSB_SetPowerLimitQueued(CDC_POWER_LIMIT_W, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         LogWarning("Failed to set power limit: %s", PSB_GetErrorString(result));
     }
 
-    result = PSB_SetSinkPowerQueued(CDC_POWER_LIMIT_W, DEVICE_PRIORITY_NORMAL);
+    result = PSB_SetSinkPowerLimitQueued(CDC_POWER_LIMIT_W, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         LogWarning("Failed to set sink power limit: %s", PSB_GetErrorString(result));
     }
