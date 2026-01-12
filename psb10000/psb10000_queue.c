@@ -172,12 +172,15 @@ static int PSB_AdapterExecuteCommand(void *deviceContext, int commandType, void 
         case PSB_CMD_SET_VOLTAGE: cmdName = "SET_VOLTAGE"; break;
         case PSB_CMD_SET_CURRENT: cmdName = "SET_CURRENT"; break;
         case PSB_CMD_SET_POWER: cmdName = "SET_POWER"; break;
+        case PSB_CMD_SET_SINK_CURRENT: cmdName = "SET_SINK_CURRENT"; break;
+        case PSB_CMD_SET_SINK_POWER: cmdName = "SET_SINK_POWER"; break;
         case PSB_CMD_SET_OUTPUT_ENABLE: cmdName = "SET_OUTPUT_ENABLE"; break;
         case PSB_CMD_GET_STATUS: cmdName = "GET_STATUS"; break;
         default: break;
     }
     if (commandType == PSB_CMD_SET_VOLTAGE || commandType == PSB_CMD_SET_CURRENT ||
-        commandType == PSB_CMD_SET_POWER) {
+        commandType == PSB_CMD_SET_POWER || commandType == PSB_CMD_SET_SINK_CURRENT ||
+        commandType == PSB_CMD_SET_SINK_POWER) {
         LogMessageEx(LOG_DEVICE_PSB, ">>> QUEUE: Executing command %s (type %d)",
                      cmdName, commandType);
     }

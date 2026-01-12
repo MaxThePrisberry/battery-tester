@@ -538,9 +538,12 @@ int PSB_SetSinkCurrent(PSB_Handle *handle, double current) {
     txBuffer[6] = (unsigned char)(crc & 0xFF);
     txBuffer[7] = (unsigned char)((crc >> 8) & 0xFF);
     
-    LogMessageEx(LOG_DEVICE_PSB, "Setting sink current: %.2fA (0x%04X)", current, deviceValue);
-    
-    return SendModbusCommand(handle, txBuffer, 8, rxBuffer, 8);
+    LogMessageEx(LOG_DEVICE_PSB, "*** WRITING REG %d (SINK_MODE_CURRENT): %.2fA (0x%04X) - MAY ENTER SINK CC MODE ***",
+                 REG_SINK_MODE_CURRENT, current, deviceValue);
+
+    int result = SendModbusCommand(handle, txBuffer, 8, rxBuffer, 8);
+    LogMessageEx(LOG_DEVICE_PSB, "Write to REG %d completed with result: %d", REG_SINK_MODE_CURRENT, result);
+    return result;
 }
 
 int PSB_SetSinkCurrentLimits(PSB_Handle *handle, double minCurrent, double maxCurrent) {
@@ -680,9 +683,12 @@ int PSB_SetSinkPower(PSB_Handle *handle, double power) {
     txBuffer[6] = (unsigned char)(crc & 0xFF);
     txBuffer[7] = (unsigned char)((crc >> 8) & 0xFF);
     
-    LogMessageEx(LOG_DEVICE_PSB, "Setting sink power: %.2fW (0x%04X)", power, deviceValue);
-    
-    return SendModbusCommand(handle, txBuffer, 8, rxBuffer, 8);
+    LogMessageEx(LOG_DEVICE_PSB, "*** WRITING REG %d (SINK_MODE_POWER): %.2fW (0x%04X) - MAY ENTER SINK CP MODE ***",
+                 REG_SINK_MODE_POWER, power, deviceValue);
+
+    int result = SendModbusCommand(handle, txBuffer, 8, rxBuffer, 8);
+    LogMessageEx(LOG_DEVICE_PSB, "Write to REG %d completed with result: %d", REG_SINK_MODE_POWER, result);
+    return result;
 }
 
 int PSB_SetSinkPowerLimit(PSB_Handle *handle, double maxPower) {
