@@ -723,39 +723,41 @@ int PSB_ZeroAllValuesQueued(DevicePriority priority) {
         LogWarningEx(LOG_DEVICE_PSB, "Failed to disable output: %s", PSB_GetErrorString(result));
         overallResult = result;
     }
-    
-    // Set voltage to 0V
-    result = PSB_SetVoltageQueued(0.0, priority);
-    if (result != PSB_SUCCESS) {
-        LogWarningEx(LOG_DEVICE_PSB, "Failed to set voltage to 0V: %s", PSB_GetErrorString(result));
-        overallResult = result;
-    }
-    
+
     // Set current to 0A
     result = PSB_SetCurrentQueued(0.0, priority);
     if (result != PSB_SUCCESS) {
         LogWarningEx(LOG_DEVICE_PSB, "Failed to set current to 0A: %s", PSB_GetErrorString(result));
         overallResult = result;
     }
-    
+
     // Set power to 0W
     result = PSB_SetPowerQueued(0.0, priority);
     if (result != PSB_SUCCESS) {
         LogWarningEx(LOG_DEVICE_PSB, "Failed to set power to 0W: %s", PSB_GetErrorString(result));
         overallResult = result;
     }
-    
+
     // Set sink current to 0A
     result = PSB_SetSinkCurrentQueued(0.0, priority);
     if (result != PSB_SUCCESS) {
         LogWarningEx(LOG_DEVICE_PSB, "Failed to set sink current to 0A: %s", PSB_GetErrorString(result));
         overallResult = result;
     }
-    
+
     // Set sink power to 0W
     result = PSB_SetSinkPowerQueued(0.0, priority);
     if (result != PSB_SUCCESS) {
         LogWarningEx(LOG_DEVICE_PSB, "Failed to set sink power to 0W: %s", PSB_GetErrorString(result));
+        overallResult = result;
+    }
+
+    // IMPORTANT: Set voltage to 0V LAST to ensure PSB ends in CV mode
+    // Writing voltage setpoint (REG 500) after sink setpoints (REG 498/499)
+    // ensures the PSB is in CV mode, not stuck in sink CP/CC mode
+    result = PSB_SetVoltageQueued(0.0, priority);
+    if (result != PSB_SUCCESS) {
+        LogWarningEx(LOG_DEVICE_PSB, "Failed to set voltage to 0V: %s", PSB_GetErrorString(result));
         overallResult = result;
     }
     
