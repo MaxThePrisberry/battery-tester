@@ -1,0 +1,651 @@
+
+=== Battery Tester Log Started: 2026-01-12 12:00:17 ===
+Log file location: c:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\BatteryTester.log
+2026-01-12 12:00:17 [INFO] Initializing cDAQ module...
+2026-01-12 12:00:17 [INFO] Initializing cDAQ thermocouple slots 2 and 3...
+2026-01-12 12:00:18 [INFO] cDAQ slot 2 initialized with 16 thermocouples
+2026-01-12 12:00:20 [INFO] cDAQ slot 3 initialized with 16 thermocouples
+2026-01-12 12:00:20 [INFO] cDAQ module initialized successfully
+2026-01-12 12:00:20 [INFO] cDAQ module initialized successfully
+2026-01-12 12:00:20 [INFO] Initializing PSB queue manager on COM3...
+2026-01-12 12:00:20 [INFO] Attempting to connect to PSB 10000...
+2026-01-12 12:00:20 [INFO] [PSB] Connecting to PSB on COM3...
+2026-01-12 12:00:20 [INFO] [PSB] Initializing on COM3, slave 1, 9600 baud
+2026-01-12 12:00:20 [INFO] [PSB] Successfully initialized
+2026-01-12 12:00:20 [INFO] [PSB] Setting remote mode: ON
+2026-01-12 12:00:20 [INFO] [PSB] Setting output: OFF
+2026-01-12 12:00:20 [INFO] Successfully connected to PSB 10000
+2026-01-12 12:00:20 [INFO] PSB 10000 queue manager initialized
+2026-01-12 12:00:20 [INFO] PSB queue manager initialized and connected on COM3
+2026-01-12 12:00:20 [INFO] Initializing PSB to safe state...
+2026-01-12 12:00:20 [INFO] [PSB] Setting PSB safe limits...
+2026-01-12 12:00:20 [INFO] PSB 10000 queue processing thread started
+2026-01-12 12:00:20 [INFO] [PSB] Setting min voltage: 0.00V
+2026-01-12 12:00:20 [INFO] [PSB] Setting max voltage: 61.20V
+2026-01-12 12:00:20 [INFO] [PSB] Setting min current: 0.00A
+2026-01-12 12:00:20 [INFO] [PSB] Setting max current: 61.20A
+2026-01-12 12:00:20 [INFO] [PSB] Setting sink max current: 61.20A
+2026-01-12 12:00:21 [INFO] [PSB] Setting sink min current: 0.00A
+2026-01-12 12:00:21 [INFO] [PSB] Setting max power: 1224.00W
+2026-01-12 12:00:21 [INFO] [PSB] Setting sink max power: 1224.00W
+2026-01-12 12:00:21 [INFO] [PSB] PSB safe limits set successfully
+2026-01-12 12:00:21 [INFO] [PSB] Zeroing all PSB values...
+2026-01-12 12:00:21 [INFO] [PSB] Setting output: OFF
+2026-01-12 12:00:22 [INFO] [PSB] >>> QUEUE: Executing command SET_VOLTAGE (type 3)
+2026-01-12 12:00:22 [INFO] [PSB] *** WRITING REG 500 (SET_VOLTAGE): 0.00V (0x0000) - WILL ENTER CV MODE ***
+2026-01-12 12:00:22 [INFO] [PSB] Write to REG 500 completed with result: 0
+2026-01-12 12:00:22 [INFO] [PSB] >>> QUEUE: Executing command SET_CURRENT (type 4)
+2026-01-12 12:00:22 [INFO] [PSB] *** WRITING REG 501 (SET_CURRENT): 0.00A (0x0000) - WILL ENTER CC MODE ***
+2026-01-12 12:00:22 [INFO] [PSB] Write to REG 501 completed with result: 0
+2026-01-12 12:00:22 [INFO] [PSB] >>> QUEUE: Executing command SET_POWER (type 5)
+2026-01-12 12:00:22 [INFO] [PSB] *** WRITING REG 502 (SET_POWER): 0.00W (0x0000) - WILL ENTER CP MODE ***
+2026-01-12 12:00:22 [INFO] [PSB] Write to REG 502 completed with result: 0
+2026-01-12 12:00:23 [INFO] [PSB] Setting sink current: 0.00A (0x0000)
+2026-01-12 12:00:23 [INFO] [PSB] Setting sink power: 0.00W (0x0000)
+2026-01-12 12:00:23 [INFO] [PSB] All PSB values zeroed successfully
+2026-01-12 12:00:23 [INFO] PSB initialization complete
+2026-01-12 12:00:23 [INFO] Initializing BioLogic abstraction layer...
+2026-01-12 12:00:23 [INFO]   Mode: EC-Lab OLE COM
+2026-01-12 12:00:23 [INFO] [BIO] Initializing BioLogic abstraction layer
+2026-01-12 12:00:23 [INFO] [BIO]   Mode: EC-Lab OLE COM
+2026-01-12 12:00:23 [INFO] [BIO] Initializing EC-Lab OLE COM mode
+2026-01-12 12:00:23 [INFO] [BIO]   Settings dir: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_settings
+2026-01-12 12:00:23 [INFO] [BIO]   Data dir: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data
+2026-01-12 12:00:23 [INFO] [BIO] Initializing EC-Lab backend
+2026-01-12 12:00:23 [INFO] [BIO]   Settings dir: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_settings
+2026-01-12 12:00:23 [INFO] [BIO]   Data dir: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data
+2026-01-12 12:00:23 [INFO] [BIO]   Device: 0, Channel: 0
+2026-01-12 12:00:23 [INFO] [BIO] ========================================
+2026-01-12 12:00:23 [INFO] [BIO] Initializing EC-Lab OLE COM connection
+2026-01-12 12:00:23 [INFO] [BIO] ========================================
+2026-01-12 12:00:23 [INFO] [BIO] Working directory: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data
+2026-01-12 12:00:23 [INFO] [BIO] Step 1: Initializing COM (MTA mode)...
+2026-01-12 12:00:23 [INFO] [BIO] COM initialized successfully (MTA mode)
+2026-01-12 12:00:23 [INFO] [BIO] Step 2: Resolving ProgID 'EClabCOM.EClabExe'...
+2026-01-12 12:00:23 [INFO] [BIO] ProgID resolved successfully. EC-Lab is registered.
+2026-01-12 12:00:23 [INFO] [BIO] Step 3: Checking if EC-Lab is running...
+2026-01-12 12:00:23 [INFO] [BIO] EC-Lab process detected - proceeding with COM connection
+2026-01-12 12:00:23 [INFO] [BIO] Step 4: Creating EC-Lab COM instance...
+2026-01-12 12:00:23 [INFO] [BIO] NOTE: This will connect to the running EC-Lab application.
+2026-01-12 12:00:23 [INFO] [BIO] NOTE: Using custom IEClabExe interface (NOT IDispatch)
+2026-01-12 12:00:23 [INFO] [BIO] Requesting IEClabExe interface...
+2026-01-12 12:00:23 [INFO] [BIO] EC-Lab COM instance created successfully!
+2026-01-12 12:00:23 [INFO] [BIO] ========================================
+2026-01-12 12:00:23 [INFO] [BIO] EC-Lab OLE COM connection initialized
+2026-01-12 12:00:23 [INFO] [BIO] ========================================
+2026-01-12 12:00:23 [INFO] [BIO] Connecting to EC-Lab device 0
+2026-01-12 12:00:23 [INFO] [BIO] Connected to EC-Lab device 0 successfully
+2026-01-12 12:00:23 [INFO] [BIO] Running connection diagnostic (5 tests over ~5 seconds)...
+2026-01-12 12:00:23 [INFO] [BIO]   [Test 1 @ 0.0s] Connection: OK
+2026-01-12 12:00:24 [INFO] [BIO]   [Test 2 @ 1.0s] Connection: OK
+2026-01-12 12:00:25 [INFO] [BIO]   [Test 3 @ 2.0s] Connection: OK
+2026-01-12 12:00:26 [INFO] [BIO]   [Test 4 @ 3.0s] Connection: OK
+2026-01-12 12:00:27 [INFO] [BIO]   [Test 5 @ 4.0s] Connection: OK
+2026-01-12 12:00:27 [INFO] [BIO] Connection diagnostic complete: 5/5 tests passed
+2026-01-12 12:00:27 [INFO] [BIO] EC-Lab backend initialized successfully
+2026-01-12 12:00:27 [INFO] [BIO] BioLogic abstraction layer initialized successfully
+2026-01-12 12:00:27 [INFO] BioLogic abstraction layer initialized successfully
+2026-01-12 12:00:27 [INFO] Initializing DTB queue manager on COM5 with 2 devices...
+2026-01-12 12:00:27 [INFO] [DTB] DTB_QueueInit: Will initialize slave address 2
+2026-01-12 12:00:27 [INFO] [DTB] DTB_QueueInit: Will initialize slave address 3
+2026-01-12 12:00:27 [INFO] Attempting to connect to DTB 4848...
+2026-01-12 12:00:27 [INFO] [DTB] Connecting to DTB slave 2 on COM5...
+2026-01-12 12:00:27 [INFO] [DTB] Initializing on COM5, slave 2, 9600 baud
+2026-01-12 12:00:27 [INFO] [DTB] Successfully initialized
+2026-01-12 12:00:27 [INFO] [DTB] Successfully connected to DTB slave 2
+2026-01-12 12:00:27 [INFO] [DTB] Connecting to DTB slave 3 on COM5...
+2026-01-12 12:00:27 [INFO] [DTB] Initializing on COM5, slave 3, 9600 baud
+2026-01-12 12:00:27 [INFO] [DTB] Successfully initialized
+2026-01-12 12:00:27 [INFO] [DTB] Successfully connected to DTB slave 3
+2026-01-12 12:00:27 [INFO] [DTB] Connected to 2 of 2 DTB devices
+2026-01-12 12:00:27 [INFO] Successfully connected to DTB 4848
+2026-01-12 12:00:27 [INFO] DTB 4848 queue manager initialized
+2026-01-12 12:00:27 [INFO] DTB 4848 queue processing thread started
+2026-01-12 12:00:27 [INFO] [DTB] DTB_QueueInit: Successfully created queue manager for 2 devices
+2026-01-12 12:00:27 [INFO] DTB queue manager initialized and connected on COM5
+2026-01-12 12:00:27 [INFO] Enabling DTB write access for all devices...
+2026-01-12 12:00:27 [INFO] [DTB] Enabling write access for all 2 DTB devices...
+2026-01-12 12:00:27 [INFO] [DTB] Enabling write access...
+2026-01-12 12:00:28 [INFO] [DTB] Write access enabled
+2026-01-12 12:00:28 [INFO] [DTB] Enabling write access...
+2026-01-12 12:00:28 [INFO] [DTB] Write access enabled
+2026-01-12 12:00:28 [INFO] [DTB] Successfully enabled write access for all DTB devices
+2026-01-12 12:00:28 [INFO] DTB write access enabled successfully for all devices
+2026-01-12 12:00:28 [INFO] Configuring all DTB4848 devices for K-type thermocouple with PID control...
+2026-01-12 12:00:28 [INFO] [DTB] Write access status: ENABLED
+2026-01-12 12:00:28 [INFO] DTB slave 2 write access currently: ENABLED
+2026-01-12 12:00:28 [INFO] [DTB] Configuring DTB4848...
+2026-01-12 12:00:28 [INFO] [DTB] Setting sensor type: 0
+2026-01-12 12:00:28 [INFO] [DTB] Setting heating/cooling mode: 0
+2026-01-12 12:00:29 [INFO] [DTB] Setting control method: 0
+2026-01-12 12:00:29 [INFO] [DTB] Setting PID mode: 4 (AUTO)
+2026-01-12 12:00:29 [INFO] [DTB] Configuration complete
+2026-01-12 12:00:29 [INFO] DTB4848 slave 2 configured successfully
+2026-01-12 12:00:30 [INFO] [DTB] Write access status: ENABLED
+2026-01-12 12:00:30 [INFO] DTB slave 3 write access currently: ENABLED
+2026-01-12 12:00:30 [INFO] [DTB] Configuring DTB4848...
+2026-01-12 12:00:30 [INFO] [DTB] Setting sensor type: 0
+2026-01-12 12:00:30 [INFO] [DTB] Setting heating/cooling mode: 0
+2026-01-12 12:00:30 [INFO] [DTB] Setting control method: 0
+2026-01-12 12:00:30 [INFO] [DTB] Setting PID mode: 4 (AUTO)
+2026-01-12 12:00:30 [INFO] [DTB] Configuration complete
+2026-01-12 12:00:31 [INFO] DTB4848 slave 3 configured successfully
+2026-01-12 12:00:31 [INFO] DTB initialization complete
+2026-01-12 12:00:31 [INFO] Initializing Teensy queue manager on COM6...
+2026-01-12 12:00:31 [INFO] Attempting to connect to Teensy...
+2026-01-12 12:00:31 [INFO] [TNY] Connecting to Teensy on COM6...
+2026-01-12 12:00:31 [INFO] [TNY] Initializing Teensy on COM6 at 9600 baud
+2026-01-12 12:00:31 [INFO] [TNY] Successfully connected to Teensy on COM6
+2026-01-12 12:00:31 [INFO] Successfully connected to Teensy
+2026-01-12 12:00:31 [INFO] Teensy queue manager initialized
+2026-01-12 12:00:31 [INFO] Teensy queue manager initialized and connected on COM6
+2026-01-12 12:00:31 [INFO] [TNY] Initializing 2 pins (2 low, 0 high)
+2026-01-12 12:00:31 [INFO] [TNY] Teensy queue processing thread started
+2026-01-12 12:00:31 [INFO] Committed transaction 1 with 2 commands to normal priority queue
+2026-01-12 12:00:31 [INFO] [TNY] Pin initialization transaction committed
+2026-01-12 12:00:31 [INFO] [TNY] Starting transaction 1 with 2 commands
+2026-01-12 12:00:31 [INFO] Status module state: UNINITIALIZED -> INITIALIZING
+2026-01-12 12:00:31 [INFO] Device states initialized (DTB devices: 2)
+2026-01-12 12:00:31 [INFO] Status monitoring module initialized
+2026-01-12 12:00:31 [INFO] Controls module initialized with 2 DTB devices
+2026-01-12 12:00:31 [INFO] Starting device status monitoring...
+2026-01-12 12:00:31 [INFO] Status module state: INITIALIZING -> RUNNING
+2026-01-12 12:00:31 [INFO] Status timer thread started
+2026-01-12 12:00:31 [INFO] Status monitoring started successfully
+2026-01-12 12:00:31 [INFO] Starting controls module - syncing with device states...
+2026-01-12 12:00:31 [INFO] [TNY] Completed transaction 1
+2026-01-12 12:00:31 [INFO] PSB remote mode: ON
+2026-01-12 12:00:34 [INFO] Controls module started
+2026-01-12 12:00:43 [INFO] BASELINE: Checking BioLogic connection...
+2026-01-12 12:00:43 [INFO] [BIO] BASELINE: BIO_IsAbstractInitialized = 1
+2026-01-12 12:00:43 [INFO] [BIO] BASELINE: BioLogic mode = EC-Lab OLE COM (1)
+2026-01-12 12:00:43 [INFO] BASELINE: Testing BioLogic connection...
+2026-01-12 12:00:43 [INFO] [BIO] BASELINE: BIO_Abstract_TestConnection returned 0 (SUCCESS=0)
+2026-01-12 12:00:43 [INFO] [BIO] BASELINE: BIO_Abstract_GetDeviceID returned 0
+2026-01-12 12:00:43 [INFO] [BIO] BASELINE: BioLogic connection verified successfully (ID=0)
+2026-01-12 12:00:43 [INFO] All required devices verified and initialized successfully
+2026-01-12 12:00:43 [INFO] === Starting Baseline Battery Experiment ===
+2026-01-12 12:00:45 [INFO] Created experiment file system: c:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\data\baseline_20260112_120045
+2026-01-12 12:00:45 [INFO] Experiment settings saved to: c:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\data\baseline_20260112_120045\experiment_settings.ini
+2026-01-12 12:00:45 [INFO] Initializing relay states...
+2026-01-12 12:00:45 [INFO] EIS target SOC points initialized:
+2026-01-12 12:00:45 [INFO]   0.0%
+2026-01-12 12:00:45 [INFO]   10.0%
+2026-01-12 12:00:45 [INFO]   20.0%
+2026-01-12 12:00:45 [INFO]   30.0%
+2026-01-12 12:00:45 [INFO]   40.0%
+2026-01-12 12:00:45 [INFO]   50.0%
+2026-01-12 12:00:45 [INFO]   60.0%
+2026-01-12 12:00:45 [INFO]   70.0%
+2026-01-12 12:00:45 [INFO]   80.0%
+2026-01-12 12:00:45 [INFO]   90.0%
+2026-01-12 12:00:45 [INFO]   100.0%
+2026-01-12 12:00:45 [INFO] === PHASE 1: Initial Discharge and Temperature Setup ===
+2026-01-12 12:00:45 [INFO] Setting up temperature control - target: 30.0 ï¿½C
+2026-01-12 12:00:45 [INFO] [DTB] Setting setpoint to 30.0°C for all 2 DTB devices...
+2026-01-12 12:00:45 [INFO] [DTB] Setting setpoint: 30.0°C
+2026-01-12 12:00:46 [INFO] [DTB] Setting setpoint: 30.0°C
+2026-01-12 12:00:46 [INFO] [DTB] Successfully set setpoint for all DTB devices
+2026-01-12 12:00:46 [INFO] [DTB] Setting run/stop to RUN for all 2 DTB devices...
+2026-01-12 12:00:46 [INFO] [DTB] Setting Run/Stop: RUN
+2026-01-12 12:00:47 [INFO] [DTB] Setting Run/Stop: RUN
+2026-01-12 12:00:47 [INFO] [DTB] Successfully set run/stop for all DTB devices
+2026-01-12 12:00:47 [INFO] DTB temperature controller started
+2026-01-12 12:00:47 [INFO] Switching to PSB...
+2026-01-12 12:00:47 [INFO] [PSB] Setting output: OFF
+2026-01-12 12:00:48 [INFO] Successfully switched to PSB
+2026-01-12 12:00:48 [INFO] Discharging battery to 2.70 V
+2026-01-12 12:00:48 [INFO] Battery voltage: 2.882 V, Target: 2.700 V - Will DISCHARGE
+2026-01-12 12:00:48 [INFO] [PSB] Setting sink current: 5.00A (0x1110)
+2026-01-12 12:00:48 [INFO] [PSB] >>> QUEUE: Executing command SET_POWER (type 5)
+2026-01-12 12:00:48 [INFO] [PSB] *** WRITING REG 502 (SET_POWER): 30.00W (0x051E) - WILL ENTER CP MODE ***
+2026-01-12 12:00:49 [INFO] [PSB] Write to REG 502 completed with result: 0
+2026-01-12 12:00:49 [INFO] [PSB] Setting sink power: 30.00W (0x051E)
+2026-01-12 12:00:49 [INFO] [PSB] >>> QUEUE: Executing command SET_VOLTAGE (type 3)
+2026-01-12 12:00:49 [INFO] [PSB] *** WRITING REG 500 (SET_VOLTAGE): 2.70V (0x0937) - WILL ENTER CV MODE ***
+2026-01-12 12:00:49 [INFO] [PSB] Write to REG 500 completed with result: 0
+2026-01-12 12:00:49 [INFO] [PSB] Setting output: ON
+2026-01-12 12:00:49 [INFO] Waiting for output to stabilize...
+2026-01-12 12:00:51 [INFO] Discharging...
+2026-01-12 12:01:33 [INFO] User requested to stop baseline experiment
+2026-01-12 12:01:38 [INFO] Battery_GoToVoltage operation cancelled by user
+2026-01-12 12:01:38 [INFO] [PSB] Setting output: OFF
+2026-01-12 12:01:38 [INFO] Discharge complete: 0.00 mAh, 0.00 Wh in 0.8 minutes
+2026-01-12 12:01:38 [INFO] Cleaning up baseline experiment...
+2026-01-12 12:01:38 [INFO] Safely disconnecting all devices...
+2026-01-12 12:01:38 [INFO] [PSB] Setting output: OFF
+2026-01-12 12:01:38 [INFO] [DTB] Setting run/stop to STOP for all 2 DTB devices...
+2026-01-12 12:01:40 [INFO] [DTB] Setting Run/Stop: STOP
+2026-01-12 12:01:40 [INFO] [DTB] Setting Run/Stop: STOP
+2026-01-12 12:01:41 [INFO] [DTB] Successfully set run/stop for all DTB devices
+2026-01-12 12:01:41 [INFO] Device disconnect completed
+2026-01-12 12:01:41 [INFO] Baseline experiment cleanup completed
+2026-01-12 12:01:45 [INFO] [PSB] Starting PSB Test Suite
+2026-01-12 12:01:45 [INFO] [PSB] Zeroing all PSB values...
+2026-01-12 12:01:45 [INFO] [PSB] Setting output: OFF
+2026-01-12 12:01:46 [INFO] [PSB] >>> QUEUE: Executing command SET_VOLTAGE (type 3)
+2026-01-12 12:01:46 [INFO] [PSB] *** WRITING REG 500 (SET_VOLTAGE): 0.00V (0x0000) - WILL ENTER CV MODE ***
+2026-01-12 12:01:46 [INFO] [PSB] Write to REG 500 completed with result: 0
+2026-01-12 12:01:46 [INFO] [PSB] >>> QUEUE: Executing command SET_CURRENT (type 4)
+2026-01-12 12:01:46 [INFO] [PSB] *** WRITING REG 501 (SET_CURRENT): 0.00A (0x0000) - WILL ENTER CC MODE ***
+2026-01-12 12:01:46 [INFO] [PSB] Write to REG 501 completed with result: 0
+2026-01-12 12:01:46 [INFO] [PSB] >>> QUEUE: Executing command SET_POWER (type 5)
+2026-01-12 12:01:46 [INFO] [PSB] *** WRITING REG 502 (SET_POWER): 0.00W (0x0000) - WILL ENTER CP MODE ***
+2026-01-12 12:01:47 [INFO] [PSB] Write to REG 502 completed with result: 0
+2026-01-12 12:01:47 [INFO] [PSB] Setting sink current: 0.00A (0x0000)
+2026-01-12 12:01:47 [INFO] [PSB] Setting sink power: 0.00W (0x0000)
+2026-01-12 12:01:47 [INFO] [PSB] All PSB values zeroed successfully
+2026-01-12 12:01:47 [INFO] [PSB] Running test: Remote Mode Control
+2026-01-12 12:01:48 [INFO] [PSB] Setting remote mode: OFF
+2026-01-12 12:01:48 [INFO] [PSB] Setting remote mode: ON
+2026-01-12 12:01:50 [INFO] [PSB] Test PASSED: Remote Mode Control (2.51 seconds)
+2026-01-12 12:01:50 [INFO] [PSB] Running test: Status Register Reading
+2026-01-12 12:01:52 [INFO] [PSB] Test PASSED: Status Register Reading (2.63 seconds)
+2026-01-12 12:01:53 [INFO] [PSB] Running test: Voltage Control
+2026-01-12 12:01:53 [INFO] [PSB] Setting remote mode: ON
+2026-01-12 12:01:53 [INFO] [PSB] >>> QUEUE: Executing command SET_VOLTAGE (type 3)
+2026-01-12 12:01:53 [INFO] [PSB] *** WRITING REG 500 (SET_VOLTAGE): 1.00V (0x0369) - WILL ENTER CV MODE ***
+2026-01-12 12:01:53 [INFO] [PSB] Write to REG 500 completed with result: 0
+2026-01-12 12:01:54 [INFO] [PSB] >>> QUEUE: Executing command SET_VOLTAGE (type 3)
+2026-01-12 12:01:54 [INFO] [PSB] *** WRITING REG 500 (SET_VOLTAGE): 30.00V (0x6665) - WILL ENTER CV MODE ***
+2026-01-12 12:01:54 [INFO] [PSB] Write to REG 500 completed with result: 0
+2026-01-12 12:01:55 [INFO] [PSB] >>> QUEUE: Executing command SET_VOLTAGE (type 3)
+2026-01-12 12:01:55 [INFO] [PSB] *** WRITING REG 500 (SET_VOLTAGE): 45.00V (0x9998) - WILL ENTER CV MODE ***
+2026-01-12 12:01:55 [INFO] [PSB] Write to REG 500 completed with result: 0
+2026-01-12 12:01:56 [INFO] [PSB] Test PASSED: Voltage Control (3.33 seconds)
+2026-01-12 12:01:56 [INFO] [PSB] Running test: Voltage Limits
+2026-01-12 12:01:57 [INFO] [PSB] Setting min voltage: 15.00V
+2026-01-12 12:01:57 [INFO] [PSB] Setting max voltage: 45.00V
+2026-01-12 12:01:58 [INFO] [PSB] >>> QUEUE: Executing command SET_VOLTAGE (type 3)
+2026-01-12 12:01:58 [INFO] [PSB] *** WRITING REG 500 (SET_VOLTAGE): 30.00V (0x6665) - WILL ENTER CV MODE ***
+2026-01-12 12:01:58 [INFO] [PSB] Write to REG 500 completed with result: 0
+2026-01-12 12:01:58 [INFO] [PSB] >>> QUEUE: Executing command SET_VOLTAGE (type 3)
+2026-01-12 12:01:58 [INFO] [PSB] *** WRITING REG 500 (SET_VOLTAGE): 50.00V (0xAAA9) - WILL ENTER CV MODE ***
+2026-01-12 12:01:58 [ERROR] [PSB] Modbus exception code: 0x03 - Illegal data value
+2026-01-12 12:01:58 [INFO] [PSB] Write to REG 500 completed with result: -3007
+2026-01-12 12:01:58 [INFO] [PSB] >>> QUEUE: Executing command SET_VOLTAGE (type 3)
+2026-01-12 12:01:58 [INFO] [PSB] *** WRITING REG 500 (SET_VOLTAGE): 10.00V (0x2221) - WILL ENTER CV MODE ***
+2026-01-12 12:01:58 [ERROR] [PSB] Modbus exception code: 0x03 - Illegal data value
+2026-01-12 12:01:58 [INFO] [PSB] Write to REG 500 completed with result: -3007
+2026-01-12 12:01:58 [INFO] [PSB] Setting min voltage: 0.00V
+2026-01-12 12:01:59 [INFO] [PSB] Setting max voltage: 61.20V
+2026-01-12 12:01:59 [INFO] [PSB] Test PASSED: Voltage Limits (2.51 seconds)
+2026-01-12 12:01:59 [INFO] [PSB] Running test: Current Control
+2026-01-12 12:02:00 [INFO] [PSB] >>> QUEUE: Executing command SET_CURRENT (type 4)
+2026-01-12 12:02:00 [INFO] [PSB] *** WRITING REG 501 (SET_CURRENT): 6.00A (0x147A) - WILL ENTER CC MODE ***
+2026-01-12 12:02:00 [INFO] [PSB] Write to REG 501 completed with result: 0
+2026-01-12 12:02:01 [INFO] [PSB] >>> QUEUE: Executing command SET_CURRENT (type 4)
+2026-01-12 12:02:01 [INFO] [PSB] *** WRITING REG 501 (SET_CURRENT): 30.00A (0x6665) - WILL ENTER CC MODE ***
+2026-01-12 12:02:01 [INFO] [PSB] Write to REG 501 completed with result: 0
+2026-01-12 12:02:02 [INFO] [PSB] >>> QUEUE: Executing command SET_CURRENT (type 4)
+2026-01-12 12:02:02 [INFO] [PSB] *** WRITING REG 501 (SET_CURRENT): 50.00A (0xAAA9) - WILL ENTER CC MODE ***
+2026-01-12 12:02:02 [INFO] [PSB] Write to REG 501 completed with result: 0
+2026-01-12 12:02:03 [INFO] [PSB] Test PASSED: Current Control (3.78 seconds)
+2026-01-12 12:02:03 [INFO] [PSB] Running test: Current Limits
+2026-01-12 12:02:03 [INFO] [PSB] Zeroing all PSB values...
+2026-01-12 12:02:03 [INFO] [PSB] Setting output: OFF
+2026-01-12 12:02:04 [INFO] [PSB] >>> QUEUE: Executing command SET_VOLTAGE (type 3)
+2026-01-12 12:02:04 [INFO] [PSB] *** WRITING REG 500 (SET_VOLTAGE): 0.00V (0x0000) - WILL ENTER CV MODE ***
+2026-01-12 12:02:04 [INFO] [PSB] Write to REG 500 completed with result: 0
+2026-01-12 12:02:04 [INFO] [PSB] >>> QUEUE: Executing command SET_CURRENT (type 4)
+2026-01-12 12:02:04 [INFO] [PSB] *** WRITING REG 501 (SET_CURRENT): 0.00A (0x0000) - WILL ENTER CC MODE ***
+2026-01-12 12:02:04 [INFO] [PSB] Write to REG 501 completed with result: 0
+2026-01-12 12:02:04 [INFO] [PSB] >>> QUEUE: Executing command SET_POWER (type 5)
+2026-01-12 12:02:04 [INFO] [PSB] *** WRITING REG 502 (SET_POWER): 0.00W (0x0000) - WILL ENTER CP MODE ***
+2026-01-12 12:02:04 [INFO] [PSB] Write to REG 502 completed with result: 0
+2026-01-12 12:02:05 [INFO] [PSB] Setting sink current: 0.00A (0x0000)
+2026-01-12 12:02:05 [INFO] [PSB] Setting sink power: 0.00W (0x0000)
+2026-01-12 12:02:05 [INFO] [PSB] All PSB values zeroed successfully
+2026-01-12 12:02:05 [INFO] [PSB] >>> QUEUE: Executing command SET_CURRENT (type 4)
+2026-01-12 12:02:05 [INFO] [PSB] *** WRITING REG 501 (SET_CURRENT): 30.00A (0x6665) - WILL ENTER CC MODE ***
+2026-01-12 12:02:06 [INFO] [PSB] Write to REG 501 completed with result: 0
+2026-01-12 12:02:06 [INFO] [PSB] Setting min current: 6.00A
+2026-01-12 12:02:06 [INFO] [PSB] Setting max current: 50.00A
+2026-01-12 12:02:07 [INFO] [PSB] >>> QUEUE: Executing command SET_CURRENT (type 4)
+2026-01-12 12:02:07 [INFO] [PSB] *** WRITING REG 501 (SET_CURRENT): 60.00A (0xCCCB) - WILL ENTER CC MODE ***
+2026-01-12 12:02:07 [ERROR] [PSB] Modbus exception code: 0x03 - Illegal data value
+2026-01-12 12:02:07 [INFO] [PSB] Write to REG 501 completed with result: -3007
+2026-01-12 12:02:07 [WARN] [PSB] Unexpected error setting current above limit: Invalid response
+2026-01-12 12:02:07 [INFO] [PSB] >>> QUEUE: Executing command SET_CURRENT (type 4)
+2026-01-12 12:02:07 [INFO] [PSB] *** WRITING REG 501 (SET_CURRENT): 0.00A (0x0000) - WILL ENTER CC MODE ***
+2026-01-12 12:02:07 [ERROR] [PSB] Modbus exception code: 0x03 - Illegal data value
+2026-01-12 12:02:07 [INFO] [PSB] Write to REG 501 completed with result: -3007
+2026-01-12 12:02:07 [WARN] [PSB] Unexpected error setting current below limit: Invalid response
+2026-01-12 12:02:07 [INFO] [PSB] Setting min current: 0.00A
+2026-01-12 12:02:07 [INFO] [PSB] Setting max current: 61.20A
+2026-01-12 12:02:08 [INFO] [PSB] Test PASSED: Current Limits (4.74 seconds)
+2026-01-12 12:02:08 [INFO] [PSB] Running test: Power Control
+2026-01-12 12:02:08 [INFO] [PSB] >>> QUEUE: Executing command SET_POWER (type 5)
+2026-01-12 12:02:08 [INFO] [PSB] *** WRITING REG 502 (SET_POWER): 100.00W (0x1110) - WILL ENTER CP MODE ***
+2026-01-12 12:02:08 [INFO] [PSB] Write to REG 502 completed with result: 0
+2026-01-12 12:02:09 [INFO] [PSB] >>> QUEUE: Executing command SET_POWER (type 5)
+2026-01-12 12:02:09 [INFO] [PSB] *** WRITING REG 502 (SET_POWER): 600.00W (0x6665) - WILL ENTER CP MODE ***
+2026-01-12 12:02:09 [INFO] [PSB] Write to REG 502 completed with result: 0
+2026-01-12 12:02:10 [INFO] [PSB] >>> QUEUE: Executing command SET_POWER (type 5)
+2026-01-12 12:02:10 [INFO] [PSB] *** WRITING REG 502 (SET_POWER): 1000.00W (0xAAA9) - WILL ENTER CP MODE ***
+2026-01-12 12:02:10 [INFO] [PSB] Write to REG 502 completed with result: 0
+2026-01-12 12:02:11 [INFO] [PSB] >>> QUEUE: Executing command SET_POWER (type 5)
+2026-01-12 12:02:11 [ERROR] [PSB] Invalid power 1400.00W (range: 0-1224.00W)
+2026-01-12 12:02:11 [INFO] [PSB] Test PASSED: Power Control (2.81 seconds)
+2026-01-12 12:02:11 [INFO] [PSB] Running test: Power Limit
+2026-01-12 12:02:11 [INFO] [PSB] >>> QUEUE: Executing command SET_POWER (type 5)
+2026-01-12 12:02:11 [INFO] [PSB] *** WRITING REG 502 (SET_POWER): 100.00W (0x1110) - WILL ENTER CP MODE ***
+2026-01-12 12:02:11 [INFO] [PSB] Write to REG 502 completed with result: 0
+2026-01-12 12:02:12 [INFO] [PSB] Setting max power: 1200.00W
+2026-01-12 12:02:12 [INFO] [PSB] >>> QUEUE: Executing command SET_POWER (type 5)
+2026-01-12 12:02:12 [INFO] [PSB] *** WRITING REG 502 (SET_POWER): 1000.00W (0xAAA9) - WILL ENTER CP MODE ***
+2026-01-12 12:02:13 [INFO] [PSB] Write to REG 502 completed with result: 0
+2026-01-12 12:02:13 [INFO] [PSB] >>> QUEUE: Executing command SET_POWER (type 5)
+2026-01-12 12:02:13 [ERROR] [PSB] Invalid power 1300.00W (range: 0-1224.00W)
+2026-01-12 12:02:13 [INFO] [PSB] Setting max power: 1224.00W
+2026-01-12 12:02:13 [ERROR] [PSB] Invalid power limit 1400.00W (range: 0-1224.00W)
+2026-01-12 12:02:13 [INFO] [PSB] Test PASSED: Power Limit (2.27 seconds)
+2026-01-12 12:02:13 [INFO] [PSB] Running test: Sink Current Control
+2026-01-12 12:02:14 [INFO] [PSB] >>> QUEUE: Executing command SET_VOLTAGE (type 3)
+2026-01-12 12:02:14 [INFO] [PSB] *** WRITING REG 500 (SET_VOLTAGE): 0.00V (0x0000) - WILL ENTER CV MODE ***
+2026-01-12 12:02:14 [INFO] [PSB] Write to REG 500 completed with result: 0
+2026-01-12 12:02:14 [INFO] [PSB] Setting output: OFF
+2026-01-12 12:02:15 [INFO] [PSB] Setting sink current: 5.00A (0x1110)
+2026-01-12 12:02:16 [INFO] [PSB] Setting sink current: 15.00A (0x3332)
+2026-01-12 12:02:17 [INFO] [PSB] Setting sink current: 30.00A (0x6665)
+2026-01-12 12:02:18 [ERROR] [PSB] Invalid sink current -10.00A (range: 0-61.20A)
+2026-01-12 12:02:18 [ERROR] [PSB] Invalid sink current 67.00A (range: 0-61.20A)
+2026-01-12 12:02:18 [INFO] [PSB] Test PASSED: Sink Current Control (4.37 seconds)
+2026-01-12 12:02:18 [INFO] [PSB] Running test: Sink Power Control
+2026-01-12 12:02:18 [INFO] [PSB] >>> QUEUE: Executing command SET_VOLTAGE (type 3)
+2026-01-12 12:02:18 [INFO] [PSB] *** WRITING REG 500 (SET_VOLTAGE): 0.00V (0x0000) - WILL ENTER CV MODE ***
+2026-01-12 12:02:18 [INFO] [PSB] Write to REG 500 completed with result: 0
+2026-01-12 12:02:19 [INFO] [PSB] Setting output: OFF
+2026-01-12 12:02:19 [INFO] [PSB] Setting sink power: 100.00W (0x1110)
+2026-01-12 12:02:20 [INFO] [PSB] Setting sink power: 400.00W (0x4443)
+2026-01-12 12:02:21 [INFO] [PSB] Setting sink power: 800.00W (0x8887)
+2026-01-12 12:02:22 [ERROR] [PSB] Invalid sink power -100.00W (range: 0-1224.00W)
+2026-01-12 12:02:22 [ERROR] [PSB] Invalid sink power 1400.00W (range: 0-1224.00W)
+2026-01-12 12:02:22 [INFO] [PSB] Test PASSED: Sink Power Control (4.33 seconds)
+2026-01-12 12:02:22 [INFO] [PSB] Running test: Sink Current Limits
+2026-01-12 12:02:23 [INFO] [PSB] Zeroing all PSB values...
+2026-01-12 12:02:23 [INFO] [PSB] Setting output: OFF
+2026-01-12 12:02:23 [INFO] [PSB] >>> QUEUE: Executing command SET_VOLTAGE (type 3)
+2026-01-12 12:02:23 [INFO] [PSB] *** WRITING REG 500 (SET_VOLTAGE): 0.00V (0x0000) - WILL ENTER CV MODE ***
+2026-01-12 12:02:23 [INFO] [PSB] Write to REG 500 completed with result: 0
+2026-01-12 12:02:24 [INFO] [PSB] >>> QUEUE: Executing command SET_CURRENT (type 4)
+2026-01-12 12:02:24 [INFO] [PSB] *** WRITING REG 501 (SET_CURRENT): 0.00A (0x0000) - WILL ENTER CC MODE ***
+2026-01-12 12:02:24 [INFO] [PSB] Write to REG 501 completed with result: 0
+2026-01-12 12:02:24 [INFO] [PSB] >>> QUEUE: Executing command SET_POWER (type 5)
+2026-01-12 12:02:24 [INFO] [PSB] *** WRITING REG 502 (SET_POWER): 0.00W (0x0000) - WILL ENTER CP MODE ***
+2026-01-12 12:02:24 [INFO] [PSB] Write to REG 502 completed with result: 0
+2026-01-12 12:02:24 [INFO] [PSB] Setting sink current: 0.00A (0x0000)
+2026-01-12 12:02:24 [INFO] [PSB] Setting sink power: 0.00W (0x0000)
+2026-01-12 12:02:25 [INFO] [PSB] All PSB values zeroed successfully
+2026-01-12 12:02:25 [INFO] [PSB] Setting sink current: 20.00A (0x4443)
+2026-01-12 12:02:26 [INFO] [PSB] Setting sink max current: 40.00A
+2026-01-12 12:02:26 [INFO] [PSB] Setting sink min current: 5.00A
+2026-01-12 12:02:26 [INFO] [PSB] Setting sink current: 20.00A (0x4443)
+2026-01-12 12:02:27 [INFO] [PSB] Setting sink current: 40.00A (0x8887)
+2026-01-12 12:02:27 [INFO] [PSB] Setting sink current: 5.00A (0x1110)
+2026-01-12 12:02:27 [ERROR] [PSB] Min sink current (30.00A) > Max sink current (10.00A)
+2026-01-12 12:02:27 [ERROR] [PSB] Invalid sink current limits (-5.00A-40.00A)
+2026-01-12 12:02:27 [ERROR] [PSB] Invalid sink current limits (0.00A-67.00A)
+2026-01-12 12:02:27 [INFO] [PSB] Setting sink max current: 61.20A
+2026-01-12 12:02:27 [INFO] [PSB] Setting sink min current: 0.00A
+2026-01-12 12:02:27 [INFO] [PSB] Test PASSED: Sink Current Limits (4.89 seconds)
+2026-01-12 12:02:27 [INFO] [PSB] Running test: Sink Power Limit
+2026-01-12 12:02:28 [INFO] [PSB] Setting sink power: 100.00W (0x1110)
+2026-01-12 12:02:28 [INFO] [PSB] Setting sink max power: 1000.00W
+2026-01-12 12:02:29 [INFO] [PSB] Setting sink power: 800.00W (0x8887)
+2026-01-12 12:02:29 [INFO] [PSB] Setting sink power: 1000.00W (0xAAA9)
+2026-01-12 12:02:29 [INFO] [PSB] Setting sink power: 100.00W (0x1110)
+2026-01-12 12:02:30 [INFO] [PSB] Setting sink max power: 600.00W
+2026-01-12 12:02:30 [ERROR] [PSB] Invalid sink power limit -100.00W (range: 0-1224.00W)
+2026-01-12 12:02:30 [ERROR] [PSB] Invalid sink power limit 1400.00W (range: 0-1224.00W)
+2026-01-12 12:02:30 [INFO] [PSB] Setting sink max power: 1224.00W
+2026-01-12 12:02:30 [INFO] [PSB] Test PASSED: Sink Power Limit (2.90 seconds)
+2026-01-12 12:02:31 [INFO] [PSB] Running test: Output Control
+2026-01-12 12:02:32 [INFO] [PSB] Setting output: ON
+2026-01-12 12:02:33 [INFO] [PSB] Setting output: OFF
+2026-01-12 12:02:33 [INFO] [PSB] Test PASSED: Output Control (2.31 seconds)
+2026-01-12 12:02:33 [INFO] [PSB] Running test: Invalid Parameters
+2026-01-12 12:02:34 [INFO] [PSB] >>> QUEUE: Executing command SET_VOLTAGE (type 3)
+2026-01-12 12:02:34 [ERROR] [PSB] Invalid voltage -10.00V (range: 0-61.20V)
+2026-01-12 12:02:34 [INFO] [PSB] >>> QUEUE: Executing command SET_CURRENT (type 4)
+2026-01-12 12:02:34 [ERROR] [PSB] Invalid current -5.00A (range: 0-61.20A)
+2026-01-12 12:02:34 [INFO] [PSB] >>> QUEUE: Executing command SET_POWER (type 5)
+2026-01-12 12:02:34 [ERROR] [PSB] Invalid power -100.00W (range: 0-1224.00W)
+2026-01-12 12:02:34 [ERROR] [PSB] Min voltage (50.00V) > Max voltage (20.00V)
+2026-01-12 12:02:35 [ERROR] [PSB] Min current (40.00A) > Max current (10.00A)
+2026-01-12 12:02:35 [INFO] [PSB] Test PASSED: Invalid Parameters (1.47 seconds)
+2026-01-12 12:02:35 [INFO] [PSB] Running test: Boundary Conditions
+2026-01-12 12:02:35 [INFO] [PSB] Zeroing all PSB values...
+2026-01-12 12:02:35 [INFO] [PSB] Setting output: OFF
+2026-01-12 12:02:36 [INFO] [PSB] >>> QUEUE: Executing command SET_VOLTAGE (type 3)
+2026-01-12 12:02:36 [INFO] [PSB] *** WRITING REG 500 (SET_VOLTAGE): 0.00V (0x0000) - WILL ENTER CV MODE ***
+2026-01-12 12:02:36 [INFO] [PSB] Write to REG 500 completed with result: 0
+2026-01-12 12:02:36 [INFO] [PSB] >>> QUEUE: Executing command SET_CURRENT (type 4)
+2026-01-12 12:02:36 [INFO] [PSB] *** WRITING REG 501 (SET_CURRENT): 0.00A (0x0000) - WILL ENTER CC MODE ***
+2026-01-12 12:02:36 [INFO] [PSB] Write to REG 501 completed with result: 0
+2026-01-12 12:02:36 [INFO] [PSB] >>> QUEUE: Executing command SET_POWER (type 5)
+2026-01-12 12:02:36 [INFO] [PSB] *** WRITING REG 502 (SET_POWER): 0.00W (0x0000) - WILL ENTER CP MODE ***
+2026-01-12 12:02:36 [INFO] [PSB] Write to REG 502 completed with result: 0
+2026-01-12 12:02:37 [INFO] [PSB] Setting sink current: 0.00A (0x0000)
+2026-01-12 12:02:37 [INFO] [PSB] Setting sink power: 0.00W (0x0000)
+2026-01-12 12:02:37 [INFO] [PSB] All PSB values zeroed successfully
+2026-01-12 12:02:37 [INFO] [PSB] >>> QUEUE: Executing command SET_VOLTAGE (type 3)
+2026-01-12 12:02:37 [INFO] [PSB] *** WRITING REG 500 (SET_VOLTAGE): 0.00V (0x0000) - WILL ENTER CV MODE ***
+2026-01-12 12:02:37 [INFO] [PSB] Write to REG 500 completed with result: 0
+2026-01-12 12:02:37 [INFO] [PSB] >>> QUEUE: Executing command SET_CURRENT (type 4)
+2026-01-12 12:02:37 [INFO] [PSB] *** WRITING REG 501 (SET_CURRENT): 0.00A (0x0000) - WILL ENTER CC MODE ***
+2026-01-12 12:02:37 [INFO] [PSB] Write to REG 501 completed with result: 0
+2026-01-12 12:02:38 [INFO] [PSB] >>> QUEUE: Executing command SET_VOLTAGE (type 3)
+2026-01-12 12:02:38 [ERROR] [PSB] Invalid voltage -2.00V (range: 0-61.20V)
+2026-01-12 12:02:38 [INFO] [PSB] >>> QUEUE: Executing command SET_CURRENT (type 4)
+2026-01-12 12:02:38 [ERROR] [PSB] Invalid current -2.00A (range: 0-61.20A)
+2026-01-12 12:02:38 [INFO] [PSB] >>> QUEUE: Executing command SET_VOLTAGE (type 3)
+2026-01-12 12:02:38 [INFO] [PSB] *** WRITING REG 500 (SET_VOLTAGE): 60.00V (0xCCCB) - WILL ENTER CV MODE ***
+2026-01-12 12:02:38 [INFO] [PSB] Write to REG 500 completed with result: 0
+2026-01-12 12:02:38 [INFO] [PSB] >>> QUEUE: Executing command SET_CURRENT (type 4)
+2026-01-12 12:02:38 [INFO] [PSB] *** WRITING REG 501 (SET_CURRENT): 60.00A (0xCCCB) - WILL ENTER CC MODE ***
+2026-01-12 12:02:38 [INFO] [PSB] Write to REG 501 completed with result: 0
+2026-01-12 12:02:38 [INFO] [PSB] Test PASSED: Boundary Conditions (3.55 seconds)
+2026-01-12 12:02:39 [INFO] [PSB] Running test: Sequence Operations
+2026-01-12 12:02:39 [INFO] [PSB] Setting remote mode: OFF
+2026-01-12 12:02:39 [INFO] [PSB] Setting remote mode: ON
+2026-01-12 12:02:40 [INFO] [PSB] >>> QUEUE: Executing command SET_VOLTAGE (type 3)
+2026-01-12 12:02:40 [INFO] [PSB] *** WRITING REG 500 (SET_VOLTAGE): 24.00V (0x51EA) - WILL ENTER CV MODE ***
+2026-01-12 12:02:40 [INFO] [PSB] Write to REG 500 completed with result: 0
+2026-01-12 12:02:41 [INFO] [PSB] >>> QUEUE: Executing command SET_CURRENT (type 4)
+2026-01-12 12:02:41 [INFO] [PSB] *** WRITING REG 501 (SET_CURRENT): 10.00A (0x2221) - WILL ENTER CC MODE ***
+2026-01-12 12:02:41 [INFO] [PSB] Write to REG 501 completed with result: 0
+2026-01-12 12:02:41 [INFO] [PSB] Setting output: ON
+2026-01-12 12:02:42 [INFO] [PSB] Setting output: OFF
+2026-01-12 12:02:42 [INFO] [PSB] Test PASSED: Sequence Operations (3.42 seconds)
+2026-01-12 12:02:42 [INFO] [PSB] Running test: Output Voltage Verification
+2026-01-12 12:02:43 [INFO] [PSB] Setting output: OFF
+2026-01-12 12:02:43 [INFO] [PSB] >>> QUEUE: Executing command SET_CURRENT (type 4)
+2026-01-12 12:02:43 [INFO] [PSB] *** WRITING REG 501 (SET_CURRENT): 1.00A (0x0369) - WILL ENTER CC MODE ***
+2026-01-12 12:02:43 [INFO] [PSB] Write to REG 501 completed with result: 0
+2026-01-12 12:02:44 [INFO] [PSB] >>> QUEUE: Executing command SET_VOLTAGE (type 3)
+2026-01-12 12:02:44 [INFO] [PSB] *** WRITING REG 500 (SET_VOLTAGE): 0.00V (0x0000) - WILL ENTER CV MODE ***
+2026-01-12 12:02:44 [INFO] [PSB] Write to REG 500 completed with result: 0
+2026-01-12 12:02:44 [WARN] [PSB] Setting power limit to 600W...
+2026-01-12 12:02:44 [INFO] [PSB] Setting max power: 600.00W
+2026-01-12 12:02:44 [WARN] [PSB] Setting power to 600W...
+2026-01-12 12:02:44 [INFO] [PSB] >>> QUEUE: Executing command SET_POWER (type 5)
+2026-01-12 12:02:44 [INFO] [PSB] *** WRITING REG 502 (SET_POWER): 600.00W (0x6665) - WILL ENTER CP MODE ***
+2026-01-12 12:02:44 [INFO] [PSB] Write to REG 502 completed with result: 0
+2026-01-12 12:02:45 [WARN] [PSB] *** READY TO BEGIN OUTPUT TESTS ***
+2026-01-12 12:02:45 [WARN] [PSB] The test will enable the PSB output with low current limit (1A)
+2026-01-12 12:02:45 [WARN] [PSB] Ensure nothing is connected to the output terminals!
+2026-01-12 12:07:06 [INFO] [PSB] >>> QUEUE: Executing command SET_VOLTAGE (type 3)
+2026-01-12 12:07:06 [INFO] [PSB] *** WRITING REG 500 (SET_VOLTAGE): 5.00V (0x1110) - WILL ENTER CV MODE ***
+2026-01-12 12:07:06 [INFO] [PSB] Write to REG 500 completed with result: 0
+2026-01-12 12:07:07 [INFO] [PSB] Setting output: ON
+2026-01-12 12:07:08 [INFO] [PSB] Setting output: OFF
+2026-01-12 12:07:09 [INFO] [PSB] >>> QUEUE: Executing command SET_VOLTAGE (type 3)
+2026-01-12 12:07:09 [INFO] [PSB] *** WRITING REG 500 (SET_VOLTAGE): 12.00V (0x28F5) - WILL ENTER CV MODE ***
+2026-01-12 12:07:09 [INFO] [PSB] Write to REG 500 completed with result: 0
+2026-01-12 12:07:09 [INFO] [PSB] Setting output: ON
+2026-01-12 12:07:11 [INFO] [PSB] Setting output: OFF
+2026-01-12 12:07:11 [INFO] [PSB] >>> QUEUE: Executing command SET_VOLTAGE (type 3)
+2026-01-12 12:07:11 [INFO] [PSB] *** WRITING REG 500 (SET_VOLTAGE): 24.00V (0x51EA) - WILL ENTER CV MODE ***
+2026-01-12 12:07:11 [INFO] [PSB] Write to REG 500 completed with result: 0
+2026-01-12 12:07:12 [INFO] [PSB] Setting output: ON
+2026-01-12 12:07:13 [INFO] [PSB] Setting output: OFF
+2026-01-12 12:07:14 [INFO] [PSB] >>> QUEUE: Executing command SET_VOLTAGE (type 3)
+2026-01-12 12:07:14 [INFO] [PSB] *** WRITING REG 500 (SET_VOLTAGE): 48.00V (0xA3D5) - WILL ENTER CV MODE ***
+2026-01-12 12:07:14 [INFO] [PSB] Write to REG 500 completed with result: 0
+2026-01-12 12:07:15 [INFO] [PSB] Setting output: ON
+2026-01-12 12:07:16 [INFO] [PSB] Setting output: OFF
+2026-01-12 12:07:16 [INFO] [PSB] Test PASSED: Output Voltage Verification (274.31 seconds)
+2026-01-12 12:07:16 [INFO] [PSB] ========================================
+2026-01-12 12:07:16 [INFO] [PSB] PSB Test Suite Summary:
+2026-01-12 12:07:16 [INFO] [PSB] Total Tests: 17
+2026-01-12 12:07:16 [INFO] [PSB] Passed: 17
+2026-01-12 12:07:16 [INFO] [PSB] Failed: 0
+2026-01-12 12:07:16 [INFO] [PSB] Total Time: 326.14 seconds
+2026-01-12 12:07:16 [INFO] [PSB] Average Time: 19.18 seconds
+2026-01-12 12:07:16 [INFO] [PSB] ========================================
+2026-01-12 12:07:16 [INFO] [PSB] PSB test suite completed successfully (17 tests passed)
+2026-01-12 12:07:16 [INFO] [PSB] Zeroing all PSB values...
+2026-01-12 12:07:17 [INFO] [PSB] Setting output: OFF
+2026-01-12 12:07:17 [INFO] [PSB] >>> QUEUE: Executing command SET_VOLTAGE (type 3)
+2026-01-12 12:07:17 [INFO] [PSB] *** WRITING REG 500 (SET_VOLTAGE): 0.00V (0x0000) - WILL ENTER CV MODE ***
+2026-01-12 12:07:17 [INFO] [PSB] Write to REG 500 completed with result: 0
+2026-01-12 12:07:18 [INFO] [PSB] >>> QUEUE: Executing command SET_CURRENT (type 4)
+2026-01-12 12:07:18 [INFO] [PSB] *** WRITING REG 501 (SET_CURRENT): 0.00A (0x0000) - WILL ENTER CC MODE ***
+2026-01-12 12:07:18 [INFO] [PSB] Write to REG 501 completed with result: 0
+2026-01-12 12:07:18 [INFO] [PSB] >>> QUEUE: Executing command SET_POWER (type 5)
+2026-01-12 12:07:18 [INFO] [PSB] *** WRITING REG 502 (SET_POWER): 0.00W (0x0000) - WILL ENTER CP MODE ***
+2026-01-12 12:07:18 [INFO] [PSB] Write to REG 502 completed with result: 0
+2026-01-12 12:07:18 [INFO] [PSB] Setting sink current: 0.00A (0x0000)
+2026-01-12 12:07:18 [INFO] [PSB] Setting sink power: 0.00W (0x0000)
+2026-01-12 12:07:18 [INFO] [PSB] All PSB values zeroed successfully
+2026-01-12 12:08:15 [INFO] BASELINE: Checking BioLogic connection...
+2026-01-12 12:08:15 [INFO] [BIO] BASELINE: BIO_IsAbstractInitialized = 1
+2026-01-12 12:08:15 [INFO] [BIO] BASELINE: BioLogic mode = EC-Lab OLE COM (1)
+2026-01-12 12:08:15 [INFO] BASELINE: Testing BioLogic connection...
+2026-01-12 12:08:15 [INFO] [BIO] BASELINE: BIO_Abstract_TestConnection returned 0 (SUCCESS=0)
+2026-01-12 12:08:15 [INFO] [BIO] BASELINE: BIO_Abstract_GetDeviceID returned 0
+2026-01-12 12:08:15 [INFO] [BIO] BASELINE: BioLogic connection verified successfully (ID=0)
+2026-01-12 12:08:15 [INFO] All required devices verified and initialized successfully
+2026-01-12 12:08:15 [INFO] === Starting Baseline Battery Experiment ===
+2026-01-12 12:08:17 [INFO] Created experiment file system: c:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\data\baseline_20260112_120817
+2026-01-12 12:08:17 [INFO] Experiment settings saved to: c:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\data\baseline_20260112_120817\experiment_settings.ini
+2026-01-12 12:08:17 [INFO] Initializing relay states...
+2026-01-12 12:08:17 [INFO] EIS target SOC points initialized:
+2026-01-12 12:08:17 [INFO]   0.0%
+2026-01-12 12:08:17 [INFO]   10.0%
+2026-01-12 12:08:17 [INFO]   20.0%
+2026-01-12 12:08:17 [INFO]   30.0%
+2026-01-12 12:08:17 [INFO]   40.0%
+2026-01-12 12:08:17 [INFO]   50.0%
+2026-01-12 12:08:17 [INFO]   60.0%
+2026-01-12 12:08:17 [INFO]   70.0%
+2026-01-12 12:08:17 [INFO]   80.0%
+2026-01-12 12:08:17 [INFO]   90.0%
+2026-01-12 12:08:17 [INFO]   100.0%
+2026-01-12 12:08:17 [INFO] === PHASE 1: Initial Discharge and Temperature Setup ===
+2026-01-12 12:08:17 [INFO] Setting up temperature control - target: 30.0 ï¿½C
+2026-01-12 12:08:17 [INFO] [DTB] Setting setpoint to 30.0°C for all 2 DTB devices...
+2026-01-12 12:08:18 [INFO] [DTB] Setting setpoint: 30.0°C
+2026-01-12 12:08:18 [INFO] [DTB] Setting setpoint: 30.0°C
+2026-01-12 12:08:18 [INFO] [DTB] Successfully set setpoint for all DTB devices
+2026-01-12 12:08:18 [INFO] [DTB] Setting run/stop to RUN for all 2 DTB devices...
+2026-01-12 12:08:18 [INFO] [DTB] Setting Run/Stop: RUN
+2026-01-12 12:08:19 [INFO] [DTB] Setting Run/Stop: RUN
+2026-01-12 12:08:19 [INFO] [DTB] Successfully set run/stop for all DTB devices
+2026-01-12 12:08:19 [INFO] DTB temperature controller started
+2026-01-12 12:08:19 [INFO] Switching to PSB...
+2026-01-12 12:08:19 [INFO] [PSB] Setting output: OFF
+2026-01-12 12:08:20 [INFO] Successfully switched to PSB
+2026-01-12 12:08:20 [INFO] Discharging battery to 2.70 V
+2026-01-12 12:08:20 [INFO] Battery voltage: 2.882 V, Target: 2.700 V - Will DISCHARGE
+2026-01-12 12:08:20 [INFO] [PSB] Setting sink current: 5.00A (0x1110)
+2026-01-12 12:08:21 [INFO] [PSB] >>> QUEUE: Executing command SET_POWER (type 5)
+2026-01-12 12:08:21 [INFO] [PSB] *** WRITING REG 502 (SET_POWER): 30.00W (0x051E) - WILL ENTER CP MODE ***
+2026-01-12 12:08:21 [INFO] [PSB] Write to REG 502 completed with result: 0
+2026-01-12 12:08:21 [INFO] [PSB] Setting sink power: 30.00W (0x051E)
+2026-01-12 12:08:21 [INFO] [PSB] >>> QUEUE: Executing command SET_VOLTAGE (type 3)
+2026-01-12 12:08:21 [INFO] [PSB] *** WRITING REG 500 (SET_VOLTAGE): 2.70V (0x0937) - WILL ENTER CV MODE ***
+2026-01-12 12:08:21 [INFO] [PSB] Write to REG 500 completed with result: 0
+2026-01-12 12:08:21 [INFO] [PSB] Setting output: ON
+2026-01-12 12:08:22 [INFO] Waiting for output to stabilize...
+2026-01-12 12:08:24 [INFO] Discharging...
+2026-01-12 12:09:46 [INFO] User requested to stop baseline experiment
+2026-01-12 12:09:52 [INFO] Battery_GoToVoltage operation cancelled by user
+2026-01-12 12:09:52 [INFO] [PSB] Setting output: OFF
+2026-01-12 12:09:52 [INFO] Discharge complete: 0.00 mAh, 0.00 Wh in 1.5 minutes
+2026-01-12 12:09:52 [INFO] Cleaning up baseline experiment...
+2026-01-12 12:09:52 [INFO] Safely disconnecting all devices...
+2026-01-12 12:09:52 [INFO] [PSB] Setting output: OFF
+2026-01-12 12:09:52 [INFO] [DTB] Setting run/stop to STOP for all 2 DTB devices...
+2026-01-12 12:09:52 [INFO] [DTB] Setting Run/Stop: STOP
+2026-01-12 12:09:53 [INFO] [DTB] Setting Run/Stop: STOP
+2026-01-12 12:09:53 [INFO] [DTB] Successfully set run/stop for all DTB devices
+2026-01-12 12:09:53 [INFO] Device disconnect completed
+2026-01-12 12:09:53 [INFO] Baseline experiment cleanup completed
+2026-01-12 12:10:31 [INFO] ========================================
+2026-01-12 12:10:31 [INFO] Shutting down Battery Tester application
+2026-01-12 12:10:31 [INFO] ========================================
+2026-01-12 12:10:31 [INFO] [TNY] Setting 2 pins
+2026-01-12 12:10:31 [INFO] Stopping status monitoring...
+2026-01-12 12:10:31 [INFO] Stopping device status monitoring...
+2026-01-12 12:10:31 [INFO] Status module state: RUNNING -> STOPPING
+2026-01-12 12:10:31 [INFO] Status timer thread stopped
+2026-01-12 12:10:31 [INFO] Status module state: STOPPING -> STOPPED
+2026-01-12 12:10:31 [INFO] Status monitoring stopped
+2026-01-12 12:10:31 [INFO] Cleaning up cDAQ module...
+2026-01-12 12:10:31 [INFO] Cleaning up cDAQ module...
+2026-01-12 12:10:32 [INFO] Cleaned up cDAQ slot 2 task
+2026-01-12 12:10:33 [INFO] Cleaned up cDAQ slot 3 task
+2026-01-12 12:10:33 [INFO] cDAQ module cleaned up
+2026-01-12 12:10:33 [INFO] Shutting down PSB queue manager...
+2026-01-12 12:10:33 [INFO] [PSB] Shutting down PSB 10000 queue manager...
+2026-01-12 12:10:33 [INFO] [PSB] Waiting for processing thread to complete...
+2026-01-12 12:10:33 [INFO] [PSB] All queues empty, processing thread exiting
+2026-01-12 12:10:33 [INFO] [PSB] PSB 10000 queue processing thread stopped
+2026-01-12 12:10:34 [INFO] [PSB] Setting output: OFF
+2026-01-12 12:10:34 [INFO] [PSB] Setting remote mode: OFF
+2026-01-12 12:10:34 [INFO] [PSB] Closing connection on COM3
+2026-01-12 12:10:34 [INFO] [PSB] Disconnected from PSB 10000
+2026-01-12 12:10:34 [INFO] Device queue manager shut down
+2026-01-12 12:10:34 [INFO] Shutting down BioLogic abstraction layer...
+2026-01-12 12:10:34 [INFO] [BIO] Shutting down BioLogic abstraction layer
+2026-01-12 12:10:34 [INFO] [BIO] Shutting down EC-Lab backend
+2026-01-12 12:10:34 [INFO] [BIO] Shutting down EC-Lab OLE COM connection
+2026-01-12 12:10:34 [INFO] [BIO] Disconnecting from EC-Lab device 0
+2026-01-12 12:10:34 [INFO] [BIO] Disconnected from EC-Lab device
+2026-01-12 12:10:34 [INFO] [BIO] EC-Lab OLE COM connection shutdown complete
+2026-01-12 12:10:34 [INFO] [BIO] EC-Lab backend shutdown complete
+2026-01-12 12:10:34 [INFO] [BIO] BioLogic abstraction layer shutdown complete
+2026-01-12 12:10:34 [INFO] Shutting down DTB queue manager...
+2026-01-12 12:10:34 [INFO] [DTB] Shutting down DTB 4848 queue manager...
+2026-01-12 12:10:34 [INFO] [DTB] Waiting for processing thread to complete...
+2026-01-12 12:10:34 [INFO] [DTB] All queues empty, processing thread exiting
+2026-01-12 12:10:34 [INFO] [DTB] DTB 4848 queue processing thread stopped
+2026-01-12 12:10:34 [INFO] [DTB] Stopping DTB slave 2...
+2026-01-12 12:10:34 [INFO] [DTB] Setting Run/Stop: STOP
+2026-01-12 12:10:34 [INFO] [DTB] Stopping DTB slave 3...
+2026-01-12 12:10:34 [INFO] [DTB] Setting Run/Stop: STOP
+2026-01-12 12:10:35 [INFO] [DTB] Closing COM5
+2026-01-12 12:10:35 [INFO] [DTB] Disconnected all DTB devices from COM5
+2026-01-12 12:10:35 [INFO] [DTB] Disconnected from DTB 4848
+2026-01-12 12:10:35 [INFO] Device queue manager shut down
+2026-01-12 12:10:35 [INFO] Shutting down Teensy queue manager...
+2026-01-12 12:10:35 [INFO] [TNY] Shutting down Teensy queue manager...
+2026-01-12 12:10:35 [INFO] [TNY] Waiting for processing thread to complete...
+2026-01-12 12:10:35 [INFO] [TNY] All queues empty, processing thread exiting
+2026-01-12 12:10:35 [INFO] [TNY] Teensy queue processing thread stopped
+2026-01-12 12:10:35 [INFO] [TNY] Closing connection on COM6
+2026-01-12 12:10:35 [INFO] [TNY] Disconnected from Teensy
+2026-01-12 12:10:35 [INFO] Device queue manager shut down
+2026-01-12 12:10:35 [INFO] Cleaning up CDC experiment module...
+2026-01-12 12:10:35 [INFO] Cleaning up Baseline experiment module...
+2026-01-12 12:10:35 [INFO] Cleaning up controls module...
+2026-01-12 12:10:35 [INFO] Controls module cleaned up
+2026-01-12 12:10:35 [INFO] Cleaning up status monitoring...
+2026-01-12 12:10:35 [INFO] Status module state: STOPPED -> UNINITIALIZED
+2026-01-12 12:10:35 [INFO] Status module cleaned up
+2026-01-12 12:10:35 [INFO] Shutting down thread pool...
+2026-01-12 12:10:35 [INFO] Cleanup complete. Exiting application.
+2026-01-12 12:10:35 [INFO] ========================================
+=== Battery Tester Log Ended: 2026-01-12 12:10:35 ===
