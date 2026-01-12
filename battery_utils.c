@@ -164,9 +164,33 @@ int Battery_GoToVoltage(VoltageTargetParams *params) {
         LogError("Failed to set voltage: %s", PSB_GetErrorString(result));
         return result;
     }
-    
+
+    // DIAGNOSTIC: Read PSB status immediately after setting voltage to verify mode
+    PSB_Status diagStatus;
+    result = PSB_GetStatusQueued(&diagStatus, DEVICE_PRIORITY_NORMAL);
+    if (result == PSB_SUCCESS) {
+        const char *modeStr[] = {"CV", "CR", "CC", "CP"};
+        const char *sinkSourceStr = diagStatus.sinkMode ? "SINK" : "SOURCE";
+        LogMessage("DIAGNOSTIC: After setting voltage to %.3fV:", params->targetVoltage_V);
+        LogMessage("  PSB Mode: %s (%s mode)", modeStr[diagStatus.regulationMode], sinkSourceStr);
+        LogMessage("  Device State (raw): 0x%08lX", diagStatus.rawState);
+        LogMessage("  Control Location: %d", diagStatus.controlLocation);
+        LogMessage("  Remote Mode: %s", diagStatus.remoteMode ? "ON" : "OFF");
+
+        if (diagStatus.regulationMode != 0) {  // 0 = CV mode
+            LogWarning("PROBLEM DETECTED: PSB is not in CV mode after writing voltage setpoint!");
+            LogWarning("  Expected: CV mode (0), Actual: %s mode (%d)",
+                      modeStr[diagStatus.regulationMode], diagStatus.regulationMode);
+        }
+        if (diagStatus.sinkMode == 1) {
+            LogWarning("PROBLEM DETECTED: PSB is in SINK mode instead of SOURCE mode!");
+        }
+    } else {
+        LogWarning("Failed to read PSB status for diagnostics: %s", PSB_GetErrorString(result));
+    }
+
     // Enable output
-    PSB_SetOutputEnableQueued(1, DEVICE_PRIORITY_NORMAL);
+    result = PSB_SetOutputEnableQueued(1, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         LogError("Failed to enable output: %s", PSB_GetErrorString(result));
         return result;

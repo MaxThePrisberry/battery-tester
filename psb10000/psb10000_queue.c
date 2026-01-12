@@ -161,6 +161,26 @@ static int PSB_AdapterConnect(void *deviceContext, void *connectionParams) {
             LogWarningEx(LOG_DEVICE_PSB, "Failed to clear voltage: %s", PSB_GetErrorString(result));
         }
 
+        // DIAGNOSTIC: Read device state after clearing all setpoints
+        PSB_Status diagStatus;
+        result = PSB_GetStatus(&ctx->handle, &diagStatus);
+        if (result == PSB_SUCCESS) {
+            const char *modeStr[] = {"CV", "CR", "CC", "CP"};
+            const char *sinkSourceStr = diagStatus.sinkMode ? "SINK" : "SOURCE";
+            LogMessageEx(LOG_DEVICE_PSB, "DIAGNOSTIC: After clearing all setpoints:");
+            LogMessageEx(LOG_DEVICE_PSB, "  PSB Mode: %s (%s mode)", modeStr[diagStatus.regulationMode], sinkSourceStr);
+            LogMessageEx(LOG_DEVICE_PSB, "  Device State (raw): 0x%08lX", diagStatus.rawState);
+            LogMessageEx(LOG_DEVICE_PSB, "  Control Location: %d", diagStatus.controlLocation);
+
+            if (diagStatus.regulationMode != 0) {  // 0 = CV mode
+                LogWarningEx(LOG_DEVICE_PSB, "PROBLEM: PSB not in CV mode after initialization! Mode=%s",
+                            modeStr[diagStatus.regulationMode]);
+            }
+            if (diagStatus.sinkMode == 1) {
+                LogWarningEx(LOG_DEVICE_PSB, "PROBLEM: PSB in SINK mode instead of SOURCE mode after initialization!");
+            }
+        }
+
         LogMessageEx(LOG_DEVICE_PSB, "PSB initialization complete - all setpoints cleared");
 
         // Restore result to PSB_SUCCESS if initialization succeeded
