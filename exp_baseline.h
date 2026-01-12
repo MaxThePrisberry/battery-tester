@@ -192,6 +192,7 @@ typedef struct {
     double phaseStartTime;           // Current phase start time
     double lastLogTime;              // Last data logging time
     double lastGraphUpdate;          // Last graph update time
+    double lastStatusLog;            // Last PSB status logging time
     double lastTempCheck;            // Last temperature check time
     
     // Temperature management

@@ -1502,6 +1502,7 @@ static int RunPhase3_EISCharge(BaselineExperimentContext *ctx) {
     ctx->phaseStartTime = Timer() - ctx->experimentStartTime;
     ctx->lastLogTime = Timer();
     ctx->lastGraphUpdate = Timer();
+    ctx->lastStatusLog = Timer();
     ctx->currentSOC = 0.0;
     ctx->accumulatedCapacity_mAh = 0.0;
     ctx->lastCurrent = 0.0;
@@ -1571,11 +1572,27 @@ static int RunPhase3_EISCharge(BaselineExperimentContext *ctx) {
         // Update graphs if needed
         if ((currentTime - ctx->lastGraphUpdate) >= 1.0) {
             double elapsedTime_min = elapsedTime / 60.0;  // Convert to minutes
-			PlotPoint(ctx->mainPanelHandle, ctx->graph1Handle, 
+			PlotPoint(ctx->mainPanelHandle, ctx->graph1Handle,
                   elapsedTime_min, fabs(status.current), VAL_SOLID_CIRCLE, VAL_RED);
             ctx->lastGraphUpdate = currentTime;
         }
-        
+
+        // Periodic PSB status logging for mode tracking (every 5 seconds)
+        if ((currentTime - ctx->lastStatusLog) >= 5.0) {
+            const char *modeStr[] = {"CV", "CR", "CC", "CP"};
+            const char *currentMode = (status.regulationMode >= 0 && status.regulationMode <= 3) ?
+                                      modeStr[status.regulationMode] : "UNKNOWN";
+            LogMessage("[Status] PSB Mode=%s, V=%.3fV, I=%.3fA, P=%.2fW, SOC=%.1f%%",
+                       currentMode, status.voltage, status.current, status.power, ctx->currentSOC);
+
+            // Warning if not in expected CV mode
+            if (status.regulationMode != 0) {
+                LogWarning("[Status] PSB not in CV mode! Currently in %s mode", currentMode);
+            }
+
+            ctx->lastStatusLog = currentTime;
+        }
+
         // Check if we need to perform EIS measurement
         if (nextTargetIndex < ctx->numTargetSOCs && 
             ctx->currentSOC >= (ctx->targetSOCs[nextTargetIndex] - BASELINE_SOC_TOLERANCE)) {
