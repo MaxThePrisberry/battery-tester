@@ -120,31 +120,34 @@ int Battery_GoToVoltage(VoltageTargetParams *params) {
                                                      "Configuring discharge parameters...");
     }
 
-    // IMPORTANT: Set limits first, then voltage setpoint last to enter voltage-controlled mode
-    // (PSB control mode is determined by which setpoint register is written last)
+    // IMPORTANT: For voltage control, only write REG 500 (voltage setpoint).
+    // Use LIMIT registers (not setpoint registers) to constrain current/power.
+    // Writing setpoint registers REG 498/499/501/502 would change the control mode.
 
-    // Set current limit based on direction
+    // Set current LIMITS (not setpoints) based on direction
+    // These write to limit registers (REG 9000-9009), not setpoint registers (REG 498-502)
     if (params->wasCharging) {
-        result = PSB_SetCurrentQueued(params->maxCurrent_A, DEVICE_PRIORITY_NORMAL);
+        result = PSB_SetCurrentLimitsQueued(0.0, params->maxCurrent_A, DEVICE_PRIORITY_NORMAL);
     } else {
-        result = PSB_SetSinkCurrentQueued(params->maxCurrent_A, DEVICE_PRIORITY_NORMAL);
+        result = PSB_SetSinkCurrentLimitsQueued(0.0, params->maxCurrent_A, DEVICE_PRIORITY_NORMAL);
     }
     if (result != PSB_SUCCESS) {
-        LogError("Failed to set current limit: %s", PSB_GetErrorString(result));
+        LogError("Failed to set current limits: %s", PSB_GetErrorString(result));
         return result;
     }
 
-	// Set power limits
-	result = PSB_SetPowerQueued(PSB_BATTERY_POWER_MAX, DEVICE_PRIORITY_NORMAL);
+	// Set power LIMITS (not setpoints)
+	result = PSB_SetPowerLimitQueued(PSB_BATTERY_POWER_MAX, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         LogWarning("Failed to set power limit: %s", PSB_GetErrorString(result));
     }
-	result = PSB_SetSinkPowerQueued(PSB_BATTERY_POWER_MAX, DEVICE_PRIORITY_NORMAL);
+	result = PSB_SetSinkPowerLimitQueued(PSB_BATTERY_POWER_MAX, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         LogWarning("Failed to set sink power limit: %s", PSB_GetErrorString(result));
     }
 
-    // Set voltage setpoint last to enter voltage-controlled mode
+    // Set voltage SETPOINT last to enter voltage-controlled mode
+    // This writes REG 500, which triggers CV mode
     result = PSB_SetVoltageQueued(params->targetVoltage_V, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         LogError("Failed to set voltage: %s", PSB_GetErrorString(result));
