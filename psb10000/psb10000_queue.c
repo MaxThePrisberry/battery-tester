@@ -128,10 +128,43 @@ static int PSB_AdapterConnect(void *deviceContext, void *connectionParams) {
         ctx->specificPort = params->comPort;
         ctx->specificBaudRate = params->baudRate;
         ctx->specificSlaveAddress = params->slaveAddress;
-        
-        // Only set remote mode and disable output - minimal safe state
+
+        // Set remote mode and disable output
+        LogMessageEx(LOG_DEVICE_PSB, "Initializing PSB to known state...");
         PSB_SetRemoteMode(&ctx->handle, 1);
         PSB_SetOutputEnable(&ctx->handle, 0);
+
+        // CRITICAL: Clear all setpoint registers to mimic power-cycle reset
+        // This ensures the PSB starts in a clean state, not stuck in sink mode
+        // from previous operations. Only write SOURCE mode registers, not sink
+        // setpoint registers, as sink setpoints interfere with mode selection.
+
+        LogMessageEx(LOG_DEVICE_PSB, "Clearing all PSB setpoint registers...");
+
+        // Clear source current (REG 501)
+        result = PSB_SetCurrent(&ctx->handle, 0.0);
+        if (result != PSB_SUCCESS) {
+            LogWarningEx(LOG_DEVICE_PSB, "Failed to clear source current: %s", PSB_GetErrorString(result));
+        }
+
+        // Clear source power (REG 502)
+        result = PSB_SetPower(&ctx->handle, 0.0);
+        if (result != PSB_SUCCESS) {
+            LogWarningEx(LOG_DEVICE_PSB, "Failed to clear source power: %s", PSB_GetErrorString(result));
+        }
+
+        // IMPORTANT: Clear voltage LAST (REG 500) to ensure PSB ends in source CV mode
+        // This leaves the PSB in source CV mode at 0V/0A/0W
+        // Do NOT write sink setpoint registers (REG 498/499) as they interfere with mode selection
+        result = PSB_SetVoltage(&ctx->handle, 0.0);
+        if (result != PSB_SUCCESS) {
+            LogWarningEx(LOG_DEVICE_PSB, "Failed to clear voltage: %s", PSB_GetErrorString(result));
+        }
+
+        LogMessageEx(LOG_DEVICE_PSB, "PSB initialization complete - all setpoints cleared");
+
+        // Restore result to PSB_SUCCESS if initialization succeeded
+        result = PSB_SUCCESS;
     }
     
     return result;
@@ -716,7 +749,7 @@ int PSB_ZeroAllValuesQueued(DevicePriority priority) {
     int overallResult = PSB_SUCCESS;
     
     LogMessageEx(LOG_DEVICE_PSB, "Zeroing all PSB values...");
-    
+
     // Disable output first
     result = PSB_SetOutputEnableQueued(0, priority);
     if (result != PSB_SUCCESS) {
@@ -724,37 +757,28 @@ int PSB_ZeroAllValuesQueued(DevicePriority priority) {
         overallResult = result;
     }
 
-    // Set current to 0A
+    // CRITICAL: Only write SOURCE mode setpoint registers, not sink setpoint registers
+    // Writing sink setpoint registers (REG 498/499) puts the PSB in sink mode, and
+    // writing voltage alone doesn't reliably switch it back to source mode.
+    // Instead, we write only source registers + voltage to ensure source CV mode at 0V.
+
+    // Set source current to 0A (REG 501)
     result = PSB_SetCurrentQueued(0.0, priority);
     if (result != PSB_SUCCESS) {
         LogWarningEx(LOG_DEVICE_PSB, "Failed to set current to 0A: %s", PSB_GetErrorString(result));
         overallResult = result;
     }
 
-    // Set power to 0W
+    // Set source power to 0W (REG 502)
     result = PSB_SetPowerQueued(0.0, priority);
     if (result != PSB_SUCCESS) {
         LogWarningEx(LOG_DEVICE_PSB, "Failed to set power to 0W: %s", PSB_GetErrorString(result));
         overallResult = result;
     }
 
-    // Set sink current to 0A
-    result = PSB_SetSinkCurrentQueued(0.0, priority);
-    if (result != PSB_SUCCESS) {
-        LogWarningEx(LOG_DEVICE_PSB, "Failed to set sink current to 0A: %s", PSB_GetErrorString(result));
-        overallResult = result;
-    }
-
-    // Set sink power to 0W
-    result = PSB_SetSinkPowerQueued(0.0, priority);
-    if (result != PSB_SUCCESS) {
-        LogWarningEx(LOG_DEVICE_PSB, "Failed to set sink power to 0W: %s", PSB_GetErrorString(result));
-        overallResult = result;
-    }
-
-    // IMPORTANT: Set voltage to 0V LAST to ensure PSB ends in CV mode
-    // Writing voltage setpoint (REG 500) after sink setpoints (REG 498/499)
-    // ensures the PSB is in CV mode, not stuck in sink CP/CC mode
+    // IMPORTANT: Set voltage to 0V LAST (REG 500) to ensure PSB ends in source CV mode
+    // This leaves the PSB in a clean source CV mode at 0V/0A/0W
+    // Do NOT write sink setpoint registers (REG 498/499) as they interfere with mode selection
     result = PSB_SetVoltageQueued(0.0, priority);
     if (result != PSB_SUCCESS) {
         LogWarningEx(LOG_DEVICE_PSB, "Failed to set voltage to 0V: %s", PSB_GetErrorString(result));
