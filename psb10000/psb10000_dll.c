@@ -370,10 +370,13 @@ int PSB_SetVoltage(PSB_Handle *handle, double voltage) {
     txBuffer[6] = (unsigned char)(crc & 0xFF);
     txBuffer[7] = (unsigned char)((crc >> 8) & 0xFF);
     
-    LogMessageEx(LOG_DEVICE_PSB,"Setting voltage: %.2fV (0x%04X)", voltage, deviceValue);
-    
+    LogMessageEx(LOG_DEVICE_PSB,"*** WRITING REG %d (SET_VOLTAGE): %.2fV (0x%04X) - WILL ENTER CV MODE ***",
+                 REG_SET_VOLTAGE, voltage, deviceValue);
+
     // Expected response for write register: Same as request = 8 bytes
-    return SendModbusCommand(handle, txBuffer, 8, rxBuffer, 8);
+    int result = SendModbusCommand(handle, txBuffer, 8, rxBuffer, 8);
+    LogMessageEx(LOG_DEVICE_PSB,"Write to REG %d completed with result: %d", REG_SET_VOLTAGE, result);
+    return result;
 }
 
 int PSB_SetVoltageLimits(PSB_Handle *handle, double minVoltage, double maxVoltage) {
@@ -453,9 +456,12 @@ int PSB_SetCurrent(PSB_Handle *handle, double current) {
     txBuffer[6] = (unsigned char)(crc & 0xFF);
     txBuffer[7] = (unsigned char)((crc >> 8) & 0xFF);
     
-    LogMessageEx(LOG_DEVICE_PSB,"Setting current: %.2fA (0x%04X)", current, deviceValue);
-    
-    return SendModbusCommand(handle, txBuffer, 8, rxBuffer, 8);
+    LogMessageEx(LOG_DEVICE_PSB,"*** WRITING REG %d (SET_CURRENT): %.2fA (0x%04X) - WILL ENTER CC MODE ***",
+                 REG_SET_CURRENT, current, deviceValue);
+
+    int result = SendModbusCommand(handle, txBuffer, 8, rxBuffer, 8);
+    LogMessageEx(LOG_DEVICE_PSB,"Write to REG %d completed with result: %d", REG_SET_CURRENT, result);
+    return result;
 }
 
 int PSB_SetCurrentLimits(PSB_Handle *handle, double minCurrent, double maxCurrent) {
@@ -614,9 +620,12 @@ int PSB_SetPower(PSB_Handle *handle, double power) {
     txBuffer[6] = (unsigned char)(crc & 0xFF);
     txBuffer[7] = (unsigned char)((crc >> 8) & 0xFF);
     
-    LogMessageEx(LOG_DEVICE_PSB,"Setting power: %.2fW (0x%04X)", power, deviceValue);
-    
-    return SendModbusCommand(handle, txBuffer, 8, rxBuffer, 8);
+    LogMessageEx(LOG_DEVICE_PSB,"*** WRITING REG %d (SET_POWER): %.2fW (0x%04X) - WILL ENTER CP MODE ***",
+                 REG_SET_POWER_SOURCE, power, deviceValue);
+
+    int result = SendModbusCommand(handle, txBuffer, 8, rxBuffer, 8);
+    LogMessageEx(LOG_DEVICE_PSB,"Write to REG %d completed with result: %d", REG_SET_POWER_SOURCE, result);
+    return result;
 }
 
 int PSB_SetPowerLimit(PSB_Handle *handle, double maxPower) {

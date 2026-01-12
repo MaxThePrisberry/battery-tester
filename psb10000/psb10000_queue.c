@@ -165,7 +165,23 @@ static int PSB_AdapterExecuteCommand(void *deviceContext, int commandType, void 
     PSBDeviceContext *ctx = (PSBDeviceContext*)deviceContext;
     PSBCommandParams *cmdParams = (PSBCommandParams*)params;
     PSBCommandResult *cmdResult = (PSBCommandResult*)result;
-    
+
+    // Diagnostic logging for command execution order
+    const char *cmdName = "UNKNOWN";
+    switch ((PSBCommandType)commandType) {
+        case PSB_CMD_SET_VOLTAGE: cmdName = "SET_VOLTAGE"; break;
+        case PSB_CMD_SET_CURRENT: cmdName = "SET_CURRENT"; break;
+        case PSB_CMD_SET_POWER: cmdName = "SET_POWER"; break;
+        case PSB_CMD_SET_OUTPUT_ENABLE: cmdName = "SET_OUTPUT_ENABLE"; break;
+        case PSB_CMD_GET_STATUS: cmdName = "GET_STATUS"; break;
+        default: break;
+    }
+    if (commandType == PSB_CMD_SET_VOLTAGE || commandType == PSB_CMD_SET_CURRENT ||
+        commandType == PSB_CMD_SET_POWER) {
+        LogMessageEx(LOG_DEVICE_PSB, ">>> QUEUE: Executing command %s (type %d)",
+                     cmdName, commandType);
+    }
+
     switch ((PSBCommandType)commandType) {
         case PSB_CMD_SET_REMOTE_MODE:
             cmdResult->errorCode = PSB_SetRemoteMode(&ctx->handle, cmdParams->remoteMode.enable);
