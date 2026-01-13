@@ -139,22 +139,38 @@ static int PSB_AdapterConnect(void *deviceContext, void *connectionParams) {
         // from previous operations. Only write SOURCE mode registers, not sink
         // setpoint registers, as sink setpoints interfere with mode selection.
 
-        LogMessageEx(LOG_DEVICE_PSB, "Clearing all PSB setpoint registers...");
+        LogMessageEx(LOG_DEVICE_PSB, "Clearing all PSB setpoint registers to eliminate stale values...");
 
-        // CRITICAL: Only write voltage register, do NOT write current or power registers
-        // When PSB output is enabled, it re-evaluates which setpoint to use as "active"
-        // If we write power (REG 502), it will switch to CP mode on output enable
-        // If we write current (REG 501), it will switch to CC mode on output enable
-        // By ONLY writing voltage, we force it to use CV mode on output enable
+        // CRITICAL INSIGHT: PSB has STALE VALUES from previous runs
+        // Even though we only write voltage, the PSB still sees old values in current/power
+        // registers from before we connected. When output is enabled, it evaluates ALL
+        // registers and picks one based on those stale values.
+        //
+        // Solution: Write 0 to ALL setpoint registers ONCE during connection to clear
+        // stale values, then NEVER write current/power again (only voltage).
 
-        // Clear voltage to 0V (REG 500) - this is the ONLY setpoint we write
-        result = PSB_SetVoltage(&ctx->handle, 0.0);
+        // Step 1: Clear ALL setpoint registers to 0 to eliminate stale values
+        LogMessageEx(LOG_DEVICE_PSB, "Step 1: Clearing stale values from all setpoint registers");
+
+        result = PSB_SetCurrent(&ctx->handle, 0.0);
         if (result != PSB_SUCCESS) {
-            LogWarningEx(LOG_DEVICE_PSB, "Failed to clear voltage: %s", PSB_GetErrorString(result));
+            LogWarningEx(LOG_DEVICE_PSB, "Failed to clear current register: %s", PSB_GetErrorString(result));
         }
 
-        LogMessageEx(LOG_DEVICE_PSB, "NOTE: Only voltage register cleared - current and power registers left untouched");
-        LogMessageEx(LOG_DEVICE_PSB, "This forces PSB to use CV mode when output is enabled");
+        result = PSB_SetPower(&ctx->handle, 0.0);
+        if (result != PSB_SUCCESS) {
+            LogWarningEx(LOG_DEVICE_PSB, "Failed to clear power register: %s", PSB_GetErrorString(result));
+        }
+
+        // Step 2: Write voltage LAST to set initial mode
+        LogMessageEx(LOG_DEVICE_PSB, "Step 2: Setting voltage to 0V as the active setpoint");
+        result = PSB_SetVoltage(&ctx->handle, 0.0);
+        if (result != PSB_SUCCESS) {
+            LogWarningEx(LOG_DEVICE_PSB, "Failed to set voltage: %s", PSB_GetErrorString(result));
+        }
+
+        LogMessageEx(LOG_DEVICE_PSB, "All setpoint registers cleared - voltage is the active setpoint");
+        LogMessageEx(LOG_DEVICE_PSB, "From now on, ONLY voltage register will be written to maintain CV mode");
 
         // DIAGNOSTIC: Read device state after clearing all setpoints
         PSB_Status diagStatus;
@@ -772,19 +788,34 @@ int PSB_ZeroAllValuesQueued(DevicePriority priority) {
         overallResult = result;
     }
 
-    // CRITICAL: Only write voltage register (REG 500), do NOT write current or power
-    // When PSB output is enabled, it re-evaluates which setpoint to use as "active"
-    // If we write power (REG 502), it will switch to CP mode on output enable
-    // If we write current (REG 501), it will switch to CC mode on output enable
-    // If we write sink registers (REG 498/499), it will switch to sink mode
-    // By ONLY writing voltage, we force it to use source CV mode on output enable
+    // CRITICAL: Clear ALL setpoint registers to 0, then write voltage last
+    // This eliminates stale values from previous runs while ensuring voltage is the
+    // active setpoint when complete.
 
-    // Set voltage to 0V (REG 500) - this is the ONLY setpoint we write
+    LogMessageEx(LOG_DEVICE_PSB, "Clearing all source setpoint registers to 0...");
+
+    // Clear current register
+    result = PSB_SetCurrentQueued(0.0, priority);
+    if (result != PSB_SUCCESS) {
+        LogWarningEx(LOG_DEVICE_PSB, "Failed to clear current: %s", PSB_GetErrorString(result));
+        overallResult = result;
+    }
+
+    // Clear power register
+    result = PSB_SetPowerQueued(0.0, priority);
+    if (result != PSB_SUCCESS) {
+        LogWarningEx(LOG_DEVICE_PSB, "Failed to clear power: %s", PSB_GetErrorString(result));
+        overallResult = result;
+    }
+
+    // Set voltage LAST to make it the active setpoint
     result = PSB_SetVoltageQueued(0.0, priority);
     if (result != PSB_SUCCESS) {
         LogWarningEx(LOG_DEVICE_PSB, "Failed to set voltage to 0V: %s", PSB_GetErrorString(result));
         overallResult = result;
     }
+
+    LogMessageEx(LOG_DEVICE_PSB, "All setpoint registers cleared - voltage is active setpoint");
     
     if (overallResult == PSB_SUCCESS) {
         LogMessageEx(LOG_DEVICE_PSB, "All PSB values zeroed successfully");
