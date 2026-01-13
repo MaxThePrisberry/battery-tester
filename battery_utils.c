@@ -124,27 +124,22 @@ int Battery_GoToVoltage(VoltageTargetParams *params) {
     // Use LIMIT registers (not setpoint registers) to constrain current/power.
     // Writing setpoint registers REG 498/499/501/502 would change the control mode.
 
-    // Set current LIMITS (not setpoints) based on direction
-    // These write to limit registers (REG 9000-9009), not setpoint registers (REG 498-502)
-    if (params->wasCharging) {
-        result = PSB_SetCurrentLimitsQueued(0.0, params->maxCurrent_A, DEVICE_PRIORITY_NORMAL);
-    } else {
-        result = PSB_SetSinkCurrentLimitsQueued(0.0, params->maxCurrent_A, DEVICE_PRIORITY_NORMAL);
-    }
-    if (result != PSB_SUCCESS) {
-        LogError("Failed to set current limits: %s", PSB_GetErrorString(result));
-        return result;
-    }
+    // NOTE: We do NOT modify limit registers here!
+    //
+    // Discovery from ops-log-2026-01-12-10.txt:
+    // - During init, sink current SETPOINT = 61.2A (to prevent CC mode selection)
+    // - Trying to set sink current LIMIT < SETPOINT causes "Illegal data value" error
+    // - The PSB rejects setting limits lower than setpoints
+    //
+    // Solution: Leave limits at their high initialization values (61.2A, 1224W).
+    // In CV mode, the actual current is naturally limited by:
+    //   1. Voltage difference (battery V vs target V)
+    //   2. Battery internal resistance
+    //   3. PSB's natural current capability
+    // The high limit values effectively "disable" current/power limiting while preventing
+    // mode selection issues.
 
-	// Set power LIMITS (not setpoints)
-	result = PSB_SetPowerLimitQueued(PSB_BATTERY_POWER_MAX, DEVICE_PRIORITY_NORMAL);
-    if (result != PSB_SUCCESS) {
-        LogWarning("Failed to set power limit: %s", PSB_GetErrorString(result));
-    }
-	result = PSB_SetSinkPowerLimitQueued(PSB_BATTERY_POWER_MAX, DEVICE_PRIORITY_NORMAL);
-    if (result != PSB_SUCCESS) {
-        LogWarning("Failed to set sink power limit: %s", PSB_GetErrorString(result));
-    }
+    LogMessage("Using high limit values set during initialization (no limit modification)");
 
     // CRITICAL: Only write voltage register (REG 500), do NOT write current or power
     // Discovery from ops-log-2026-01-12-05.txt:
