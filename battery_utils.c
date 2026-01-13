@@ -185,11 +185,35 @@ int Battery_GoToVoltage(VoltageTargetParams *params) {
         LogError("Failed to enable output: %s", PSB_GetErrorString(result));
         return result;
     }
-    
+
     // Wait for output to stabilize
     LogMessage("Waiting for output to stabilize...");
     Delay(STABILIZE_TIME);
-    
+
+    // CRITICAL DIAGNOSTIC: Check PSB mode AFTER output enable (this is where mode switching occurs!)
+    result = PSB_GetStatusQueued(&diagStatus, DEVICE_PRIORITY_NORMAL);
+    if (result == PSB_SUCCESS) {
+        const char *modeStr[] = {"CV", "CR", "CC", "CP"};
+        const char *sinkSourceStr = diagStatus.sinkMode ? "SINK" : "SOURCE";
+        LogMessage("==========================================================");
+        LogMessage("CRITICAL DIAGNOSTIC: After output enable + stabilization:");
+        LogMessage("==========================================================");
+        LogMessage("  PSB Mode: %s (%s mode)", modeStr[diagStatus.regulationMode], sinkSourceStr);
+        LogMessage("  Voltage: %.3f V (target: %.3f V)", diagStatus.voltage, params->targetVoltage_V);
+        LogMessage("  Current: %.3f A", diagStatus.current);
+        LogMessage("  Power: %.2f W", diagStatus.power);
+        LogMessage("  Device State (raw): 0x%08lX", diagStatus.rawState);
+        LogMessage("  Output Enabled: %s", diagStatus.outputEnabled ? "YES" : "NO");
+        LogMessage("==========================================================");
+
+        if (diagStatus.regulationMode != 0) {  // 0 = CV mode
+            LogError("MODE SWITCHING DETECTED AFTER OUTPUT ENABLE!");
+            LogError("  Expected: CV mode, Actual: %s %s mode",
+                    modeStr[diagStatus.regulationMode], sinkSourceStr);
+            LogError("  This is the root cause of the discharge failure!");
+        }
+    }
+
     // Initialize timing and coulomb counting
     double startTime = Timer();
     double lastUpdateTime = startTime;

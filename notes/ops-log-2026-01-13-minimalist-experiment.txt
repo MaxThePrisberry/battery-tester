@@ -1,0 +1,77 @@
+=== PSB Mode Selection - Minimalist Experiment ===
+Date: 2026-01-13
+Author: Claude Sonnet 4.5
+
+BACKGROUND:
+-----------
+After 30+ debugging commits trying to force PSB into CV mode by writing various
+"decoy" values to sink registers (REG 498/499), the PSB still switches to CP/CC
+mode after output is enabled.
+
+Previous attempts:
+- Clearing all registers to 0: PSB chose CP/CC sink modes
+- Setting sink registers to maximum (61.2A/1224W): Modbus errors + CC mode
+- Setting sink registers to moderate (10A/100W): Still investigating...
+
+HYPOTHESIS:
+-----------
+Writing ANY value to sink registers (REG 498/499) may interfere with PSB mode
+selection logic. The PSB firmware may prioritize sink registers when:
+1. Battery voltage > Target voltage (discharge/sink operation needed)
+2. ANY non-zero sink register values are present
+
+Perhaps the PSB defaults (factory reset state) for sink registers are more
+appropriate for CV mode operation than any value we write.
+
+EXPERIMENT:
+-----------
+MINIMALIST APPROACH - Do NOT write sink registers at all!
+
+Changes made:
+1. psb10000_queue.c::PSB_AdapterConnect()
+   - Clear source registers (501, 502) to 0
+   - **SKIP writing REG 498 (sink power) entirely**
+   - **SKIP writing REG 499 (sink current) entirely**
+   - Write voltage register (500) to 0V
+
+2. psb10000_queue.c::PSB_ZeroAllValuesQueued()
+   - Same changes as PSB_AdapterConnect()
+
+EXPECTED OUTCOMES:
+------------------
+Best case: PSB enters and maintains CV mode after output enable
+- This would prove that writing sink registers interferes with CV mode
+- PSB factory defaults for sink registers work correctly for CV operation
+
+Worst case: PSB still enters CP/CC mode
+- This would prove mode selection issue is NOT related to sink register writes
+- Would need to investigate:
+  a) Limit registers (REG 9005, 9008, 9009) interfering
+  b) PSB firmware bug with bidirectional sink/source mode
+  c) Voltage relationship triggering sink-specific modes
+  d) Need to explicitly force SOURCE mode vs letting PSB auto-select
+
+NEXT STEPS IF THIS FAILS:
+--------------------------
+1. Read back ALL registers (498-504, 9000-9009) and log complete state
+2. Try forcing SOURCE mode explicitly if such a register exists
+3. Test with target voltage > battery voltage (source operation)
+4. Contact EA Elektro-Automatik support with findings
+5. Consider workaround: Use external relay to prevent discharge
+
+TESTING PROCEDURE:
+------------------
+1. Rebuild project
+2. Run baseline experiment
+3. Observe PSB mode after output enable
+4. Check logs for mode (should be CV SOURCE, not CP/CC SINK)
+5. Verify actual current flow (should be non-zero if discharge occurs)
+
+BUILD COMMAND:
+--------------
+Build in LabWindows/CVI IDE (F7)
+
+OBSERVATIONS:
+-------------
+(To be filled in during testing)
+

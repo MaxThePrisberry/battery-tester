@@ -1,0 +1,253 @@
+=== PSB Mode Selection Debugging - Implementation Summary ===
+Date: 2026-01-13
+Changes Made By: Claude Sonnet 4.5
+
+================================================================================
+PROBLEM SUMMARY
+================================================================================
+
+The PSB 10000 bidirectional power supply fails to maintain CV (Constant Voltage)
+mode during battery discharge operations. Despite writing only the voltage
+register (REG 500), the PSB spontaneously switches to CP (Constant Power) or CC
+(Constant Current) mode immediately after output is enabled.
+
+Timeline:
+- Dec 2025: Problem first observed
+- Jan 2-12 2026: 30+ debug commits attempting various fixes
+- Jan 13 2026: Implemented minimalist approach + comprehensive diagnostics
+
+Previous Failed Attempts:
+1. Clearing all registers to 0: PSB chose CP/CC sink modes
+2. Setting sink registers to maximum (61.2A/1224W): Modbus errors + CC mode
+3. Setting sink registers to moderate (10A/100W): Mode switching persisted
+
+================================================================================
+CHANGES IMPLEMENTED (2026-01-13)
+================================================================================
+
+### 1. MINIMALIST INITIALIZATION APPROACH ###
+
+File: psb10000/psb10000_queue.c
+
+Function: PSB_AdapterConnect()
+- REMOVED: All writes to sink registers (REG 498, 499)
+- KEPT: Writes to source registers (REG 501, 502) = 0
+- KEPT: Write to voltage register (REG 500) = 0V
+- ADDED: Logging to indicate minimalist approach
+
+Rationale:
+- Writing ANY value to sink registers may interfere with PSB mode selection
+- PSB factory defaults for sink registers may work correctly for CV operation
+- Test hypothesis: Sink register writes are the root cause
+
+Function: PSB_ZeroAllValuesQueued()
+- Applied same minimalist changes as PSB_AdapterConnect()
+- Ensures consistent behavior throughout initialization
+
+### 2. COMPREHENSIVE REGISTER DIAGNOSTICS ###
+
+File: psb10000/psb10000_dll.h
+- Added: int PSB_LogAllRegisters(PSB_Handle *handle, const char *context);
+
+File: psb10000/psb10000_dll.c
+- Added: PSB_ReadRegisterAsValue() - Helper to read and convert register values
+- Added: PSB_LogAllRegisters() - Reads and logs ALL relevant PSB registers:
+  * Setpoint registers: 498-504 (sink power, sink current, voltage, source current, source power)
+  * Limit registers: 9000-9009 (voltage limits, current limits, power limits)
+  * Device state: REG 505 (regulation mode, sink/source mode, output state)
+  * Actual values: voltage, current, power
+
+Output Format:
+- Clear section headers
+- Register address + name + value
+- Error indication if register read fails
+- Complete device state snapshot
+
+### 3. STRATEGIC DIAGNOSTIC LOGGING ###
+
+File: psb10000/psb10000_queue.c
+Location: PSB_AdapterConnect() - After initialization
+- Calls PSB_LogAllRegisters() with context "After initialization (minimalist approach)"
+- Captures complete PSB state immediately after connection
+
+File: battery_utils.c
+Location: Battery_GoToVoltage() - After output enable
+- Added comprehensive diagnostic logging AFTER output enable + stabilization
+- This is the CRITICAL moment where mode switching occurs
+- Logs: mode, voltage, current, power, device state
+- ERROR logging if mode != CV
+
+Purpose:
+- Understand EXACT register values at key moments
+- Identify which registers are causing mode selection issues
+- Capture the moment when mode switching occurs
+
+### 4. DOCUMENTATION ###
+
+Files Created:
+- notes/ops-log-2026-01-13-minimalist-experiment.txt - Experiment rationale
+- notes/IMPLEMENTATION-SUMMARY-2026-01-13.txt - This file
+
+================================================================================
+TESTING PROCEDURE
+================================================================================
+
+1. BUILD PROJECT
+   - Open BatteryTester.prj in LabWindows/CVI 2020
+   - Build (F7)
+   - Check for compilation errors
+
+2. RUN BASELINE EXPERIMENT
+   - Launch application
+   - Start baseline experiment with battery connected
+   - Battery voltage should be > 2.7V for discharge test
+
+3. OBSERVE LOGS
+
+   Look for these key log sections:
+
+   A) INITIALIZATION (First diagnostic):
+      ```
+      ======================================================
+      PSB COMPLETE REGISTER DUMP: After initialization (minimalist approach)
+      ======================================================
+      SETPOINT REGISTERS:
+        REG 498 (SINK_MODE_POWER):       XXX.XX W
+        REG 499 (SINK_MODE_CURRENT):     XXX.XX A
+        REG 500 (SET_VOLTAGE):           0.00 V
+        REG 501 (SET_CURRENT):           0.00 A
+        REG 502 (SET_POWER_SOURCE):      0.00 W
+      LIMIT REGISTERS:
+        REG 9000-9009...
+      DEVICE STATE:
+        Regulation Mode: CV (SOURCE mode)  <-- SHOULD BE CV SOURCE
+      ```
+
+   B) AFTER OUTPUT ENABLE (Second diagnostic):
+      ```
+      ==========================================================
+      CRITICAL DIAGNOSTIC: After output enable + stabilization:
+      ==========================================================
+        PSB Mode: CV (SOURCE mode)  <-- CHECK THIS!
+        Voltage: 2.XXX V (target: 2.700 V)
+        Current: X.XXX A
+      ```
+
+4. EXPECTED OUTCOMES
+
+   BEST CASE (Minimalist approach succeeds):
+   - Initialization: CV SOURCE mode ✓
+   - After output enable: STILL CV SOURCE mode ✓
+   - Current flows (non-zero)
+   - Discharge proceeds normally
+   - **Problem solved!**
+
+   WORST CASE (Minimalist approach fails):
+   - Initialization: CV SOURCE mode ✓
+   - After output enable: CP SINK or CC SINK mode ✗
+   - Current = 0.000A
+   - "MODE SWITCHING DETECTED AFTER OUTPUT ENABLE!" error
+   - **Need further investigation**
+
+================================================================================
+ANALYSIS GUIDE - If Minimalist Approach Fails
+================================================================================
+
+If the PSB still switches to CP/CC mode after output enable, analyze the logs:
+
+1. CHECK SINK REGISTER VALUES AT INITIALIZATION
+   - Look at REG 498 (SINK_MODE_POWER) value
+   - Look at REG 499 (SINK_MODE_CURRENT) value
+   - These should be PSB factory defaults (we didn't write them)
+   - Document these values
+
+2. COMPARE LIMIT vs SETPOINT REGISTERS
+   - Are limit registers (9000-9009) conflicting with setpoints?
+   - Is sink current limit (9008) too low?
+   - Is sink power limit (9005) too low?
+
+3. CHECK VOLTAGE RELATIONSHIP
+   - Battery voltage: X.XXX V
+   - Target voltage: 2.700 V
+   - If battery > target, PSB must SINK (discharge)
+   - Does PSB firmware prefer sink-specific modes for sinking?
+
+4. LOOK FOR PATTERNS
+   - Does it always choose the same mode (CP vs CC)?
+   - Is there a relationship between chosen mode and register values?
+
+5. NEXT DEBUGGING STEPS IF THIS FAILS:
+   a) Test with target voltage > battery voltage (source operation)
+   b) Try writing sink registers AFTER output enable
+   c) Investigate if there's a register to force SOURCE vs SINK mode
+   d) Contact EA Elektro-Automatik technical support
+   e) Consider hardware workaround (external relay for discharge)
+
+================================================================================
+FILES MODIFIED
+================================================================================
+
+1. psb10000/psb10000_dll.h
+   - Added PSB_LogAllRegisters() prototype
+
+2. psb10000/psb10000_dll.c
+   - Added PSB_ReadRegisterAsValue() helper function
+   - Added PSB_LogAllRegisters() implementation
+
+3. psb10000/psb10000_queue.c
+   - Modified PSB_AdapterConnect() - minimalist approach
+   - Modified PSB_ZeroAllValuesQueued() - minimalist approach
+   - Added PSB_LogAllRegisters() call after initialization
+
+4. battery_utils.c
+   - Added comprehensive diagnostic logging after output enable
+
+5. notes/ops-log-2026-01-13-minimalist-experiment.txt
+   - Created experiment documentation
+
+6. notes/IMPLEMENTATION-SUMMARY-2026-01-13.txt
+   - Created this summary
+
+================================================================================
+COMMIT MESSAGE TEMPLATE
+================================================================================
+
+Title:
+Test minimalist PSB initialization - skip all sink register writes
+
+Body:
+HYPOTHESIS: Writing sink registers (REG 498/499) interferes with CV mode selection
+
+CHANGES:
+1. PSB initialization now SKIPS writing sink registers entirely
+   - No write to REG 498 (sink power)
+   - No write to REG 499 (sink current)
+   - Only writes source registers (501, 502) and voltage (500)
+   - Lets PSB use factory defaults for sink registers
+
+2. Added comprehensive register diagnostics:
+   - PSB_LogAllRegisters() reads ALL setpoint + limit registers
+   - Logs complete PSB state at initialization
+   - Logs complete PSB state after output enable (critical moment)
+
+3. Enhanced error detection:
+   - Clear ERROR logging if mode switches after output enable
+   - Captures exact moment and values when switching occurs
+
+TESTING:
+Run baseline experiment and check logs for:
+- Sink register values at initialization (factory defaults)
+- PSB mode after output enable (should stay CV SOURCE)
+- Current flow (should be non-zero if discharge occurs)
+
+If this fails, logs will show which registers are causing mode selection.
+
+REFERENCES:
+- ops-log-2026-01-13-minimalist-experiment.txt
+- IMPLEMENTATION-SUMMARY-2026-01-13.txt
+
+Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
+
+================================================================================
+END OF SUMMARY
+================================================================================

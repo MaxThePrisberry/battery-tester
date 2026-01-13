@@ -911,3 +911,147 @@ void PSB_PrintStatus(PSB_Status *status) {
     LogMessageEx(LOG_DEVICE_PSB, "Raw State: 0x%08lX", status->rawState);
     LogMessageEx(LOG_DEVICE_PSB, "==================");
 }
+
+// Helper function to read a register and convert to double value
+static int PSB_ReadRegisterAsValue(PSB_Handle *handle, int regAddress, double *outValue, double nominalValue) {
+    unsigned char request[8];
+    unsigned char response[7];
+    int result;
+
+    // Build Modbus Read Holding Register request
+    request[0] = handle->slaveAddress;
+    request[1] = MODBUS_READ_HOLDING_REGISTERS;
+    request[2] = (regAddress >> 8) & 0xFF;
+    request[3] = regAddress & 0xFF;
+    request[4] = 0x00;  // Read 1 register (high byte)
+    request[5] = 0x01;  // Read 1 register (low byte)
+
+    unsigned short crc = PSB_CalculateCRC(request, 6);
+    request[6] = crc & 0xFF;
+    request[7] = (crc >> 8) & 0xFF;
+
+    result = PSB_SendRawModbus(handle, request, 8, response, sizeof(response), 7);
+    if (result != PSB_SUCCESS) {
+        *outValue = -999.0;  // Sentinel value for read error
+        return result;
+    }
+
+    // Extract 16-bit value
+    unsigned short rawValue = (response[3] << 8) | response[4];
+
+    // Convert using PSB formula: value = (rawValue / 52428.0) * 102% * nominal
+    *outValue = (rawValue / 52428.0) * 1.02 * nominalValue;
+
+    return PSB_SUCCESS;
+}
+
+int PSB_LogAllRegisters(PSB_Handle *handle, const char *context) {
+    if (!handle || !handle->isConnected) {
+        return PSB_ERROR_NOT_CONNECTED;
+    }
+
+    double value;
+    int result;
+
+    LogMessageEx(LOG_DEVICE_PSB, "");
+    LogMessageEx(LOG_DEVICE_PSB, "======================================================");
+    LogMessageEx(LOG_DEVICE_PSB, "PSB COMPLETE REGISTER DUMP: %s", context ? context : "");
+    LogMessageEx(LOG_DEVICE_PSB, "======================================================");
+
+    // Read and log SETPOINT registers (498-504)
+    LogMessageEx(LOG_DEVICE_PSB, "SETPOINT REGISTERS:");
+    LogMessageEx(LOG_DEVICE_PSB, "-------------------");
+
+    result = PSB_ReadRegisterAsValue(handle, REG_SINK_MODE_POWER, &value, PSB_NOMINAL_POWER);
+    LogMessageEx(LOG_DEVICE_PSB, "  REG 498 (SINK_MODE_POWER):       %s%.2f W%s",
+                result == PSB_SUCCESS ? "" : "[ERROR] ", value, result == PSB_SUCCESS ? "" : " (read failed)");
+
+    result = PSB_ReadRegisterAsValue(handle, REG_SINK_MODE_CURRENT, &value, PSB_NOMINAL_CURRENT);
+    LogMessageEx(LOG_DEVICE_PSB, "  REG 499 (SINK_MODE_CURRENT):     %s%.2f A%s",
+                result == PSB_SUCCESS ? "" : "[ERROR] ", value, result == PSB_SUCCESS ? "" : " (read failed)");
+
+    result = PSB_ReadRegisterAsValue(handle, REG_SET_VOLTAGE, &value, PSB_NOMINAL_VOLTAGE);
+    LogMessageEx(LOG_DEVICE_PSB, "  REG 500 (SET_VOLTAGE):           %s%.2f V%s",
+                result == PSB_SUCCESS ? "" : "[ERROR] ", value, result == PSB_SUCCESS ? "" : " (read failed)");
+
+    result = PSB_ReadRegisterAsValue(handle, REG_SET_CURRENT, &value, PSB_NOMINAL_CURRENT);
+    LogMessageEx(LOG_DEVICE_PSB, "  REG 501 (SET_CURRENT):           %s%.2f A%s",
+                result == PSB_SUCCESS ? "" : "[ERROR] ", value, result == PSB_SUCCESS ? "" : " (read failed)");
+
+    result = PSB_ReadRegisterAsValue(handle, REG_SET_POWER_SOURCE, &value, PSB_NOMINAL_POWER);
+    LogMessageEx(LOG_DEVICE_PSB, "  REG 502 (SET_POWER_SOURCE):      %s%.2f W%s",
+                result == PSB_SUCCESS ? "" : "[ERROR] ", value, result == PSB_SUCCESS ? "" : " (read failed)");
+
+    // Read and log LIMIT registers (9000-9009)
+    LogMessageEx(LOG_DEVICE_PSB, "");
+    LogMessageEx(LOG_DEVICE_PSB, "LIMIT REGISTERS:");
+    LogMessageEx(LOG_DEVICE_PSB, "----------------");
+
+    result = PSB_ReadRegisterAsValue(handle, REG_VOLTAGE_MAX, &value, PSB_NOMINAL_VOLTAGE);
+    LogMessageEx(LOG_DEVICE_PSB, "  REG 9000 (VOLTAGE_MAX):          %s%.2f V%s",
+                result == PSB_SUCCESS ? "" : "[ERROR] ", value, result == PSB_SUCCESS ? "" : " (read failed)");
+
+    result = PSB_ReadRegisterAsValue(handle, REG_VOLTAGE_MIN, &value, PSB_NOMINAL_VOLTAGE);
+    LogMessageEx(LOG_DEVICE_PSB, "  REG 9001 (VOLTAGE_MIN):          %s%.2f V%s",
+                result == PSB_SUCCESS ? "" : "[ERROR] ", value, result == PSB_SUCCESS ? "" : " (read failed)");
+
+    result = PSB_ReadRegisterAsValue(handle, REG_CURRENT_MAX, &value, PSB_NOMINAL_CURRENT);
+    LogMessageEx(LOG_DEVICE_PSB, "  REG 9002 (CURRENT_MAX/SRC):      %s%.2f A%s",
+                result == PSB_SUCCESS ? "" : "[ERROR] ", value, result == PSB_SUCCESS ? "" : " (read failed)");
+
+    result = PSB_ReadRegisterAsValue(handle, REG_CURRENT_MIN, &value, PSB_NOMINAL_CURRENT);
+    LogMessageEx(LOG_DEVICE_PSB, "  REG 9003 (CURRENT_MIN/SRC):      %s%.2f A%s",
+                result == PSB_SUCCESS ? "" : "[ERROR] ", value, result == PSB_SUCCESS ? "" : " (read failed)");
+
+    result = PSB_ReadRegisterAsValue(handle, REG_POWER_MAX, &value, PSB_NOMINAL_POWER);
+    LogMessageEx(LOG_DEVICE_PSB, "  REG 9004 (POWER_MAX/SRC):        %s%.2f W%s",
+                result == PSB_SUCCESS ? "" : "[ERROR] ", value, result == PSB_SUCCESS ? "" : " (read failed)");
+
+    result = PSB_ReadRegisterAsValue(handle, REG_SINK_POWER_MAX, &value, PSB_NOMINAL_POWER);
+    LogMessageEx(LOG_DEVICE_PSB, "  REG 9005 (SINK_POWER_MAX):       %s%.2f W%s",
+                result == PSB_SUCCESS ? "" : "[ERROR] ", value, result == PSB_SUCCESS ? "" : " (read failed)");
+
+    result = PSB_ReadRegisterAsValue(handle, REG_SINK_CURRENT_MAX, &value, PSB_NOMINAL_CURRENT);
+    LogMessageEx(LOG_DEVICE_PSB, "  REG 9008 (SINK_CURRENT_MAX):     %s%.2f A%s",
+                result == PSB_SUCCESS ? "" : "[ERROR] ", value, result == PSB_SUCCESS ? "" : " (read failed)");
+
+    result = PSB_ReadRegisterAsValue(handle, REG_SINK_CURRENT_MIN, &value, PSB_NOMINAL_CURRENT);
+    LogMessageEx(LOG_DEVICE_PSB, "  REG 9009 (SINK_CURRENT_MIN):     %s%.2f A%s",
+                result == PSB_SUCCESS ? "" : "[ERROR] ", value, result == PSB_SUCCESS ? "" : " (read failed)");
+
+    // Read and log device state
+    LogMessageEx(LOG_DEVICE_PSB, "");
+    LogMessageEx(LOG_DEVICE_PSB, "DEVICE STATE:");
+    LogMessageEx(LOG_DEVICE_PSB, "-------------");
+    PSB_Status status;
+    result = PSB_GetStatus(handle, &status);
+    if (result == PSB_SUCCESS) {
+        const char *modeStr[] = {"CV", "CR", "CC", "CP"};
+        const char *sinkSourceStr = status.sinkMode ? "SINK" : "SOURCE";
+        LogMessageEx(LOG_DEVICE_PSB, "  REG 505 (DEVICE_STATE):          0x%08lX", status.rawState);
+        LogMessageEx(LOG_DEVICE_PSB, "    Regulation Mode:               %s (%s mode)",
+                    modeStr[status.regulationMode], sinkSourceStr);
+        LogMessageEx(LOG_DEVICE_PSB, "    Output Enabled:                %s",
+                    status.outputEnabled ? "YES" : "NO");
+        LogMessageEx(LOG_DEVICE_PSB, "    Remote Mode:                   %s",
+                    status.remoteMode ? "YES" : "NO");
+        LogMessageEx(LOG_DEVICE_PSB, "    Control Location:              %d", status.controlLocation);
+    } else {
+        LogMessageEx(LOG_DEVICE_PSB, "  [ERROR] Failed to read device state");
+    }
+
+    // Read and log ACTUAL values
+    LogMessageEx(LOG_DEVICE_PSB, "");
+    LogMessageEx(LOG_DEVICE_PSB, "ACTUAL VALUES:");
+    LogMessageEx(LOG_DEVICE_PSB, "--------------");
+    if (result == PSB_SUCCESS) {
+        LogMessageEx(LOG_DEVICE_PSB, "  Voltage:                         %.3f V", status.voltage);
+        LogMessageEx(LOG_DEVICE_PSB, "  Current:                         %.3f A", status.current);
+        LogMessageEx(LOG_DEVICE_PSB, "  Power:                           %.2f W", status.power);
+    }
+
+    LogMessageEx(LOG_DEVICE_PSB, "======================================================");
+    LogMessageEx(LOG_DEVICE_PSB, "");
+
+    return PSB_SUCCESS;
+}

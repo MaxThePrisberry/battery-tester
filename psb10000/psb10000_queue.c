@@ -134,33 +134,13 @@ static int PSB_AdapterConnect(void *deviceContext, void *connectionParams) {
         PSB_SetRemoteMode(&ctx->handle, 1);
         PSB_SetOutputEnable(&ctx->handle, 0);
 
-        // CRITICAL: Clear all setpoint registers to mimic power-cycle reset
-        // This ensures the PSB starts in a clean state, not stuck in sink mode
-        // from previous operations. Only write SOURCE mode registers, not sink
-        // setpoint registers, as sink setpoints interfere with mode selection.
+        // MINIMALIST APPROACH: Only write source registers and voltage
+        // DO NOT write sink registers at all - let PSB defaults handle sink mode
+        // Hypothesis: Writing sink registers interferes with CV mode selection
 
-        LogMessageEx(LOG_DEVICE_PSB, "Configuring PSB setpoint registers to ensure CV mode...");
+        LogMessageEx(LOG_DEVICE_PSB, "=== MINIMALIST INITIALIZATION: Avoiding all sink register writes ===");
 
-        // CRITICAL FIX from ops-log-2026-01-12-08.txt:
-        // The PSB has BOTH source AND sink setpoint registers that persist across restarts:
-        // - Source: REG 501 (current), REG 502 (power), REG 500 (voltage)
-        // - Sink: REG 499 (sink current), REG 498 (sink power), REG 500 (voltage shared)
-        //
-        // When battery voltage > target voltage, PSB needs to SINK (discharge).
-        // If sink setpoint registers have low values, PSB chooses those modes:
-        //   - REG 499 (sink current) = 0A → CC SINK mode at 0A (ops-log-09.txt)
-        //   - REG 498 (sink power) = 0W → CP SINK mode at 0W (ops-log-08.txt)
-        //
-        // Solution:
-        // - Clear source registers (501, 502) to 0
-        // - Set sink current (499) to moderate decoy (10A) so it's never chosen over voltage
-        // - Set sink power (498) to moderate decoy (100W) so it's never chosen over voltage
-        // - Write voltage (500) LAST to make it the active setpoint
-        //
-        // These "decoy" values are mode selection hints, not operating points. In CV mode,
-        // they are dormant. Actual current is limited by physics (voltage difference, resistance).
-
-        // Step 1: Clear ALL source setpoint registers
+        // Step 1: Clear source setpoint registers only
         LogMessageEx(LOG_DEVICE_PSB, "Step 1: Clearing source setpoint registers (REG 501, 502)");
 
         result = PSB_SetCurrent(&ctx->handle, 0.0);
@@ -173,60 +153,26 @@ static int PSB_AdapterConnect(void *deviceContext, void *connectionParams) {
             LogWarningEx(LOG_DEVICE_PSB, "Failed to clear source power (REG 502): %s", PSB_GetErrorString(result));
         }
 
-        // Step 2: Configure sink setpoint registers to prevent unwanted mode selection
-        LogMessageEx(LOG_DEVICE_PSB, "Step 2: Configuring sink setpoint registers (REG 498, 499)");
+        // Step 2: DO NOT WRITE SINK REGISTERS (REG 498, 499)
+        // Let PSB firmware use whatever default values it has for sink registers
+        LogMessageEx(LOG_DEVICE_PSB, "Step 2: SKIPPING sink register writes - letting PSB use defaults");
+        LogMessageEx(LOG_DEVICE_PSB, "  NOT writing REG 498 (sink power)");
+        LogMessageEx(LOG_DEVICE_PSB, "  NOT writing REG 499 (sink current)");
 
-        // CRITICAL FIX: Set sink current to moderate "decoy" value instead of 0A!
-        // Discovery from ops-log-2026-01-12-09.txt: PSB chose CC SINK mode at 0A
-        // If REG 499 (sink current) = 0A, PSB chooses CC SINK mode at 0A instead of CV mode!
-        // Solution: Set REG 499 to moderate value (10A) so PSB never chooses CC over CV mode.
-        // This is a "decoy" for mode selection, not an actual operating point.
-        result = PSB_SetSinkCurrent(&ctx->handle, PSB_SINK_CURRENT_DECOY);
-        if (result != PSB_SUCCESS) {
-            LogWarningEx(LOG_DEVICE_PSB, "Failed to set sink current decoy (REG 499): %s", PSB_GetErrorString(result));
-        }
-
-        // CRITICAL FIX: Set sink power to moderate "decoy" value instead of 0W!
-        // Discovery: When battery voltage > target voltage, PSB needs to SINK.
-        // If REG 498 (sink power) = 0W, PSB chooses CP SINK mode at 0W instead of CV mode!
-        // Solution: Set REG 498 to moderate value (100W) so PSB never chooses CP over CV mode.
-        // This is a "decoy" for mode selection, not an actual operating point.
-        result = PSB_SetSinkPower(&ctx->handle, PSB_SINK_POWER_DECOY);
-        if (result != PSB_SUCCESS) {
-            LogWarningEx(LOG_DEVICE_PSB, "Failed to set sink power decoy (REG 498): %s", PSB_GetErrorString(result));
-        }
-
-        // Step 3: Write voltage LAST to set as the active setpoint
-        LogMessageEx(LOG_DEVICE_PSB, "Step 3: Setting voltage (REG 500) to 0V as the active setpoint");
+        // Step 3: Write voltage as the only active setpoint
+        LogMessageEx(LOG_DEVICE_PSB, "Step 3: Setting voltage (REG 500) to 0V as the ONLY active setpoint");
         result = PSB_SetVoltage(&ctx->handle, 0.0);
         if (result != PSB_SUCCESS) {
             LogWarningEx(LOG_DEVICE_PSB, "Failed to set voltage: %s", PSB_GetErrorString(result));
         }
 
-        LogMessageEx(LOG_DEVICE_PSB, "PSB setpoint registers configured: source=0, sink current=10A (decoy), sink power=100W (decoy), voltage=0");
-        LogMessageEx(LOG_DEVICE_PSB, "From now on, ONLY voltage register (REG 500) will be written to maintain CV mode");
+        LogMessageEx(LOG_DEVICE_PSB, "PSB setpoint configuration: source=0, sink=(UNTOUCHED), voltage=0V");
+        LogMessageEx(LOG_DEVICE_PSB, "From now on, ONLY voltage register (REG 500) will be written");
 
-        // DIAGNOSTIC: Read device state after clearing all setpoints
-        PSB_Status diagStatus;
-        result = PSB_GetStatus(&ctx->handle, &diagStatus);
-        if (result == PSB_SUCCESS) {
-            const char *modeStr[] = {"CV", "CR", "CC", "CP"};
-            const char *sinkSourceStr = diagStatus.sinkMode ? "SINK" : "SOURCE";
-            LogMessageEx(LOG_DEVICE_PSB, "DIAGNOSTIC: After clearing all setpoints:");
-            LogMessageEx(LOG_DEVICE_PSB, "  PSB Mode: %s (%s mode)", modeStr[diagStatus.regulationMode], sinkSourceStr);
-            LogMessageEx(LOG_DEVICE_PSB, "  Device State (raw): 0x%08lX", diagStatus.rawState);
-            LogMessageEx(LOG_DEVICE_PSB, "  Control Location: %d", diagStatus.controlLocation);
+        // DIAGNOSTIC: Log ALL registers to understand complete PSB state
+        PSB_LogAllRegisters(&ctx->handle, "After initialization (minimalist approach)");
 
-            if (diagStatus.regulationMode != 0) {  // 0 = CV mode
-                LogWarningEx(LOG_DEVICE_PSB, "PROBLEM: PSB not in CV mode after initialization! Mode=%s",
-                            modeStr[diagStatus.regulationMode]);
-            }
-            if (diagStatus.sinkMode == 1) {
-                LogWarningEx(LOG_DEVICE_PSB, "PROBLEM: PSB in SINK mode instead of SOURCE mode after initialization!");
-            }
-        }
-
-        LogMessageEx(LOG_DEVICE_PSB, "PSB initialization complete - all setpoints cleared");
+        LogMessageEx(LOG_DEVICE_PSB, "PSB initialization complete - minimalist approach applied");
 
         // Restore result to PSB_SUCCESS if initialization succeeded
         result = PSB_SUCCESS;
@@ -822,13 +768,10 @@ int PSB_ZeroAllValuesQueued(DevicePriority priority) {
         overallResult = result;
     }
 
-    // CRITICAL FIX: Configure setpoint registers to prevent CC/CP mode selection
-    // - Clear source registers (501, 502) to 0
-    // - Set sink current (499) to moderate decoy (10A) to prevent CC SINK mode selection
-    // - Set sink power (498) to moderate decoy (100W) to prevent CP SINK mode selection
-    // - Write voltage (500) LAST to make it the active setpoint
+    // MINIMALIST APPROACH: Only write source registers and voltage
+    // DO NOT write sink registers - let PSB defaults handle sink mode
 
-    LogMessageEx(LOG_DEVICE_PSB, "Configuring setpoint registers (source=0, sink current=10A decoy, sink power=100W decoy)...");
+    LogMessageEx(LOG_DEVICE_PSB, "=== MINIMALIST ZEROING: Avoiding all sink register writes ===");
 
     // Clear source current register (REG 501)
     result = PSB_SetCurrentQueued(0.0, priority);
@@ -844,23 +787,8 @@ int PSB_ZeroAllValuesQueued(DevicePriority priority) {
         overallResult = result;
     }
 
-    // CRITICAL FIX: Set sink current to moderate "decoy" value instead of 0A (REG 499)
-    // This prevents PSB from choosing CC SINK mode at 0A when it needs to sink
-    // Using moderate value (10A) for safety - it's a mode selection decoy, not an operating point
-    result = PSB_SetSinkCurrentQueued(PSB_SINK_CURRENT_DECOY, priority);
-    if (result != PSB_SUCCESS) {
-        LogWarningEx(LOG_DEVICE_PSB, "Failed to set sink current decoy: %s", PSB_GetErrorString(result));
-        overallResult = result;
-    }
-
-    // CRITICAL FIX: Set sink power to moderate "decoy" value instead of 0W (REG 498)
-    // This prevents PSB from choosing CP SINK mode at 0W when it needs to sink
-    // Using moderate value (100W) for safety - it's a mode selection decoy, not an operating point
-    result = PSB_SetSinkPowerQueued(PSB_SINK_POWER_DECOY, priority);
-    if (result != PSB_SUCCESS) {
-        LogWarningEx(LOG_DEVICE_PSB, "Failed to set sink power decoy: %s", PSB_GetErrorString(result));
-        overallResult = result;
-    }
+    // DO NOT WRITE SINK REGISTERS (REG 498, 499)
+    LogMessageEx(LOG_DEVICE_PSB, "SKIPPING sink register writes (REG 498, 499) - letting PSB use defaults");
 
     // Set voltage LAST (REG 500) to make it the active setpoint
     result = PSB_SetVoltageQueued(0.0, priority);
@@ -869,7 +797,7 @@ int PSB_ZeroAllValuesQueued(DevicePriority priority) {
         overallResult = result;
     }
 
-    LogMessageEx(LOG_DEVICE_PSB, "Setpoint registers configured: source=0, sink current=10A (decoy), sink power=100W (decoy), voltage=0");
+    LogMessageEx(LOG_DEVICE_PSB, "Setpoint configuration: source=0, sink=(UNTOUCHED), voltage=0V");
     
     if (overallResult == PSB_SUCCESS) {
         LogMessageEx(LOG_DEVICE_PSB, "All PSB values zeroed successfully");
