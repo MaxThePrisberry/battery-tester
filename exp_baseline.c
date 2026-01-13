@@ -1404,28 +1404,31 @@ static int RunPhase3_EISCharge(BaselineExperimentContext *ctx) {
     LogMessage("DIAGNOSTIC: Target voltage=%.3fV, current limit=%.3fA, power limit=%.1fW",
                ctx->params.chargeVoltage, ctx->params.chargeCurrent, BASELINE_POWER_LIMIT);
 
-    // CRITICAL FIX: Explicitly ZERO sink registers to prevent CP mode selection
-    // Problem discovered in ops-log-04: Sink registers retained non-zero values (30.58W, 5.10A)
-    // from previous operations, causing PSB to see multiple non-zero setpoints and select CP mode.
-    // Solution: Explicitly write 0.0 to ensure ONLY voltage register is non-zero.
-    LogMessage("DIAGNOSTIC: [0/4] ZEROING sink registers to prevent interference with CV mode");
-    result = PSB_SetSinkPowerQueued(0.0, DEVICE_PRIORITY_NORMAL);
+    // CRITICAL FIX: Restore DECOY VALUES to sink registers
+    // Problem discovered in ops-log-05: Zeroing sink registers (0.0/0.0) causes CP mode!
+    // ops-log-04 showed retained values (30.58W, 5.10A) caused CP mode
+    // ops-log-05 showed zeroed values (0.0W, 0.0A) ALSO caused CP mode
+    // Root cause: Battery_GoToVoltage() relies on decoy values being present (10A/100W)
+    // Solution: RESTORE decoy values as "background parameters" for PSB mode selection
+    LogMessage("DIAGNOSTIC: [0/4] RESTORING sink decoy values for proper CV mode selection");
+
+    result = PSB_SetSinkPowerQueued(PSB_SINK_POWER_DECOY, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
-        LogWarning("Failed to zero sink power (REG 498): %s", PSB_GetErrorString(result));
+        LogWarning("Failed to set sink power decoy (REG 498): %s", PSB_GetErrorString(result));
     } else {
-        LogMessage("DIAGNOSTIC: REG 498 (SINK_MODE_POWER) set to 0.0 W");
+        LogMessage("DIAGNOSTIC: REG 498 (SINK_MODE_POWER) restored to %.1f W (decoy)", PSB_SINK_POWER_DECOY);
     }
     Delay(0.1);
 
-    result = PSB_SetSinkCurrentQueued(0.0, DEVICE_PRIORITY_NORMAL);
+    result = PSB_SetSinkCurrentQueued(PSB_SINK_CURRENT_DECOY, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
-        LogWarning("Failed to zero sink current (REG 499): %s", PSB_GetErrorString(result));
+        LogWarning("Failed to set sink current decoy (REG 499): %s", PSB_GetErrorString(result));
     } else {
-        LogMessage("DIAGNOSTIC: REG 499 (SINK_MODE_CURRENT) set to 0.0 A");
+        LogMessage("DIAGNOSTIC: REG 499 (SINK_MODE_CURRENT) restored to %.1f A (decoy)", PSB_SINK_CURRENT_DECOY);
     }
     Delay(0.1);
 
-    LogMessage("DIAGNOSTIC: Sink registers zeroed - now configuring charging");
+    LogMessage("DIAGNOSTIC: Sink decoy values restored - now configuring charging");
 
     // Set current limit using LIMIT register (REG 9002), NOT setpoint register (REG 501)
     // CRITICAL: Keep REG 501 at 0.0A to avoid interfering with CV mode selection
@@ -1469,7 +1472,7 @@ static int RunPhase3_EISCharge(BaselineExperimentContext *ctx) {
     Delay(0.2);  // Brief delay to ensure command completes
 
     // COMPREHENSIVE DIAGNOSTIC: Log all register values before output enable
-    // This verifies REG 498/499 = 0.0, REG 501 = 0.0A (explicit zeroing approach)
+    // This verifies REG 498/499 = DECOY VALUES, REG 501 = 0.0A (decoy value approach)
     LogMessage("DIAGNOSTIC: [4/4] Verifying all setpoint registers before output enable");
     extern PSBQueueManager* g_psbQueueMgr;  // Global PSB queue manager
     extern PSB_Handle* PSB_QueueGetHandle(PSBQueueManager *mgr);  // Get handle from queue

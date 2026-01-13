@@ -1,0 +1,344 @@
+================================================================================
+PSB 10000 SINK DECOY VALUES RESTORATION
+================================================================================
+Date: 2026-01-13
+Previous Commit: 811a6a0 (explicit sink register zeroing)
+This Commit: [To be updated after commit]
+
+================================================================================
+PROBLEM SUMMARY
+================================================================================
+
+After 3 failed approaches, ops-log-2026-01-13-05.txt revealed the TRUE root
+cause of Phase 3 charging failures:
+
+APPROACH 1: Write Current Setpoint (ops-log-03)
+  - REG 501 = 3.3A (setpoint)
+  - Result: CP mode ❌
+
+APPROACH 2: Zero-Current, Untouched Sink (ops-log-04)
+  - REG 501 = 0.0A (fixed)
+  - REG 498/499 = 30.58W/5.10A (RETAINED from previous operations)
+  - Result: CP mode ❌
+
+APPROACH 3: Explicit Sink Zeroing (ops-log-05)
+  - REG 501 = 0.0A
+  - REG 498/499 = 0.0W/0.0A (EXPLICITLY ZEROED)
+  - Result: CP mode ❌ (STILL FAILED!)
+
+================================================================================
+ROOT CAUSE DISCOVERED
+================================================================================
+
+Analysis of ops-log-05 Phase 4 discharge (lines 653-669) showed that
+Battery_DischargeCapacity() writes non-zero sink values:
+  - REG 498 = 30.00W
+  - REG 499 = 5.00A
+  - REG 502 = 30.00W
+
+Following the code path backwards:
+  1. Battery_DischargeCapacity() calls PSB_SetSinkPower/PSB_SetSinkCurrent
+  2. Battery_GoToVoltage() ASSUMES decoy values are present (line 142):
+     "Using initialization setpoints (10A/100W decoys) and high limits (61.2A/1224W)"
+  3. PSB initialization was changed to "minimalist approach" (line 158):
+     "SKIPPING sink register writes - letting PSB use defaults"
+
+THE DISCONNECT:
+  - Initialization: "minimalist approach" DOES NOT write sink registers
+  - Battery functions: ASSUME sink registers contain decoy values (10A/100W)
+  - Result: Sink registers have undefined/retained values, not intended decoys
+
+DISCOVERY FROM CODE ANALYSIS:
+  psb10000_dll.h defines decoy values:
+    #define PSB_SINK_CURRENT_DECOY  10.0    // A (mode selection decoy)
+    #define PSB_SINK_POWER_DECOY    100.0   // W (mode selection decoy)
+
+  These were supposed to be written during initialization but the "minimalist
+  approach" removed that step, breaking the assumption made by Battery_GoToVoltage().
+
+================================================================================
+WHY ZEROING FAILED (ops-log-05)
+================================================================================
+
+When we explicitly zeroed sink registers (0.0W/0.0A), we removed ALL non-zero
+values from sink registers. The PSB firmware needs SOME non-zero "background
+values" for proper mode selection:
+
+PSB Mode Selection Logic (INFERRED):
+  1. When output is enabled, PSB examines ALL setpoint registers (498-502)
+  2. If sink registers = 0.0 AND battery voltage < target voltage:
+     → PSB interprets as "no sink capability configured"
+     → Defaults to CP mode as "safe fallback"
+  3. If sink registers = MODERATE VALUES (10A/100W):
+     → PSB interprets as "sink capability available but not active"
+     → Selects CV mode based on voltage register
+     → Sink values act as "background parameters"
+
+ANALOGY:
+  Sink decoy values are like "capacity declarations" - telling the PSB "I CAN
+  sink up to 10A/100W if needed, but right now I'm in CV mode controlling
+  voltage." Without these declarations, PSB assumes no sink capability and
+  fails to select CV mode properly.
+
+================================================================================
+SOLUTION: RESTORE DECOY VALUE APPROACH
+================================================================================
+
+Revert to the ORIGINAL design where sink registers contain moderate "decoy
+values" (10A/100W) that act as background parameters:
+
+DECOY VALUES = "Mode Selection Parameters"
+  - Not operating limits (that's what LIMIT registers are for)
+  - Not active setpoints (voltage register controls in CV mode)
+  - Background values that allow PSB to make correct mode selection decisions
+
+CONFIGURATION STRATEGY:
+  During Initialization (psb10000_queue.c):
+    REG 498 (SINK_MODE_POWER) = 100.0 W (decoy)
+    REG 499 (SINK_MODE_CURRENT) = 10.0 A (decoy)
+    REG 500 (SET_VOLTAGE) = 0.0 V
+    REG 501 (SET_CURRENT) = 0.0 A
+    REG 502 (SET_POWER_SOURCE) = 0.0 W
+
+  Before Phase 3 Charging (exp_baseline.c):
+    RESTORE decoy values (in case they were changed):
+      REG 498 = 100.0 W (decoy)
+      REG 499 = 10.0 A (decoy)
+    Then configure charging:
+      REG 9002 (CURRENT_MAX) = 3.3 A (limit)
+      REG 9004 (POWER_MAX) = 30 W (limit)
+      REG 500 (SET_VOLTAGE) = 4.2 V (control setpoint)
+
+RESULT:
+  - PSB sees voltage as primary control (REG 500 = 4.2V)
+  - PSB sees sink capability declared (REG 498/499 = 100W/10A decoys)
+  - PSB selects CV SOURCE mode correctly
+  - Current is limited by REG 9002 (3.3A), not sink registers
+
+================================================================================
+IMPLEMENTATION CHANGES
+================================================================================
+
+File: psb10000/psb10000_queue.c
+Location: PSB_AdapterConnect() initialization (lines 137-170)
+
+BEFORE (Minimalist Approach - FAILED):
+  // Step 2: DO NOT WRITE SINK REGISTERS (REG 498, 499)
+  // Let PSB firmware use whatever default values it has for sink registers
+  LogMessageEx(LOG_DEVICE_PSB, "Step 2: SKIPPING sink register writes - letting PSB use defaults");
+  LogMessageEx(LOG_DEVICE_PSB, "  NOT writing REG 498 (sink power)");
+  LogMessageEx(LOG_DEVICE_PSB, "  NOT writing REG 499 (sink current)");
+
+AFTER (Decoy Value Approach - CORRECT):
+  // Step 2: Write DECOY VALUES to sink registers
+  // These moderate values (10A, 100W) act as "background parameters"
+  // They're high enough to not interfere with CV mode but safe for operation
+  LogMessageEx(LOG_DEVICE_PSB, "Step 2: Writing DECOY VALUES to sink registers");
+  LogMessageEx(LOG_DEVICE_PSB, "  Setting REG 498 (sink power) to %.1f W (decoy)", PSB_SINK_POWER_DECOY);
+
+  result = PSB_SetSinkPower(&ctx->handle, PSB_SINK_POWER_DECOY);
+  if (result != PSB_SUCCESS) {
+      LogWarningEx(LOG_DEVICE_PSB, "Failed to set sink power decoy: %s", PSB_GetErrorString(result));
+  }
+
+  LogMessageEx(LOG_DEVICE_PSB, "  Setting REG 499 (sink current) to %.1f A (decoy)", PSB_SINK_CURRENT_DECOY);
+
+  result = PSB_SetSinkCurrent(&ctx->handle, PSB_SINK_CURRENT_DECOY);
+  if (result != PSB_SUCCESS) {
+      LogWarningEx(LOG_DEVICE_PSB, "Failed to set sink current decoy: %s", PSB_GetErrorString(result));
+  }
+
+File: psb10000/psb10000_queue.c
+Location: PSB_ZeroAllValuesQueued() (lines 785-828)
+
+BEFORE (Minimalist - FAILED):
+  // DO NOT WRITE SINK REGISTERS (REG 498, 499)
+  LogMessageEx(LOG_DEVICE_PSB, "SKIPPING sink register writes (REG 498, 499) - letting PSB use defaults");
+
+AFTER (Decoy Value Approach - CORRECT):
+  // RESTORE SINK DECOY VALUES (REG 498, 499)
+  LogMessageEx(LOG_DEVICE_PSB, "RESTORING sink decoy values (%.1fA, %.1fW)",
+              PSB_SINK_CURRENT_DECOY, PSB_SINK_POWER_DECOY);
+
+  result = PSB_SetSinkCurrentQueued(PSB_SINK_CURRENT_DECOY, priority);
+  result = PSB_SetSinkPowerQueued(PSB_SINK_POWER_DECOY, priority);
+
+File: exp_baseline.c
+Location: Phase 3 charging configuration (lines 1407-1428)
+
+BEFORE (Explicit Zeroing - FAILED):
+  LogMessage("DIAGNOSTIC: [0/4] ZEROING sink registers to prevent interference with CV mode");
+  result = PSB_SetSinkPowerQueued(0.0, DEVICE_PRIORITY_NORMAL);
+  result = PSB_SetSinkCurrentQueued(0.0, DEVICE_PRIORITY_NORMAL);
+
+AFTER (Restore Decoy Values - CORRECT):
+  LogMessage("DIAGNOSTIC: [0/4] RESTORING sink decoy values for proper CV mode selection");
+  result = PSB_SetSinkPowerQueued(PSB_SINK_POWER_DECOY, DEVICE_PRIORITY_NORMAL);
+  result = PSB_SetSinkCurrentQueued(PSB_SINK_CURRENT_DECOY, DEVICE_PRIORITY_NORMAL);
+
+================================================================================
+EXPECTED OUTCOMES
+================================================================================
+
+When Phase 3 charging is executed with decoy values restored:
+
+1. INITIALIZATION (at startup):
+   - REG 498 = 100.0 W (decoy)
+   - REG 499 = 10.0 A (decoy)
+   - REG 500/501/502 = 0.0 V/A/W
+   - Message: "Decoy values established"
+
+2. BEFORE PHASE 3 OUTPUT ENABLE:
+   - REG 498 = 100.0 W (decoy, restored)
+   - REG 499 = 10.0 A (decoy, restored)
+   - REG 500 = 4.200 V (control setpoint)
+   - REG 501 = 0.000 A (not active)
+   - REG 502 = 0.000 W (not active)
+   - REG 9002 = 3.300 A (current limit)
+   - REG 9004 = 30.0 W (power limit)
+
+3. AFTER OUTPUT ENABLE:
+   - Mode: CV SOURCE ✓ (not CP!)
+   - Current: Non-zero ✓ (charging)
+   - Voltage: Approaching 4.2V
+   - Message: "SUCCESS: PSB correctly in CV SOURCE mode for charging"
+
+4. DURING CHARGING:
+   - PSB maintains CV SOURCE mode
+   - Current decreases as battery voltage increases
+   - Charging completes successfully
+
+5. IF STILL FAILING:
+   - Indicates PSB firmware has more complex mode selection logic
+   - May require explicit mode selection command
+   - May need PSB technical support consultation
+
+================================================================================
+WHY THIS SHOULD WORK
+================================================================================
+
+The decoy value approach aligns with PSB firmware expectations:
+
+1. FIRMWARE NEEDS CONTEXT:
+   - PSB firmware needs to know "what modes are possible"
+   - Non-zero sink registers = "sink mode is available if needed"
+   - But voltage register controls actual operation
+
+2. MODE SELECTION HIERARCHY:
+   - Primary control: REG 500 (voltage) → CV mode
+   - Background capability: REG 498/499 (sink decoys) → sink available
+   - Operating limits: REG 9002/9004 (current/power max)
+   - Result: CV SOURCE mode with proper limiting
+
+3. MATCHES ORIGINAL DESIGN:
+   - Commit 428c749 introduced "moderate decoy values"
+   - Battery_GoToVoltage() assumes these exist
+   - Minimalist approach broke this assumption
+   - Restoring decoys fixes the disconnect
+
+4. SYMMETRY WITH DISCHARGE:
+   - Discharge operations write actual sink values
+   - Charge operations use sink decoys as background
+   - PSB firmware distinguishes between "capability" and "active mode"
+
+================================================================================
+LESSONS LEARNED
+================================================================================
+
+1. UNDERSTAND ORIGINAL DESIGN INTENT:
+   - The decoy values weren't arbitrary - they served a purpose
+   - Removing them without understanding why they existed caused failures
+   - "Minimalist" isn't always better if it breaks assumptions
+
+2. MODE SELECTION IS COMPLEX:
+   - PSB doesn't just look at "last register written"
+   - It considers ALL register values as a complete configuration
+   - Zero values can be interpreted differently than moderate values
+
+3. CODE ASSUMPTIONS MATTER:
+   - Battery_GoToVoltage() assumes decoys exist (line 142 comment)
+   - Initialization must establish these assumptions
+   - Breaking assumptions causes subtle, hard-to-debug failures
+
+4. DEBUGGING REQUIRES COMPLETE CONTEXT:
+   - Understanding the FULL configuration state was key
+   - Register dumps at multiple points revealed the pattern
+   - Comparing working discharge vs failing charge showed the missing piece
+
+5. TEST ALL PHASES:
+   - Testing only Phase 3 would have missed Phase 4 discharge showing decoy usage
+   - Complete experiment runs reveal dependencies between phases
+   - Integration issues don't show up in isolated tests
+
+================================================================================
+TESTING PROCEDURE
+================================================================================
+
+1. Build project in LabWindows/CVI 2020
+2. Connect to PSB 10000 on COM3
+3. Run baseline experiment with Phase 3 enabled
+4. Monitor logs for:
+
+   INITIALIZATION:
+     - "DECOY VALUE INITIALIZATION"
+     - "REG 498 (sink power) to 100.0 W (decoy)"
+     - "REG 499 (sink current) to 10.0 A (decoy)"
+     - "Decoy values established"
+
+   PHASE 3 CONFIGURATION:
+     - "[0/4] RESTORING sink decoy values"
+     - "REG 498 restored to 100.0 W (decoy)"
+     - "REG 499 restored to 10.0 A (decoy)"
+
+   REGISTER DUMP:
+     - REG 498 = 100.000 W (not 0.0, not 30.58)
+     - REG 499 = 10.000 A (not 0.0, not 5.10)
+     - REG 500 = 4.200 V
+     - REG 501 = 0.000 A
+     - REG 502 = 0.000 W
+
+   AFTER OUTPUT ENABLE:
+     - "PSB Mode: CV (SOURCE mode)" ← MUST be CV!
+     - "Current: <non-zero> A" ← Charging current!
+     - "SUCCESS: PSB correctly in CV SOURCE mode for charging"
+
+5. If successful:
+   - Battery charges normally
+   - Phase 3 completes with EIS measurements
+   - No CP mode switching
+
+6. If STILL failing:
+   - PSB may need explicit mode command beyond register configuration
+   - Consult PSB 10000 programming manual section on mode selection
+   - Contact EA Elektro-Automatik technical support
+
+================================================================================
+RELATED FILES AND COMMITS
+================================================================================
+
+Modified:
+  - psb10000/psb10000_queue.c (initialization and zeroing functions)
+  - exp_baseline.c (Phase 3 charging configuration)
+
+Documentation:
+  - notes/DECOY-VALUES-RESTORED-2026-01-13.txt (this file)
+  - notes/EXPLICIT-ZEROING-FIX-2026-01-13.txt (failed approach 3)
+  - notes/ZERO-CURRENT-CHARGING-2026-01-13.txt (failed approach 2)
+
+Previous Commits:
+  - 811a6a0: Explicit sink register zeroing (failed in ops-log-05)
+  - cc12e67: Zero-current charging approach (failed in ops-log-04)
+  - d5864b2: Minimalist approach implementation (removed decoys)
+  - 428c749: Use moderate decoy values for PSB sink setpoints (ORIGINAL CORRECT APPROACH!)
+
+Test Logs:
+  - ops-log-2026-01-13-03.txt: Current setpoint approach failed
+  - ops-log-2026-01-13-04.txt: Zero-current with retained sink values failed
+  - ops-log-2026-01-13-05.txt: Explicit zeroing failed, revealed decoy dependency
+
+Key Insight:
+  Commit 428c749 had the RIGHT approach with decoy values. The "minimalist"
+  optimization (d5864b2) removed them, breaking Battery_GoToVoltage() assumptions.
+  This fix restores the original working design.
+
+================================================================================

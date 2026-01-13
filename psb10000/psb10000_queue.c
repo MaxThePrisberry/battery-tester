@@ -134,13 +134,14 @@ static int PSB_AdapterConnect(void *deviceContext, void *connectionParams) {
         PSB_SetRemoteMode(&ctx->handle, 1);
         PSB_SetOutputEnable(&ctx->handle, 0);
 
-        // MINIMALIST APPROACH: Only write source registers and voltage
-        // DO NOT write sink registers at all - let PSB defaults handle sink mode
-        // Hypothesis: Writing sink registers interferes with CV mode selection
+        // DECOY VALUE APPROACH: Set sink registers to moderate "decoy" values
+        // These values prevent PSB from selecting CC/CP modes while being safe
+        // Discovery from ops-log-05: Battery_GoToVoltage() relies on decoy values
+        // Zeroing sink registers (0.0/0.0) causes CP mode selection failure
 
-        LogMessageEx(LOG_DEVICE_PSB, "=== MINIMALIST INITIALIZATION: Avoiding all sink register writes ===");
+        LogMessageEx(LOG_DEVICE_PSB, "=== DECOY VALUE INITIALIZATION: Setting moderate sink decoy values ===");
 
-        // Step 1: Clear source setpoint registers only
+        // Step 1: Clear source setpoint registers
         LogMessageEx(LOG_DEVICE_PSB, "Step 1: Clearing source setpoint registers (REG 501, 502)");
 
         result = PSB_SetCurrent(&ctx->handle, 0.0);
@@ -153,26 +154,39 @@ static int PSB_AdapterConnect(void *deviceContext, void *connectionParams) {
             LogWarningEx(LOG_DEVICE_PSB, "Failed to clear source power (REG 502): %s", PSB_GetErrorString(result));
         }
 
-        // Step 2: DO NOT WRITE SINK REGISTERS (REG 498, 499)
-        // Let PSB firmware use whatever default values it has for sink registers
-        LogMessageEx(LOG_DEVICE_PSB, "Step 2: SKIPPING sink register writes - letting PSB use defaults");
-        LogMessageEx(LOG_DEVICE_PSB, "  NOT writing REG 498 (sink power)");
-        LogMessageEx(LOG_DEVICE_PSB, "  NOT writing REG 499 (sink current)");
+        // Step 2: Write DECOY VALUES to sink registers
+        // These moderate values (10A, 100W) act as "background parameters"
+        // They're high enough to not interfere with CV mode but safe for operation
+        LogMessageEx(LOG_DEVICE_PSB, "Step 2: Writing DECOY VALUES to sink registers");
+        LogMessageEx(LOG_DEVICE_PSB, "  Setting REG 498 (sink power) to %.1f W (decoy)", PSB_SINK_POWER_DECOY);
 
-        // Step 3: Write voltage as the only active setpoint
-        LogMessageEx(LOG_DEVICE_PSB, "Step 3: Setting voltage (REG 500) to 0V as the ONLY active setpoint");
+        result = PSB_SetSinkPower(&ctx->handle, PSB_SINK_POWER_DECOY);
+        if (result != PSB_SUCCESS) {
+            LogWarningEx(LOG_DEVICE_PSB, "Failed to set sink power decoy: %s", PSB_GetErrorString(result));
+        }
+
+        LogMessageEx(LOG_DEVICE_PSB, "  Setting REG 499 (sink current) to %.1f A (decoy)", PSB_SINK_CURRENT_DECOY);
+
+        result = PSB_SetSinkCurrent(&ctx->handle, PSB_SINK_CURRENT_DECOY);
+        if (result != PSB_SUCCESS) {
+            LogWarningEx(LOG_DEVICE_PSB, "Failed to set sink current decoy: %s", PSB_GetErrorString(result));
+        }
+
+        // Step 3: Write voltage as the primary control setpoint
+        LogMessageEx(LOG_DEVICE_PSB, "Step 3: Setting voltage (REG 500) to 0V as the PRIMARY control setpoint");
         result = PSB_SetVoltage(&ctx->handle, 0.0);
         if (result != PSB_SUCCESS) {
             LogWarningEx(LOG_DEVICE_PSB, "Failed to set voltage: %s", PSB_GetErrorString(result));
         }
 
-        LogMessageEx(LOG_DEVICE_PSB, "PSB setpoint configuration: source=0, sink=(UNTOUCHED), voltage=0V");
-        LogMessageEx(LOG_DEVICE_PSB, "From now on, ONLY voltage register (REG 500) will be written");
+        LogMessageEx(LOG_DEVICE_PSB, "PSB setpoint configuration: source=0, sink=DECOY(%.1fA/%.1fW), voltage=0V",
+                    PSB_SINK_CURRENT_DECOY, PSB_SINK_POWER_DECOY);
+        LogMessageEx(LOG_DEVICE_PSB, "Voltage register (REG 500) will control CV mode operation");
 
         // DIAGNOSTIC: Log ALL registers to understand complete PSB state
-        PSB_LogAllRegisters(&ctx->handle, "After initialization (minimalist approach)");
+        PSB_LogAllRegisters(&ctx->handle, "After initialization (decoy value approach)");
 
-        LogMessageEx(LOG_DEVICE_PSB, "PSB initialization complete - minimalist approach applied");
+        LogMessageEx(LOG_DEVICE_PSB, "PSB initialization complete - decoy values established");
 
         // Restore result to PSB_SUCCESS if initialization succeeded
         result = PSB_SUCCESS;
@@ -768,10 +782,10 @@ int PSB_ZeroAllValuesQueued(DevicePriority priority) {
         overallResult = result;
     }
 
-    // MINIMALIST APPROACH: Only write source registers and voltage
-    // DO NOT write sink registers - let PSB defaults handle sink mode
+    // DECOY VALUE APPROACH: Restore sink decoy values
+    // Discovery from ops-log-05: Battery functions rely on decoy values being present
 
-    LogMessageEx(LOG_DEVICE_PSB, "=== MINIMALIST ZEROING: Avoiding all sink register writes ===");
+    LogMessageEx(LOG_DEVICE_PSB, "=== DECOY VALUE ZEROING: Restoring sink decoy values ===");
 
     // Clear source current register (REG 501)
     result = PSB_SetCurrentQueued(0.0, priority);
@@ -787,20 +801,34 @@ int PSB_ZeroAllValuesQueued(DevicePriority priority) {
         overallResult = result;
     }
 
-    // DO NOT WRITE SINK REGISTERS (REG 498, 499)
-    LogMessageEx(LOG_DEVICE_PSB, "SKIPPING sink register writes (REG 498, 499) - letting PSB use defaults");
+    // RESTORE SINK DECOY VALUES (REG 498, 499)
+    LogMessageEx(LOG_DEVICE_PSB, "RESTORING sink decoy values (%.1fA, %.1fW)",
+                PSB_SINK_CURRENT_DECOY, PSB_SINK_POWER_DECOY);
 
-    // Set voltage LAST (REG 500) to make it the active setpoint
+    result = PSB_SetSinkCurrentQueued(PSB_SINK_CURRENT_DECOY, priority);
+    if (result != PSB_SUCCESS) {
+        LogWarningEx(LOG_DEVICE_PSB, "Failed to set sink current decoy: %s", PSB_GetErrorString(result));
+        overallResult = result;
+    }
+
+    result = PSB_SetSinkPowerQueued(PSB_SINK_POWER_DECOY, priority);
+    if (result != PSB_SUCCESS) {
+        LogWarningEx(LOG_DEVICE_PSB, "Failed to set sink power decoy: %s", PSB_GetErrorString(result));
+        overallResult = result;
+    }
+
+    // Set voltage LAST (REG 500) to make it the primary control setpoint
     result = PSB_SetVoltageQueued(0.0, priority);
     if (result != PSB_SUCCESS) {
         LogWarningEx(LOG_DEVICE_PSB, "Failed to set voltage to 0V: %s", PSB_GetErrorString(result));
         overallResult = result;
     }
 
-    LogMessageEx(LOG_DEVICE_PSB, "Setpoint configuration: source=0, sink=(UNTOUCHED), voltage=0V");
+    LogMessageEx(LOG_DEVICE_PSB, "Setpoint configuration: source=0, sink=DECOY(%.1fA/%.1fW), voltage=0V",
+                PSB_SINK_CURRENT_DECOY, PSB_SINK_POWER_DECOY);
     
     if (overallResult == PSB_SUCCESS) {
-        LogMessageEx(LOG_DEVICE_PSB, "All PSB values zeroed successfully");
+        LogMessageEx(LOG_DEVICE_PSB, "All PSB values zeroed and decoy values restored successfully");
     } else {
         LogWarningEx(LOG_DEVICE_PSB, "PSB values zeroed with some warnings");
     }
