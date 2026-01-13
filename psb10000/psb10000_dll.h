@@ -33,6 +33,13 @@
 #define PSB_SAFE_SINK_CURRENT_MAX   61.2    // A (102% of nominal)
 #define PSB_SAFE_SINK_POWER_MAX     1224.0  // W (102% of nominal)
 
+// Mode selection "decoy" values for sink setpoints
+// These values prevent PSB from choosing CC/CP modes during mode selection
+// while being moderate enough to be safe. Should be higher than typical
+// battery operating points but not dangerously high.
+#define PSB_SINK_CURRENT_DECOY  10.0    // A (mode selection decoy, not operating point)
+#define PSB_SINK_POWER_DECOY    100.0   // W (mode selection decoy, not operating point)
+
 // PSB-specific error codes (using base from common.h)
 #define PSB_SUCCESS                 SUCCESS
 #define PSB_ERROR_COMM             (ERR_BASE_PSB - 1)

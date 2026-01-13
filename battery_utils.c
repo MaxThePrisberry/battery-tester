@@ -127,19 +127,19 @@ int Battery_GoToVoltage(VoltageTargetParams *params) {
     // NOTE: We do NOT modify limit registers here!
     //
     // Discovery from ops-log-2026-01-12-10.txt:
-    // - During init, sink current SETPOINT = 61.2A (to prevent CC mode selection)
+    // - During init, sink current SETPOINT = 10A (mode selection decoy)
     // - Trying to set sink current LIMIT < SETPOINT causes "Illegal data value" error
     // - The PSB rejects setting limits lower than setpoints
     //
     // Solution: Leave limits at their high initialization values (61.2A, 1224W).
+    // The setpoints (10A, 100W) are "decoys" to prevent CC/CP mode selection.
     // In CV mode, the actual current is naturally limited by:
     //   1. Voltage difference (battery V vs target V)
     //   2. Battery internal resistance
     //   3. PSB's natural current capability
-    // The high limit values effectively "disable" current/power limiting while preventing
-    // mode selection issues.
+    // The decoy setpoints and high limits work together to ensure CV mode without conflicts.
 
-    LogMessage("Using high limit values set during initialization (no limit modification)");
+    LogMessage("Using initialization setpoints (10A/100W decoys) and high limits (61.2A/1224W)");
 
     // CRITICAL: Only write voltage register (REG 500), do NOT write current or power
     // Discovery from ops-log-2026-01-12-05.txt:
