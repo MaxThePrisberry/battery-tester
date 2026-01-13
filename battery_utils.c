@@ -146,19 +146,14 @@ int Battery_GoToVoltage(VoltageTargetParams *params) {
         LogWarning("Failed to set sink power limit: %s", PSB_GetErrorString(result));
     }
 
-    // CRITICAL FIX: Force PSB into SOURCE mode first before setting voltage
-    // The PSB might be stuck in sink mode from previous operations. Writing REG 500
-    // (voltage) alone doesn't always force it out of sink mode. We need to explicitly
-    // write a source mode register (REG 501 or REG 502) to ensure we're in source mode.
-    // Write source current = 0A to force source mode without affecting operation
-    LogMessage("Forcing PSB into source mode before setting voltage...");
-    result = PSB_SetCurrentQueued(0.0, DEVICE_PRIORITY_NORMAL);
-    if (result != PSB_SUCCESS) {
-        LogWarning("Failed to force source mode: %s", PSB_GetErrorString(result));
-    }
-
-    // Set voltage SETPOINT last to enter voltage-controlled mode
-    // This writes REG 500, which triggers CV mode (now in source mode)
+    // CRITICAL: Only write voltage register (REG 500), do NOT write current or power
+    // Discovery from ops-log-2026-01-12-05.txt:
+    //   - PSB is in CV mode when output is OFF (line 222)
+    //   - PSB switches to CP mode when output is enabled (line 229)
+    //   - This happens because PSB re-evaluates "active setpoint" on output enable
+    //   - If current (REG 501) or power (REG 502) were written, PSB uses those instead
+    // Solution: ONLY write voltage register to force CV mode selection
+    LogMessage("Setting voltage setpoint (no other setpoints to avoid mode conflict)...");
     result = PSB_SetVoltageQueued(params->targetVoltage_V, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         LogError("Failed to set voltage: %s", PSB_GetErrorString(result));
