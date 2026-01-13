@@ -147,11 +147,13 @@ static int PSB_AdapterConnect(void *deviceContext, void *connectionParams) {
         // - Sink: REG 499 (sink current), REG 498 (sink power), REG 500 (voltage shared)
         //
         // When battery voltage > target voltage, PSB needs to SINK (discharge).
-        // If REG 498 (sink power) = 0W, PSB firmware chooses CP SINK mode at 0W instead of CV!
+        // If sink setpoint registers have low values, PSB chooses those modes:
+        //   - REG 499 (sink current) = 0A → CC SINK mode at 0A (ops-log-09.txt)
+        //   - REG 498 (sink power) = 0W → CP SINK mode at 0W (ops-log-08.txt)
         //
         // Solution:
         // - Clear source registers (501, 502) to 0
-        // - Clear sink current (499) to 0
+        // - Set sink current (499) to MAXIMUM so it's never chosen over voltage
         // - Set sink power (498) to MAXIMUM so it's never chosen over voltage
         // - Write voltage (500) LAST to make it the active setpoint
 
@@ -171,10 +173,13 @@ static int PSB_AdapterConnect(void *deviceContext, void *connectionParams) {
         // Step 2: Configure sink setpoint registers to prevent unwanted mode selection
         LogMessageEx(LOG_DEVICE_PSB, "Step 2: Configuring sink setpoint registers (REG 498, 499)");
 
-        // Clear sink current to 0A
-        result = PSB_SetSinkCurrent(&ctx->handle, 0.0);
+        // CRITICAL FIX: Set sink current to MAXIMUM value instead of 0A!
+        // Discovery from ops-log-2026-01-12-09.txt: PSB chose CC SINK mode at 0A
+        // If REG 499 (sink current) = 0A, PSB chooses CC SINK mode at 0A instead of CV mode!
+        // Solution: Set REG 499 to max value so PSB never chooses CC over CV mode.
+        result = PSB_SetSinkCurrent(&ctx->handle, PSB_SAFE_SINK_CURRENT_MAX);
         if (result != PSB_SUCCESS) {
-            LogWarningEx(LOG_DEVICE_PSB, "Failed to clear sink current (REG 499): %s", PSB_GetErrorString(result));
+            LogWarningEx(LOG_DEVICE_PSB, "Failed to set sink current to max (REG 499): %s", PSB_GetErrorString(result));
         }
 
         // CRITICAL FIX: Set sink power to MAXIMUM value instead of 0W!
@@ -193,7 +198,7 @@ static int PSB_AdapterConnect(void *deviceContext, void *connectionParams) {
             LogWarningEx(LOG_DEVICE_PSB, "Failed to set voltage: %s", PSB_GetErrorString(result));
         }
 
-        LogMessageEx(LOG_DEVICE_PSB, "PSB setpoint registers configured: source=0, sink current=0, sink power=MAX, voltage=0");
+        LogMessageEx(LOG_DEVICE_PSB, "PSB setpoint registers configured: source=0, sink current=MAX, sink power=MAX, voltage=0");
         LogMessageEx(LOG_DEVICE_PSB, "From now on, ONLY voltage register (REG 500) will be written to maintain CV mode");
 
         // DIAGNOSTIC: Read device state after clearing all setpoints
@@ -812,13 +817,13 @@ int PSB_ZeroAllValuesQueued(DevicePriority priority) {
         overallResult = result;
     }
 
-    // CRITICAL FIX: Configure setpoint registers to prevent CP mode selection
+    // CRITICAL FIX: Configure setpoint registers to prevent CC/CP mode selection
     // - Clear source registers (501, 502) to 0
-    // - Clear sink current (499) to 0
+    // - Set sink current (499) to MAX to prevent CC SINK mode selection
     // - Set sink power (498) to MAX to prevent CP SINK mode selection
     // - Write voltage (500) LAST to make it the active setpoint
 
-    LogMessageEx(LOG_DEVICE_PSB, "Configuring setpoint registers (source=0, sink current=0, sink power=MAX)...");
+    LogMessageEx(LOG_DEVICE_PSB, "Configuring setpoint registers (source=0, sink current=MAX, sink power=MAX)...");
 
     // Clear source current register (REG 501)
     result = PSB_SetCurrentQueued(0.0, priority);
@@ -834,10 +839,11 @@ int PSB_ZeroAllValuesQueued(DevicePriority priority) {
         overallResult = result;
     }
 
-    // Clear sink current register (REG 499)
-    result = PSB_SetSinkCurrentQueued(0.0, priority);
+    // CRITICAL FIX: Set sink current to MAXIMUM value instead of 0A (REG 499)
+    // This prevents PSB from choosing CC SINK mode at 0A when it needs to sink
+    result = PSB_SetSinkCurrentQueued(PSB_SAFE_SINK_CURRENT_MAX, priority);
     if (result != PSB_SUCCESS) {
-        LogWarningEx(LOG_DEVICE_PSB, "Failed to clear sink current: %s", PSB_GetErrorString(result));
+        LogWarningEx(LOG_DEVICE_PSB, "Failed to set sink current to max: %s", PSB_GetErrorString(result));
         overallResult = result;
     }
 
@@ -856,7 +862,7 @@ int PSB_ZeroAllValuesQueued(DevicePriority priority) {
         overallResult = result;
     }
 
-    LogMessageEx(LOG_DEVICE_PSB, "Setpoint registers configured: source=0, sink current=0, sink power=MAX, voltage=0");
+    LogMessageEx(LOG_DEVICE_PSB, "Setpoint registers configured: source=0, sink current=MAX, sink power=MAX, voltage=0");
     
     if (overallResult == PSB_SUCCESS) {
         LogMessageEx(LOG_DEVICE_PSB, "All PSB values zeroed successfully");
