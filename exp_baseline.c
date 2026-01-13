@@ -1404,9 +1404,11 @@ static int RunPhase3_EISCharge(BaselineExperimentContext *ctx) {
     LogMessage("DIAGNOSTIC: Target voltage=%.3fV, current limit=%.3fA, power limit=%.1fW",
                ctx->params.chargeVoltage, ctx->params.chargeCurrent, BASELINE_POWER_LIMIT);
 
-    // Set current limit (acts as constraint in voltage mode)
-    LogMessage("DIAGNOSTIC: [1/3] Setting current LIMIT to %.3f A (REG 501)", ctx->params.chargeCurrent);
-    result = PSB_SetCurrentQueued(ctx->params.chargeCurrent, DEVICE_PRIORITY_NORMAL);
+    // Set current limit using LIMIT register (REG 9002), NOT setpoint register (REG 501)
+    // CRITICAL: Keep REG 501 at 0.0A to avoid interfering with CV mode selection
+    // This mirrors the successful discharge pattern where only voltage setpoint is written
+    LogMessage("DIAGNOSTIC: [1/3] Setting current LIMIT to %.3f A (REG 9002, NOT REG 501)", ctx->params.chargeCurrent);
+    result = PSB_SetCurrentLimitsQueued(0.0, ctx->params.chargeCurrent, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         LogError("Failed to set charge current limit: %s", PSB_GetErrorString(result));
         if (ctx->currentPhaseLogFile) {
@@ -1415,7 +1417,7 @@ static int RunPhase3_EISCharge(BaselineExperimentContext *ctx) {
         }
         return result;
     }
-    LogMessage("DIAGNOSTIC: Current limit command completed");
+    LogMessage("DIAGNOSTIC: Current limit set via REG 9002, REG 501 remains at 0.0A");
     Delay(0.2);  // Brief delay to ensure command completes
 
     // Set power limit (acts as constraint in voltage mode)
@@ -1442,6 +1444,17 @@ static int RunPhase3_EISCharge(BaselineExperimentContext *ctx) {
     }
     LogMessage("DIAGNOSTIC: Voltage setpoint command completed");
     Delay(0.2);  // Brief delay to ensure command completes
+
+    // COMPREHENSIVE DIAGNOSTIC: Log all register values before output enable
+    // This verifies REG 501 stays at 0.0A (zero-current charging approach)
+    extern PSBQueueManager* g_psbQueueMgr;  // Global PSB queue manager
+    extern PSB_Handle* PSB_QueueGetHandle(PSBQueueManager *mgr);  // Get handle from queue
+    if (g_psbQueueMgr) {
+        PSB_Handle *psbHandle = PSB_QueueGetHandle(g_psbQueueMgr);
+        if (psbHandle && psbHandle->isConnected) {
+            PSB_LogAllRegisters(psbHandle, "After Phase 3 charging configuration (zero-current approach)");
+        }
+    }
 
     // Check PSB status to verify mode
     PSB_Status diagStatus;
@@ -1485,17 +1498,37 @@ static int RunPhase3_EISCharge(BaselineExperimentContext *ctx) {
     LogMessage("Waiting for PSB output to stabilize...");
     Delay(2.0);
 
-    // Check PSB status again after output enabled
+    // CRITICAL DIAGNOSTIC: Check PSB mode AFTER output enable
     result = PSB_GetStatusQueued(&diagStatus, DEVICE_PRIORITY_HIGH);
     if (result == PSB_SUCCESS) {
         const char *modeStr[] = {"CV", "CR", "CC", "CP"};
-        LogMessage("DIAGNOSTIC: PSB status after output enabled: Mode=%s, V=%.3fV, I=%.3fA, P=%.3fW",
-                   modeStr[diagStatus.regulationMode], diagStatus.voltage,
-                   diagStatus.current, diagStatus.power);
-        if (diagStatus.regulationMode != 0) {
-            LogWarning("*** DIAGNOSTIC: PSB mode changed to %s after output enable!",
-                       modeStr[diagStatus.regulationMode]);
+        const char *sinkSourceStr = diagStatus.sinkMode ? "SINK" : "SOURCE";
+        LogMessage("==========================================================");
+        LogMessage("CRITICAL DIAGNOSTIC: After output enable + stabilization:");
+        LogMessage("==========================================================");
+        LogMessage("  PSB Mode: %s (%s mode)", modeStr[diagStatus.regulationMode], sinkSourceStr);
+        LogMessage("  Voltage: %.3f V (target: %.3f V)", diagStatus.voltage, ctx->params.chargeVoltage);
+        LogMessage("  Current: %.3f A", diagStatus.current);
+        LogMessage("  Power: %.2f W", diagStatus.power);
+        LogMessage("  Device State (raw): 0x%08lX", diagStatus.rawState);
+        LogMessage("  Output Enabled: %s", diagStatus.outputEnabled ? "YES" : "NO");
+        LogMessage("==========================================================");
+
+        if (diagStatus.regulationMode != 0) {  // 0 = CV mode
+            LogError("MODE SWITCHING DETECTED AFTER OUTPUT ENABLE!");
+            LogError("  Expected: CV mode, Actual: %s %s mode",
+                    modeStr[diagStatus.regulationMode], sinkSourceStr);
+            LogError("  This indicates the root cause of the charging failure!");
+        } else if (diagStatus.sinkMode != 0) {
+            LogWarning("PSB in CV SINK mode instead of CV SOURCE mode");
+            LogWarning("  Battery voltage (%.3fV) may be higher than target (%.3fV)",
+                      diagStatus.voltage, ctx->params.chargeVoltage);
+        } else {
+            LogMessage("SUCCESS: PSB correctly in CV SOURCE mode for charging");
         }
+    } else {
+        LogError("CRITICAL: Failed to read PSB status after output enable: %s",
+                PSB_GetErrorString(result));
     }
     LogMessage("=== DIAGNOSTIC: PSB configuration complete ===");
     
