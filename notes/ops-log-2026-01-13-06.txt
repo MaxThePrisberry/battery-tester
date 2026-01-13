@@ -1,0 +1,760 @@
+
+=== Battery Tester Log Started: 2026-01-13 14:28:44 ===
+Log file location: c:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\BatteryTester.log
+2026-01-13 14:28:44 [INFO] Initializing cDAQ module...
+2026-01-13 14:28:44 [INFO] Initializing cDAQ thermocouple slots 2 and 3...
+2026-01-13 14:28:46 [INFO] cDAQ slot 2 initialized with 16 thermocouples
+2026-01-13 14:28:47 [INFO] cDAQ slot 3 initialized with 16 thermocouples
+2026-01-13 14:28:47 [INFO] cDAQ module initialized successfully
+2026-01-13 14:28:47 [INFO] cDAQ module initialized successfully
+2026-01-13 14:28:47 [INFO] Initializing PSB queue manager on COM3...
+2026-01-13 14:28:47 [INFO] Attempting to connect to PSB 10000...
+2026-01-13 14:28:47 [INFO] [PSB] Connecting to PSB on COM3...
+2026-01-13 14:28:47 [INFO] [PSB] Initializing on COM3, slave 1, 9600 baud
+2026-01-13 14:28:47 [INFO] [PSB] Successfully initialized
+2026-01-13 14:28:47 [INFO] [PSB] Initializing PSB to known state...
+2026-01-13 14:28:47 [INFO] [PSB] Setting remote mode: ON
+2026-01-13 14:28:47 [INFO] [PSB] Setting output: OFF
+2026-01-13 14:28:47 [INFO] [PSB] === DECOY VALUE INITIALIZATION: Setting moderate sink decoy values ===
+2026-01-13 14:28:47 [INFO] [PSB] Step 1: Clearing source setpoint registers (REG 501, 502)
+2026-01-13 14:28:47 [INFO] [PSB] *** WRITING REG 501 (SET_CURRENT): 0.00A (0x0000) - WILL ENTER CC MODE ***
+2026-01-13 14:28:47 [INFO] [PSB] Write to REG 501 completed with result: 0
+2026-01-13 14:28:47 [INFO] [PSB] *** WRITING REG 502 (SET_POWER): 0.00W (0x0000) - WILL ENTER CP MODE ***
+2026-01-13 14:28:47 [INFO] [PSB] Write to REG 502 completed with result: 0
+2026-01-13 14:28:47 [INFO] [PSB] Step 2: Writing DECOY VALUES to sink registers
+2026-01-13 14:28:47 [INFO] [PSB]   Setting REG 498 (sink power) to 100.0 W (decoy)
+2026-01-13 14:28:47 [INFO] [PSB] *** WRITING REG 498 (SINK_MODE_POWER): 100.00W (0x1110) - MAY ENTER SINK CP MODE ***
+2026-01-13 14:28:47 [INFO] [PSB] Write to REG 498 completed with result: 0
+2026-01-13 14:28:47 [INFO] [PSB]   Setting REG 499 (sink current) to 10.0 A (decoy)
+2026-01-13 14:28:47 [INFO] [PSB] *** WRITING REG 499 (SINK_MODE_CURRENT): 10.00A (0x2221) - MAY ENTER SINK CC MODE ***
+2026-01-13 14:28:47 [INFO] [PSB] Write to REG 499 completed with result: 0
+2026-01-13 14:28:47 [INFO] [PSB] Step 3: Setting voltage (REG 500) to 0V as the PRIMARY control setpoint
+2026-01-13 14:28:47 [INFO] [PSB] *** WRITING REG 500 (SET_VOLTAGE): 0.00V (0x0000) - WILL ENTER CV MODE ***
+2026-01-13 14:28:47 [INFO] [PSB] Write to REG 500 completed with result: 0
+2026-01-13 14:28:47 [INFO] [PSB] PSB setpoint configuration: source=0, sink=DECOY(10.0A/100.0W), voltage=0V
+2026-01-13 14:28:47 [INFO] [PSB] Voltage register (REG 500) will control CV mode operation
+2026-01-13 14:28:47 [INFO] [PSB] 
+2026-01-13 14:28:47 [INFO] [PSB] ======================================================
+2026-01-13 14:28:47 [INFO] [PSB] PSB COMPLETE REGISTER DUMP: After initialization (decoy value approach)
+2026-01-13 14:28:47 [INFO] [PSB] ======================================================
+2026-01-13 14:28:47 [INFO] [PSB] SETPOINT REGISTERS:
+2026-01-13 14:28:47 [INFO] [PSB] -------------------
+2026-01-13 14:28:48 [INFO] [PSB]   REG 498 (SINK_MODE_POWER):       101.98 W
+2026-01-13 14:28:48 [INFO] [PSB]   REG 499 (SINK_MODE_CURRENT):     10.20 A
+2026-01-13 14:28:48 [INFO] [PSB]   REG 500 (SET_VOLTAGE):           0.00 V
+2026-01-13 14:28:48 [INFO] [PSB]   REG 501 (SET_CURRENT):           0.00 A
+2026-01-13 14:28:48 [INFO] [PSB]   REG 502 (SET_POWER_SOURCE):      0.00 W
+2026-01-13 14:28:48 [INFO] [PSB] 
+2026-01-13 14:28:48 [INFO] [PSB] LIMIT REGISTERS:
+2026-01-13 14:28:48 [INFO] [PSB] ----------------
+2026-01-13 14:28:48 [INFO] [PSB]   REG 9000 (VOLTAGE_MAX):          62.42 V
+2026-01-13 14:28:48 [INFO] [PSB]   REG 9001 (VOLTAGE_MIN):          0.00 V
+2026-01-13 14:28:48 [INFO] [PSB]   REG 9002 (CURRENT_MAX/SRC):      3.37 A
+2026-01-13 14:28:48 [INFO] [PSB]   REG 9003 (CURRENT_MIN/SRC):      0.00 A
+2026-01-13 14:28:48 [INFO] [PSB]   REG 9004 (POWER_MAX/SRC):        30.58 W
+2026-01-13 14:28:49 [INFO] [PSB]   REG 9005 (SINK_POWER_MAX):       1248.47 W
+2026-01-13 14:28:49 [INFO] [PSB]   REG 9008 (SINK_CURRENT_MAX):     62.42 A
+2026-01-13 14:28:49 [INFO] [PSB]   REG 9009 (SINK_CURRENT_MIN):     0.00 A
+2026-01-13 14:28:49 [INFO] [PSB] 
+2026-01-13 14:28:49 [INFO] [PSB] DEVICE STATE:
+2026-01-13 14:28:49 [INFO] [PSB] -------------
+2026-01-13 14:28:49 [INFO] [PSB]   REG 505 (DEVICE_STATE):          0x00004803
+2026-01-13 14:28:49 [INFO] [PSB]     Regulation Mode:               CV (SOURCE mode)
+2026-01-13 14:28:49 [INFO] [PSB]     Output Enabled:                NO
+2026-01-13 14:28:49 [INFO] [PSB]     Remote Mode:                   YES
+2026-01-13 14:28:49 [INFO] [PSB]     Control Location:              3
+2026-01-13 14:28:49 [INFO] [PSB] 
+2026-01-13 14:28:49 [INFO] [PSB] ACTUAL VALUES:
+2026-01-13 14:28:49 [INFO] [PSB] --------------
+2026-01-13 14:28:49 [INFO] [PSB]   Voltage:                         2.719 V
+2026-01-13 14:28:49 [INFO] [PSB]   Current:                         0.000 A
+2026-01-13 14:28:49 [INFO] [PSB]   Power:                           0.00 W
+2026-01-13 14:28:49 [INFO] [PSB] ======================================================
+2026-01-13 14:28:49 [INFO] [PSB] 
+2026-01-13 14:28:49 [INFO] [PSB] PSB initialization complete - decoy values established
+2026-01-13 14:28:49 [INFO] Successfully connected to PSB 10000
+2026-01-13 14:28:49 [INFO] PSB 10000 queue manager initialized
+2026-01-13 14:28:49 [INFO] PSB 10000 queue processing thread started
+2026-01-13 14:28:49 [INFO] PSB queue manager initialized and connected on COM3
+2026-01-13 14:28:49 [INFO] Initializing PSB to safe state...
+2026-01-13 14:28:49 [INFO] [PSB] Setting PSB safe limits...
+2026-01-13 14:28:49 [INFO] [PSB] Setting min voltage: 0.00V
+2026-01-13 14:28:49 [INFO] [PSB] Setting max voltage: 61.20V
+2026-01-13 14:28:49 [INFO] [PSB] Setting min current: 0.00A
+2026-01-13 14:28:50 [INFO] [PSB] Setting max current: 61.20A
+2026-01-13 14:28:50 [INFO] [PSB] Setting sink max current: 61.20A
+2026-01-13 14:28:50 [INFO] [PSB] Setting sink min current: 0.00A
+2026-01-13 14:28:50 [INFO] [PSB] Setting max power: 1224.00W
+2026-01-13 14:28:50 [INFO] [PSB] Setting sink max power: 1224.00W
+2026-01-13 14:28:50 [INFO] [PSB] PSB safe limits set successfully
+2026-01-13 14:28:50 [INFO] [PSB] Zeroing all PSB values...
+2026-01-13 14:28:50 [INFO] [PSB] Setting output: OFF
+2026-01-13 14:28:50 [INFO] [PSB] === DECOY VALUE ZEROING: Restoring sink decoy values ===
+2026-01-13 14:28:51 [INFO] [PSB] >>> QUEUE: Executing command SET_CURRENT (type 4)
+2026-01-13 14:28:51 [INFO] [PSB] *** WRITING REG 501 (SET_CURRENT): 0.00A (0x0000) - WILL ENTER CC MODE ***
+2026-01-13 14:28:51 [INFO] [PSB] Write to REG 501 completed with result: 0
+2026-01-13 14:28:51 [INFO] [PSB] >>> QUEUE: Executing command SET_POWER (type 5)
+2026-01-13 14:28:51 [INFO] [PSB] *** WRITING REG 502 (SET_POWER): 0.00W (0x0000) - WILL ENTER CP MODE ***
+2026-01-13 14:28:51 [INFO] [PSB] Write to REG 502 completed with result: 0
+2026-01-13 14:28:51 [INFO] [PSB] RESTORING sink decoy values (10.0A, 100.0W)
+2026-01-13 14:28:51 [INFO] [PSB] >>> QUEUE: Executing command SET_SINK_CURRENT (type 12)
+2026-01-13 14:28:51 [INFO] [PSB] *** WRITING REG 499 (SINK_MODE_CURRENT): 10.00A (0x2221) - MAY ENTER SINK CC MODE ***
+2026-01-13 14:28:52 [INFO] [PSB] Write to REG 499 completed with result: 0
+2026-01-13 14:28:52 [INFO] [PSB] >>> QUEUE: Executing command SET_SINK_POWER (type 13)
+2026-01-13 14:28:52 [INFO] [PSB] *** WRITING REG 498 (SINK_MODE_POWER): 100.00W (0x1110) - MAY ENTER SINK CP MODE ***
+2026-01-13 14:28:52 [INFO] [PSB] Write to REG 498 completed with result: 0
+2026-01-13 14:28:52 [INFO] [PSB] >>> QUEUE: Executing command SET_VOLTAGE (type 3)
+2026-01-13 14:28:52 [INFO] [PSB] *** WRITING REG 500 (SET_VOLTAGE): 0.00V (0x0000) - WILL ENTER CV MODE ***
+2026-01-13 14:28:52 [INFO] [PSB] Write to REG 500 completed with result: 0
+2026-01-13 14:28:52 [INFO] [PSB] Setpoint configuration: source=0, sink=DECOY(10.0A/100.0W), voltage=0V
+2026-01-13 14:28:52 [INFO] [PSB] All PSB values zeroed and decoy values restored successfully
+2026-01-13 14:28:52 [INFO] PSB initialization complete
+2026-01-13 14:28:52 [INFO] Initializing BioLogic abstraction layer...
+2026-01-13 14:28:52 [INFO]   Mode: EC-Lab OLE COM
+2026-01-13 14:28:52 [INFO] [BIO] Initializing BioLogic abstraction layer
+2026-01-13 14:28:52 [INFO] [BIO]   Mode: EC-Lab OLE COM
+2026-01-13 14:28:52 [INFO] [BIO] Initializing EC-Lab OLE COM mode
+2026-01-13 14:28:52 [INFO] [BIO]   Settings dir: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_settings
+2026-01-13 14:28:52 [INFO] [BIO]   Data dir: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data
+2026-01-13 14:28:52 [INFO] [BIO] Initializing EC-Lab backend
+2026-01-13 14:28:52 [INFO] [BIO]   Settings dir: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_settings
+2026-01-13 14:28:52 [INFO] [BIO]   Data dir: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data
+2026-01-13 14:28:52 [INFO] [BIO]   Device: 0, Channel: 0
+2026-01-13 14:28:52 [INFO] [BIO] ========================================
+2026-01-13 14:28:52 [INFO] [BIO] Initializing EC-Lab OLE COM connection
+2026-01-13 14:28:52 [INFO] [BIO] ========================================
+2026-01-13 14:28:52 [INFO] [BIO] Working directory: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data
+2026-01-13 14:28:52 [INFO] [BIO] Step 1: Initializing COM (MTA mode)...
+2026-01-13 14:28:52 [INFO] [BIO] COM initialized successfully (MTA mode)
+2026-01-13 14:28:52 [INFO] [BIO] Step 2: Resolving ProgID 'EClabCOM.EClabExe'...
+2026-01-13 14:28:52 [INFO] [BIO] ProgID resolved successfully. EC-Lab is registered.
+2026-01-13 14:28:52 [INFO] [BIO] Step 3: Checking if EC-Lab is running...
+2026-01-13 14:28:52 [INFO] [BIO] EC-Lab process detected - proceeding with COM connection
+2026-01-13 14:28:52 [INFO] [BIO] Step 4: Creating EC-Lab COM instance...
+2026-01-13 14:28:52 [INFO] [BIO] NOTE: This will connect to the running EC-Lab application.
+2026-01-13 14:28:52 [INFO] [BIO] NOTE: Using custom IEClabExe interface (NOT IDispatch)
+2026-01-13 14:28:52 [INFO] [BIO] Requesting IEClabExe interface...
+2026-01-13 14:28:52 [INFO] [BIO] EC-Lab COM instance created successfully!
+2026-01-13 14:28:52 [INFO] [BIO] ========================================
+2026-01-13 14:28:52 [INFO] [BIO] EC-Lab OLE COM connection initialized
+2026-01-13 14:28:52 [INFO] [BIO] ========================================
+2026-01-13 14:28:52 [INFO] [BIO] Connecting to EC-Lab device 0
+2026-01-13 14:28:53 [INFO] [BIO] Connected to EC-Lab device 0 successfully
+2026-01-13 14:28:53 [INFO] [BIO] Running connection diagnostic (5 tests over ~5 seconds)...
+2026-01-13 14:28:53 [INFO] [BIO]   [Test 1 @ 0.0s] Connection: OK
+2026-01-13 14:28:54 [INFO] [BIO]   [Test 2 @ 1.0s] Connection: OK
+2026-01-13 14:28:55 [INFO] [BIO]   [Test 3 @ 2.0s] Connection: OK
+2026-01-13 14:28:56 [INFO] [BIO]   [Test 4 @ 3.0s] Connection: OK
+2026-01-13 14:28:57 [INFO] [BIO]   [Test 5 @ 4.0s] Connection: OK
+2026-01-13 14:28:57 [INFO] [BIO] Connection diagnostic complete: 5/5 tests passed
+2026-01-13 14:28:57 [INFO] [BIO] EC-Lab backend initialized successfully
+2026-01-13 14:28:57 [INFO] [BIO] BioLogic abstraction layer initialized successfully
+2026-01-13 14:28:57 [INFO] BioLogic abstraction layer initialized successfully
+2026-01-13 14:28:57 [INFO] Initializing DTB queue manager on COM5 with 2 devices...
+2026-01-13 14:28:57 [INFO] [DTB] DTB_QueueInit: Will initialize slave address 2
+2026-01-13 14:28:57 [INFO] [DTB] DTB_QueueInit: Will initialize slave address 3
+2026-01-13 14:28:57 [INFO] Attempting to connect to DTB 4848...
+2026-01-13 14:28:57 [INFO] [DTB] Connecting to DTB slave 2 on COM5...
+2026-01-13 14:28:57 [INFO] [DTB] Initializing on COM5, slave 2, 9600 baud
+2026-01-13 14:28:57 [INFO] [DTB] Successfully initialized
+2026-01-13 14:28:57 [INFO] [DTB] Successfully connected to DTB slave 2
+2026-01-13 14:28:57 [INFO] [DTB] Connecting to DTB slave 3 on COM5...
+2026-01-13 14:28:57 [INFO] [DTB] Initializing on COM5, slave 3, 9600 baud
+2026-01-13 14:28:57 [INFO] [DTB] Successfully initialized
+2026-01-13 14:28:57 [INFO] [DTB] Successfully connected to DTB slave 3
+2026-01-13 14:28:57 [INFO] [DTB] Connected to 2 of 2 DTB devices
+2026-01-13 14:28:58 [INFO] Successfully connected to DTB 4848
+2026-01-13 14:28:58 [INFO] DTB 4848 queue manager initialized
+2026-01-13 14:28:58 [INFO] [DTB] DTB_QueueInit: Successfully created queue manager for 2 devices
+2026-01-13 14:28:58 [INFO] DTB queue manager initialized and connected on COM5
+2026-01-13 14:28:58 [INFO] Enabling DTB write access for all devices...
+2026-01-13 14:28:58 [INFO] [DTB] Enabling write access for all 2 DTB devices...
+2026-01-13 14:28:58 [INFO] DTB 4848 queue processing thread started
+2026-01-13 14:28:58 [INFO] [DTB] Enabling write access...
+2026-01-13 14:28:58 [INFO] [DTB] Write access enabled
+2026-01-13 14:28:58 [INFO] [DTB] Enabling write access...
+2026-01-13 14:28:58 [INFO] [DTB] Write access enabled
+2026-01-13 14:28:58 [INFO] [DTB] Successfully enabled write access for all DTB devices
+2026-01-13 14:28:58 [INFO] DTB write access enabled successfully for all devices
+2026-01-13 14:28:58 [INFO] Configuring all DTB4848 devices for K-type thermocouple with PID control...
+2026-01-13 14:28:58 [INFO] [DTB] Write access status: ENABLED
+2026-01-13 14:28:58 [INFO] DTB slave 2 write access currently: ENABLED
+2026-01-13 14:28:58 [INFO] [DTB] Configuring DTB4848...
+2026-01-13 14:28:58 [INFO] [DTB] Setting sensor type: 0
+2026-01-13 14:28:59 [INFO] [DTB] Setting heating/cooling mode: 0
+2026-01-13 14:28:59 [INFO] [DTB] Setting control method: 0
+2026-01-13 14:28:59 [INFO] [DTB] Setting PID mode: 4 (AUTO)
+2026-01-13 14:28:59 [INFO] [DTB] Configuration complete
+2026-01-13 14:28:59 [INFO] DTB4848 slave 2 configured successfully
+2026-01-13 14:29:00 [INFO] [DTB] Write access status: ENABLED
+2026-01-13 14:29:00 [INFO] DTB slave 3 write access currently: ENABLED
+2026-01-13 14:29:00 [INFO] [DTB] Configuring DTB4848...
+2026-01-13 14:29:00 [INFO] [DTB] Setting sensor type: 0
+2026-01-13 14:29:00 [INFO] [DTB] Setting heating/cooling mode: 0
+2026-01-13 14:29:00 [INFO] [DTB] Setting control method: 0
+2026-01-13 14:29:01 [INFO] [DTB] Setting PID mode: 4 (AUTO)
+2026-01-13 14:29:01 [INFO] [DTB] Configuration complete
+2026-01-13 14:29:01 [INFO] DTB4848 slave 3 configured successfully
+2026-01-13 14:29:01 [INFO] DTB initialization complete
+2026-01-13 14:29:01 [INFO] Initializing Teensy queue manager on COM6...
+2026-01-13 14:29:01 [INFO] Attempting to connect to Teensy...
+2026-01-13 14:29:01 [INFO] [TNY] Connecting to Teensy on COM6...
+2026-01-13 14:29:01 [INFO] [TNY] Initializing Teensy on COM6 at 9600 baud
+2026-01-13 14:29:01 [INFO] [TNY] Successfully connected to Teensy on COM6
+2026-01-13 14:29:01 [INFO] Successfully connected to Teensy
+2026-01-13 14:29:01 [INFO] Teensy queue manager initialized
+2026-01-13 14:29:01 [INFO] Teensy queue manager initialized and connected on COM6
+2026-01-13 14:29:01 [INFO] [TNY] Initializing 2 pins (2 low, 0 high)
+2026-01-13 14:29:01 [INFO] [TNY] Teensy queue processing thread started
+2026-01-13 14:29:01 [INFO] Committed transaction 1 with 2 commands to normal priority queue
+2026-01-13 14:29:01 [INFO] [TNY] Starting transaction 1 with 2 commands
+2026-01-13 14:29:01 [INFO] [TNY] Pin initialization transaction committed
+2026-01-13 14:29:01 [INFO] Status module state: UNINITIALIZED -> INITIALIZING
+2026-01-13 14:29:01 [INFO] Device states initialized (DTB devices: 2)
+2026-01-13 14:29:01 [INFO] Status monitoring module initialized
+2026-01-13 14:29:01 [INFO] Controls module initialized with 2 DTB devices
+2026-01-13 14:29:01 [INFO] Starting device status monitoring...
+2026-01-13 14:29:01 [INFO] Status module state: INITIALIZING -> RUNNING
+2026-01-13 14:29:01 [INFO] Status timer thread started
+2026-01-13 14:29:01 [INFO] Status monitoring started successfully
+2026-01-13 14:29:01 [INFO] Starting controls module - syncing with device states...
+2026-01-13 14:29:01 [INFO] [TNY] Completed transaction 1
+2026-01-13 14:29:01 [INFO] PSB remote mode: ON
+2026-01-13 14:29:04 [INFO] Controls module started
+2026-01-13 14:29:22 [INFO] BASELINE: Checking BioLogic connection...
+2026-01-13 14:29:22 [INFO] [BIO] BASELINE: BIO_IsAbstractInitialized = 1
+2026-01-13 14:29:22 [INFO] [BIO] BASELINE: BioLogic mode = EC-Lab OLE COM (1)
+2026-01-13 14:29:22 [INFO] BASELINE: Testing BioLogic connection...
+2026-01-13 14:29:22 [INFO] [BIO] BASELINE: BIO_Abstract_TestConnection returned 0 (SUCCESS=0)
+2026-01-13 14:29:22 [INFO] [BIO] BASELINE: BIO_Abstract_GetDeviceID returned 0
+2026-01-13 14:29:22 [INFO] [BIO] BASELINE: BioLogic connection verified successfully (ID=0)
+2026-01-13 14:29:22 [INFO] All required devices verified and initialized successfully
+2026-01-13 14:29:22 [INFO] === Starting Baseline Battery Experiment ===
+2026-01-13 14:29:24 [INFO] Created experiment file system: c:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\data\baseline_20260113_142924
+2026-01-13 14:29:24 [INFO] Experiment settings saved to: c:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\data\baseline_20260113_142924\experiment_settings.ini
+2026-01-13 14:29:24 [INFO] Initializing relay states...
+2026-01-13 14:29:24 [INFO] EIS target SOC points initialized:
+2026-01-13 14:29:24 [INFO]   0.0%
+2026-01-13 14:29:24 [INFO]   10.0%
+2026-01-13 14:29:24 [INFO]   20.0%
+2026-01-13 14:29:24 [INFO]   30.0%
+2026-01-13 14:29:24 [INFO]   40.0%
+2026-01-13 14:29:24 [INFO]   50.0%
+2026-01-13 14:29:24 [INFO]   60.0%
+2026-01-13 14:29:24 [INFO]   70.0%
+2026-01-13 14:29:24 [INFO]   80.0%
+2026-01-13 14:29:24 [INFO]   90.0%
+2026-01-13 14:29:24 [INFO]   100.0%
+2026-01-13 14:29:24 [INFO] === PHASE 1: Initial Discharge and Temperature Setup ===
+2026-01-13 14:29:24 [INFO] Setting up temperature control - target: 30.0  C
+2026-01-13 14:29:24 [INFO] [DTB] Setting setpoint to 30.0 C for all 2 DTB devices...
+2026-01-13 14:29:24 [INFO] [DTB] Setting setpoint: 30.0 C
+2026-01-13 14:29:25 [INFO] [DTB] Setting setpoint: 30.0 C
+2026-01-13 14:29:25 [INFO] [DTB] Successfully set setpoint for all DTB devices
+2026-01-13 14:29:25 [INFO] [DTB] Setting run/stop to RUN for all 2 DTB devices...
+2026-01-13 14:29:25 [INFO] [DTB] Setting Run/Stop: RUN
+2026-01-13 14:29:26 [INFO] [DTB] Setting Run/Stop: RUN
+2026-01-13 14:29:26 [INFO] [DTB] Successfully set run/stop for all DTB devices
+2026-01-13 14:29:26 [INFO] DTB temperature controller started
+2026-01-13 14:29:26 [INFO] Switching to PSB...
+2026-01-13 14:29:26 [INFO] [PSB] Setting output: OFF
+2026-01-13 14:29:27 [INFO] Successfully switched to PSB
+2026-01-13 14:29:27 [INFO] Discharging battery to 2.70 V
+2026-01-13 14:29:27 [INFO] Battery voltage: 2.717 V, Target: 2.700 V - Will DISCHARGE
+2026-01-13 14:29:27 [INFO] Battery already at target voltage
+2026-01-13 14:29:27 [INFO] Phase 1 discharge completed: 0.00 mAh in 0.0 minutes
+2026-01-13 14:29:27 [INFO] Waiting 60 seconds for battery relaxation...
+2026-01-13 14:30:33 [INFO] Waiting for ALL DTB devices to reach target temperature: 30.0  C
+2026-01-13 14:30:48 [INFO] DTB average temperature: 28.7  C (target: 30.0  C, max diff: 1.7  C, 2/2 in tolerance)
+2026-01-13 14:30:48 [INFO] ALL DTB devices reached target temperature (avg: 28.7  C)
+2026-01-13 14:30:48 [INFO] Stabilizing temperature for 0 seconds - monitoring ALL DTB devices...
+2026-01-13 14:35:46 [INFO] Temperature stabilization completed for all DTB devices
+2026-01-13 14:35:46 [INFO] Phase 1 completed successfully
+2026-01-13 14:35:46 [INFO] === SKIPPING PHASE 2: Using manual capacity entry ===
+2026-01-13 14:35:46 [INFO] Manual capacity: 1000.00 mAh
+2026-01-13 14:35:46 [INFO] Manual capacity set: Charge=1000.00 mAh, Discharge=1000.00 mAh
+2026-01-13 14:35:46 [INFO] === PHASE 3: EIS Measurements During Charge ===
+2026-01-13 14:35:46 [INFO] Performing initial EIS measurement at 0% SOC...
+2026-01-13 14:35:49 [WARN] DTB(slave 3) status callback timed out after 5977.6 ms
+2026-01-13 14:35:49 [WARN] DTB(slave 3) status update timed out
+2026-01-13 14:35:52 [INFO] Waiting 60 seconds for battery relaxation before EIS measurement...
+2026-01-13 14:36:58 [INFO] Switching to BioLogic...
+2026-01-13 14:36:58 [INFO] [PSB] Setting output: OFF
+2026-01-13 14:36:59 [INFO] Successfully switched to BioLogic
+2026-01-13 14:36:59 [INFO] [BIO] Starting OCV measurement via EC-Lab
+2026-01-13 14:36:59 [INFO] [BIO]   Settings: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_settings\ocv_default.mps
+2026-01-13 14:36:59 [INFO] [BIO]   Output: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260113_143659_C01.mpr
+2026-01-13 14:36:59 [INFO] [BIO] Loading settings from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_settings\ocv_default.mps
+2026-01-13 14:37:00 [INFO] [BIO] Settings loaded successfully
+2026-01-13 14:37:00 [INFO] [BIO] Starting measurement, output: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260113_143659_C01.mpr
+2026-01-13 14:37:00 [INFO] [BIO] Measurement started
+2026-01-13 14:37:00 [INFO] [BIO] Monitoring measurement (timeout: 60000 ms)
+2026-01-13 14:37:00 [INFO] [BIO] Status: 0, Technique: 11, Time: 71.4 s, Points: 31
+2026-01-13 14:37:03 [INFO] [BIO] Measurement started running
+2026-01-13 14:37:05 [INFO] [BIO] Status: 1, Technique: 11, Time: 2.4 s, Points: 31
+2026-01-13 14:37:11 [INFO] [BIO] Status: 1, Technique: 11, Time: 7.7 s, Points: 31
+2026-01-13 14:37:13 [INFO] [BIO] Measurement completed (10.0 s, 31 points)
+2026-01-13 14:37:14 [INFO] [BIO] Converting .mpr file to BIO_TechniqueData: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260113_143659_C01.mpr
+2026-01-13 14:37:14 [INFO] [BIO] Reading number of points from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260113_143659_C01.mpr
+2026-01-13 14:37:14 [INFO] [BIO] File contains 10 data points
+2026-01-13 14:37:14 [INFO] [BIO] Reading 10 data points from .mpr file
+2026-01-13 14:37:14 [INFO] [BIO] Reading DC value at index 0 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260113_143659_C01.mpr
+2026-01-13 14:37:14 [INFO] [BIO] DC data: t=1.000 s, V=2.717310 V, I=0.000000 mA
+2026-01-13 14:37:14 [INFO] [BIO] Reading DC value at index 1 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260113_143659_C01.mpr
+2026-01-13 14:37:14 [INFO] [BIO] DC data: t=2.000 s, V=2.717216 V, I=0.000000 mA
+2026-01-13 14:37:14 [INFO] [BIO] Reading DC value at index 2 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260113_143659_C01.mpr
+2026-01-13 14:37:14 [INFO] [BIO] DC data: t=3.000 s, V=2.717204 V, I=0.000000 mA
+2026-01-13 14:37:14 [INFO] [BIO] Reading DC value at index 3 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260113_143659_C01.mpr
+2026-01-13 14:37:14 [INFO] [BIO] DC data: t=4.000 s, V=2.717201 V, I=0.000000 mA
+2026-01-13 14:37:14 [INFO] [BIO] Reading DC value at index 4 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260113_143659_C01.mpr
+2026-01-13 14:37:14 [INFO] [BIO] DC data: t=5.000 s, V=2.717199 V, I=0.000000 mA
+2026-01-13 14:37:14 [INFO] [BIO] Reading DC value at index 5 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260113_143659_C01.mpr
+2026-01-13 14:37:14 [INFO] [BIO] DC data: t=6.000 s, V=2.717199 V, I=0.000000 mA
+2026-01-13 14:37:14 [INFO] [BIO] Reading DC value at index 6 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260113_143659_C01.mpr
+2026-01-13 14:37:14 [INFO] [BIO] DC data: t=7.000 s, V=2.717200 V, I=0.000000 mA
+2026-01-13 14:37:14 [INFO] [BIO] Reading DC value at index 7 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260113_143659_C01.mpr
+2026-01-13 14:37:14 [INFO] [BIO] DC data: t=8.000 s, V=2.717203 V, I=0.000000 mA
+2026-01-13 14:37:14 [INFO] [BIO] Reading DC value at index 8 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260113_143659_C01.mpr
+2026-01-13 14:37:14 [INFO] [BIO] DC data: t=9.000 s, V=2.717204 V, I=0.000000 mA
+2026-01-13 14:37:14 [INFO] [BIO] Reading DC value at index 9 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260113_143659_C01.mpr
+2026-01-13 14:37:14 [INFO] [BIO] DC data: t=10.000 s, V=2.717205 V, I=0.000000 mA
+2026-01-13 14:37:14 [INFO] [BIO] Successfully converted 10 data points
+2026-01-13 14:37:14 [INFO] [BIO] OCV measurement completed successfully
+2026-01-13 14:37:14 [INFO] [BIO] Starting GEIS measurement via EC-Lab
+2026-01-13 14:37:14 [INFO] [BIO]   Settings: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_settings\geis_default.mps
+2026-01-13 14:37:14 [INFO] [BIO]   Output: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260113_143714_C01.mpr
+2026-01-13 14:37:14 [INFO] [BIO] Loading settings from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_settings\geis_default.mps
+2026-01-13 14:37:15 [INFO] [BIO] Settings loaded successfully
+2026-01-13 14:37:15 [INFO] [BIO] Starting measurement, output: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260113_143714_C01.mpr
+2026-01-13 14:37:15 [INFO] [BIO] Measurement started
+2026-01-13 14:37:15 [INFO] [BIO] Monitoring measurement (timeout: 300000 ms)
+2026-01-13 14:37:15 [INFO] [BIO] Status: 0, Technique: 30, Time: 10.0 s, Points: 31
+2026-01-13 14:37:18 [INFO] [BIO] Measurement started running
+2026-01-13 14:37:20 [INFO] [BIO] Status: 1, Technique: 30, Time: 2.4 s, Points: 31
+2026-01-13 14:37:25 [INFO] [BIO] Status: 1, Technique: 30, Time: 7.8 s, Points: 31
+2026-01-13 14:37:31 [INFO] [BIO] Status: 1, Technique: 30, Time: 13.0 s, Points: 31
+2026-01-13 14:37:36 [INFO] [BIO] Status: 1, Technique: 30, Time: 18.3 s, Points: 31
+2026-01-13 14:37:41 [INFO] [BIO] Status: 1, Technique: 30, Time: 23.6 s, Points: 31
+2026-01-13 14:37:46 [INFO] [BIO] Status: 1, Technique: 30, Time: 28.9 s, Points: 31
+2026-01-13 14:37:52 [INFO] [BIO] Status: 1, Technique: 30, Time: 34.1 s, Points: 31
+2026-01-13 14:37:57 [INFO] [BIO] Status: 1, Technique: 30, Time: 39.4 s, Points: 31
+2026-01-13 14:38:02 [INFO] [BIO] Status: 1, Technique: 30, Time: 44.7 s, Points: 31
+2026-01-13 14:38:08 [INFO] [BIO] Status: 1, Technique: 30, Time: 50.0 s, Points: 31
+2026-01-13 14:38:13 [INFO] [BIO] Status: 1, Technique: 30, Time: 55.3 s, Points: 31
+2026-01-13 14:38:18 [INFO] [BIO] Status: 1, Technique: 30, Time: 60.5 s, Points: 31
+2026-01-13 14:38:23 [INFO] [BIO] Status: 1, Technique: 30, Time: 65.8 s, Points: 31
+2026-01-13 14:38:29 [INFO] [BIO] Status: 1, Technique: 30, Time: 71.1 s, Points: 31
+2026-01-13 14:38:29 [INFO] [BIO] Measurement completed (71.4 s, 31 points)
+2026-01-13 14:38:30 [INFO] [BIO] Converting .mpr file to BIO_TechniqueData: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260113_143714_C01.mpr
+2026-01-13 14:38:30 [INFO] [BIO] Reading number of points from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260113_143714_C01.mpr
+2026-01-13 14:38:30 [INFO] [BIO] File contains 30 data points
+2026-01-13 14:38:30 [INFO] [BIO] Reading 30 data points from .mpr file
+2026-01-13 14:38:30 [INFO] [BIO] Reading EIS value at index 0 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260113_143714_C01.mpr
+2026-01-13 14:38:30 [INFO] [BIO] EIS data: t=1.121 s, f=10002.226 Hz, Re(Z)=0.042411 Ohm, -Im(Z)=-0.030249 Ohm
+2026-01-13 14:38:30 [INFO] [BIO] Reading EIS value at index 1 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260113_143714_C01.mpr
+2026-01-13 14:38:30 [INFO] [BIO] EIS data: t=2.018 s, f=6811.067 Hz, Re(Z)=0.041781 Ohm, -Im(Z)=-0.020742 Ohm
+2026-01-13 14:38:30 [INFO] [BIO] Reading EIS value at index 2 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260113_143714_C01.mpr
+2026-01-13 14:38:30 [INFO] [BIO] EIS data: t=3.149 s, f=4641.485 Hz, Re(Z)=0.041412 Ohm, -Im(Z)=-0.013979 Ohm
+2026-01-13 14:38:30 [INFO] [BIO] Reading EIS value at index 3 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260113_143714_C01.mpr
+2026-01-13 14:38:30 [INFO] [BIO] EIS data: t=4.281 s, f=3161.012 Hz, Re(Z)=0.041264 Ohm, -Im(Z)=-0.009361 Ohm
+2026-01-13 14:38:30 [INFO] [BIO] Reading EIS value at index 4 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260113_143714_C01.mpr
+2026-01-13 14:38:30 [INFO] [BIO] EIS data: t=5.413 s, f=2155.690 Hz, Re(Z)=0.041267 Ohm, -Im(Z)=-0.006097 Ohm
+2026-01-13 14:38:30 [INFO] [BIO] Reading EIS value at index 5 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260113_143714_C01.mpr
+2026-01-13 14:38:30 [INFO] [BIO] EIS data: t=6.545 s, f=1468.590 Hz, Re(Z)=0.041380 Ohm, -Im(Z)=-0.003790 Ohm
+2026-01-13 14:38:30 [INFO] [BIO] Reading EIS value at index 6 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260113_143714_C01.mpr
+2026-01-13 14:38:30 [INFO] [BIO] EIS data: t=7.677 s, f=1000.320 Hz, Re(Z)=0.041577 Ohm, -Im(Z)=-0.002201 Ohm
+2026-01-13 14:38:30 [INFO] [BIO] Reading EIS value at index 7 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260113_143714_C01.mpr
+2026-01-13 14:38:30 [INFO] [BIO] EIS data: t=8.807 s, f=681.090 Hz, Re(Z)=0.041813 Ohm, -Im(Z)=-0.001050 Ohm
+2026-01-13 14:38:30 [INFO] [BIO] Reading EIS value at index 8 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260113_143714_C01.mpr
+2026-01-13 14:38:30 [INFO] [BIO] EIS data: t=9.939 s, f=463.961 Hz, Re(Z)=0.042092 Ohm, -Im(Z)=-0.000191 Ohm
+2026-01-13 14:38:30 [INFO] [BIO] Reading EIS value at index 9 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260113_143714_C01.mpr
+2026-01-13 14:38:30 [INFO] [BIO] EIS data: t=11.065 s, f=316.316 Hz, Re(Z)=0.042360 Ohm, -Im(Z)=0.000320 Ohm
+2026-01-13 14:38:30 [INFO] [BIO] Reading EIS value at index 10 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260113_143714_C01.mpr
+2026-01-13 14:38:30 [INFO] [BIO] EIS data: t=12.196 s, f=215.345 Hz, Re(Z)=0.042762 Ohm, -Im(Z)=0.000798 Ohm
+2026-01-13 14:38:30 [INFO] [BIO] Reading EIS value at index 11 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260113_143714_C01.mpr
+2026-01-13 14:38:30 [INFO] [BIO] EIS data: t=13.316 s, f=146.737 Hz, Re(Z)=0.043122 Ohm, -Im(Z)=0.001186 Ohm
+2026-01-13 14:38:30 [INFO] [BIO] Reading EIS value at index 12 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260113_143714_C01.mpr
+2026-01-13 14:38:30 [INFO] [BIO] EIS data: t=14.447 s, f=100.032 Hz, Re(Z)=0.043569 Ohm, -Im(Z)=0.001383 Ohm
+2026-01-13 14:38:30 [INFO] [BIO] Reading EIS value at index 13 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260113_143714_C01.mpr
+2026-01-13 14:38:30 [INFO] [BIO] EIS data: t=15.606 s, f=68.104 Hz, Re(Z)=0.044019 Ohm, -Im(Z)=0.001562 Ohm
+2026-01-13 14:38:30 [INFO] [BIO] Reading EIS value at index 14 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260113_143714_C01.mpr
+2026-01-13 14:38:30 [INFO] [BIO] EIS data: t=16.706 s, f=46.442 Hz, Re(Z)=0.044463 Ohm, -Im(Z)=0.001741 Ohm
+2026-01-13 14:38:30 [INFO] [BIO] Reading EIS value at index 15 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260113_143714_C01.mpr
+2026-01-13 14:38:30 [INFO] [BIO] EIS data: t=17.787 s, f=31.630 Hz, Re(Z)=0.044868 Ohm, -Im(Z)=0.001761 Ohm
+2026-01-13 14:38:30 [INFO] [BIO] Reading EIS value at index 16 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260113_143714_C01.mpr
+2026-01-13 14:38:30 [INFO] [BIO] EIS data: t=18.847 s, f=21.552 Hz, Re(Z)=0.045293 Ohm, -Im(Z)=0.002002 Ohm
+2026-01-13 14:38:30 [INFO] [BIO] Reading EIS value at index 17 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260113_143714_C01.mpr
+2026-01-13 14:38:30 [INFO] [BIO] EIS data: t=19.999 s, f=14.685 Hz, Re(Z)=0.045702 Ohm, -Im(Z)=0.002138 Ohm
+2026-01-13 14:38:30 [INFO] [BIO] Reading EIS value at index 18 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260113_143714_C01.mpr
+2026-01-13 14:38:30 [INFO] [BIO] EIS data: t=71.403 s, f=9.973 Hz, Re(Z)=0.046203 Ohm, -Im(Z)=0.002399 Ohm
+2026-01-13 14:38:30 [INFO] [BIO] Reading EIS value at index 19 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260113_143714_C01.mpr
+2026-01-13 14:38:30 [INFO] [BIO] EIS data: t=71.403 s, f=6.782 Hz, Re(Z)=0.046779 Ohm, -Im(Z)=0.002723 Ohm
+2026-01-13 14:38:30 [INFO] [BIO] Reading EIS value at index 20 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260113_143714_C01.mpr
+2026-01-13 14:38:30 [INFO] [BIO] EIS data: t=71.403 s, f=4.687 Hz, Re(Z)=0.047433 Ohm, -Im(Z)=0.003070 Ohm
+2026-01-13 14:38:30 [INFO] [BIO] Reading EIS value at index 21 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260113_143714_C01.mpr
+2026-01-13 14:38:30 [INFO] [BIO] EIS data: t=71.403 s, f=3.191 Hz, Re(Z)=0.048235 Ohm, -Im(Z)=0.003431 Ohm
+2026-01-13 14:38:30 [INFO] [BIO] Reading EIS value at index 22 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260113_143714_C01.mpr
+2026-01-13 14:38:30 [INFO] [BIO] EIS data: t=71.403 s, f=2.194 Hz, Re(Z)=0.049113 Ohm, -Im(Z)=0.003767 Ohm
+2026-01-13 14:38:30 [INFO] [BIO] Reading EIS value at index 23 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260113_143714_C01.mpr
+2026-01-13 14:38:30 [INFO] [BIO] EIS data: t=71.403 s, f=1.496 Hz, Re(Z)=0.050076 Ohm, -Im(Z)=0.004076 Ohm
+2026-01-13 14:38:30 [INFO] [BIO] Reading EIS value at index 24 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260113_143714_C01.mpr
+2026-01-13 14:38:30 [INFO] [BIO] EIS data: t=71.403 s, f=0.997 Hz, Re(Z)=0.051131 Ohm, -Im(Z)=0.004339 Ohm
+2026-01-13 14:38:30 [INFO] [BIO] Reading EIS value at index 25 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260113_143714_C01.mpr
+2026-01-13 14:38:30 [INFO] [BIO] EIS data: t=71.404 s, f=0.698 Hz, Re(Z)=0.052075 Ohm, -Im(Z)=0.004663 Ohm
+2026-01-13 14:38:30 [INFO] [BIO] Reading EIS value at index 26 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260113_143714_C01.mpr
+2026-01-13 14:38:30 [INFO] [BIO] EIS data: t=71.404 s, f=0.499 Hz, Re(Z)=0.052897 Ohm, -Im(Z)=0.005006 Ohm
+2026-01-13 14:38:30 [INFO] [BIO] Reading EIS value at index 27 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260113_143714_C01.mpr
+2026-01-13 14:38:30 [INFO] [BIO] EIS data: t=71.404 s, f=0.299 Hz, Re(Z)=0.054272 Ohm, -Im(Z)=0.005684 Ohm
+2026-01-13 14:38:30 [INFO] [BIO] Reading EIS value at index 28 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260113_143714_C01.mpr
+2026-01-13 14:38:30 [INFO] [BIO] EIS data: t=71.404 s, f=0.199 Hz, Re(Z)=0.055331 Ohm, -Im(Z)=0.006695 Ohm
+2026-01-13 14:38:30 [INFO] [BIO] Reading EIS value at index 29 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260113_143714_C01.mpr
+2026-01-13 14:38:30 [INFO] [BIO] EIS data: t=71.404 s, f=0.100 Hz, Re(Z)=0.057060 Ohm, -Im(Z)=0.009082 Ohm
+2026-01-13 14:38:30 [INFO] [BIO] Successfully converted 30 data points
+2026-01-13 14:38:30 [INFO] [BIO] GEIS measurement completed successfully
+2026-01-13 14:38:30 [INFO] EIS measurement 1 completed at 0.0% SOC (OCV: 2.717 V)
+2026-01-13 14:38:30 [INFO] Starting Phase 3 charging with EIS measurements...
+2026-01-13 14:38:30 [INFO] Switching to PSB...
+2026-01-13 14:38:30 [INFO] [PSB] Setting output: OFF
+2026-01-13 14:38:31 [INFO] Successfully switched to PSB
+2026-01-13 14:38:31 [INFO] === DIAGNOSTIC: Starting PSB configuration for Phase 3 charging ===
+2026-01-13 14:38:31 [INFO] DIAGNOSTIC: Target voltage=4.200V, current limit=3.300A, power limit=0.0W
+2026-01-13 14:38:31 [INFO] DIAGNOSTIC: [0/4] RESTORING sink decoy values for proper CV mode selection
+2026-01-13 14:38:31 [INFO] [PSB] >>> QUEUE: Executing command SET_SINK_POWER (type 13)
+2026-01-13 14:38:31 [INFO] [PSB] *** WRITING REG 498 (SINK_MODE_POWER): 100.00W (0x1110) - MAY ENTER SINK CP MODE ***
+2026-01-13 14:38:31 [INFO] [PSB] Write to REG 498 completed with result: 0
+2026-01-13 14:38:31 [INFO] DIAGNOSTIC: REG 498 (SINK_MODE_POWER) restored to 100.0 W (decoy)
+2026-01-13 14:38:32 [INFO] [PSB] >>> QUEUE: Executing command SET_SINK_CURRENT (type 12)
+2026-01-13 14:38:32 [INFO] [PSB] *** WRITING REG 499 (SINK_MODE_CURRENT): 10.00A (0x2221) - MAY ENTER SINK CC MODE ***
+2026-01-13 14:38:32 [INFO] [PSB] Write to REG 499 completed with result: 0
+2026-01-13 14:38:32 [INFO] DIAGNOSTIC: REG 499 (SINK_MODE_CURRENT) restored to 10.0 A (decoy)
+2026-01-13 14:38:32 [INFO] DIAGNOSTIC: Sink decoy values restored - now configuring charging
+2026-01-13 14:38:32 [INFO] DIAGNOSTIC: [1/4] Setting current LIMIT to 3.300 A (REG 9002, NOT REG 501)
+2026-01-13 14:38:32 [INFO] [PSB] Setting min current: 0.00A
+2026-01-13 14:38:32 [INFO] [PSB] Setting max current: 3.30A
+2026-01-13 14:38:32 [INFO] DIAGNOSTIC: Current limit set via REG 9002, REG 501 remains at 0.0A
+2026-01-13 14:38:32 [INFO] DIAGNOSTIC: [2/4] Setting power LIMIT to 0.0 W (REG 9004)
+2026-01-13 14:38:32 [INFO] [PSB] Setting max power: 30.00W
+2026-01-13 14:38:32 [INFO] DIAGNOSTIC: Power limit command completed
+2026-01-13 14:38:33 [INFO] DIAGNOSTIC: [3/4] Setting voltage SETPOINT to 4.200 V (REG 500) - THIS SHOULD ENTER CV MODE
+2026-01-13 14:38:33 [INFO] [PSB] >>> QUEUE: Executing command SET_VOLTAGE (type 3)
+2026-01-13 14:38:33 [INFO] [PSB] *** WRITING REG 500 (SET_VOLTAGE): 4.20V (0x0E55) - WILL ENTER CV MODE ***
+2026-01-13 14:38:33 [INFO] [PSB] Write to REG 500 completed with result: 0
+2026-01-13 14:38:33 [INFO] DIAGNOSTIC: Voltage setpoint command completed
+2026-01-13 14:38:33 [INFO] DIAGNOSTIC: [4/4] Verifying all setpoint registers before output enable
+2026-01-13 14:38:33 [INFO] [PSB] 
+2026-01-13 14:38:33 [INFO] [PSB] ======================================================
+2026-01-13 14:38:33 [INFO] [PSB] PSB COMPLETE REGISTER DUMP: After Phase 3 charging configuration (zero-current approach)
+2026-01-13 14:38:33 [INFO] [PSB] ======================================================
+2026-01-13 14:38:33 [INFO] [PSB] SETPOINT REGISTERS:
+2026-01-13 14:38:33 [INFO] [PSB] -------------------
+2026-01-13 14:38:34 [ERROR] [PSB] Timeout - read 0 of 5 bytes
+2026-01-13 14:38:34 [INFO] [PSB]   REG 498 (SINK_MODE_POWER):       [ERROR] -999.00 W (read failed)
+2026-01-13 14:38:34 [INFO] [PSB]   REG 499 (SINK_MODE_CURRENT):     10.20 A
+2026-01-13 14:38:34 [INFO] [PSB]   REG 500 (SET_VOLTAGE):           4.28 V
+2026-01-13 14:38:34 [INFO] [PSB]   REG 501 (SET_CURRENT):           0.00 A
+2026-01-13 14:38:34 [INFO] [PSB]   REG 502 (SET_POWER_SOURCE):      0.00 W
+2026-01-13 14:38:34 [INFO] [PSB] 
+2026-01-13 14:38:34 [INFO] [PSB] LIMIT REGISTERS:
+2026-01-13 14:38:34 [INFO] [PSB] ----------------
+2026-01-13 14:38:35 [INFO] [PSB]   REG 9000 (VOLTAGE_MAX):          62.42 V
+2026-01-13 14:38:35 [INFO] [PSB]   REG 9001 (VOLTAGE_MIN):          0.00 V
+2026-01-13 14:38:35 [INFO] [PSB]   REG 9002 (CURRENT_MAX/SRC):      3.37 A
+2026-01-13 14:38:35 [INFO] [PSB]   REG 9003 (CURRENT_MIN/SRC):      0.00 A
+2026-01-13 14:38:36 [ERROR] [PSB] Timeout - read 7 of 9 bytes
+2026-01-13 14:38:36 [ERROR] [PSB] Failed to get PSB status: Timeout error
+2026-01-13 14:38:36 [ERROR] [PSB] Timeout - read 0 of 5 bytes
+2026-01-13 14:38:36 [INFO] [PSB]   REG 9004 (POWER_MAX/SRC):        [ERROR] -999.00 W (read failed)
+2026-01-13 14:38:36 [INFO] [PSB]   REG 9005 (SINK_POWER_MAX):       1248.47 W
+2026-01-13 14:38:36 [INFO] [PSB]   REG 9008 (SINK_CURRENT_MAX):     62.42 A
+2026-01-13 14:38:36 [INFO] [PSB]   REG 9009 (SINK_CURRENT_MIN):     0.00 A
+2026-01-13 14:38:36 [INFO] [PSB] 
+2026-01-13 14:38:36 [INFO] [PSB] DEVICE STATE:
+2026-01-13 14:38:36 [INFO] [PSB] -------------
+2026-01-13 14:38:36 [INFO] [PSB]   REG 505 (DEVICE_STATE):          0x00004803
+2026-01-13 14:38:36 [INFO] [PSB]     Regulation Mode:               CV (SOURCE mode)
+2026-01-13 14:38:36 [INFO] [PSB]     Output Enabled:                NO
+2026-01-13 14:38:36 [INFO] [PSB]     Remote Mode:                   YES
+2026-01-13 14:38:36 [INFO] [PSB]     Control Location:              3
+2026-01-13 14:38:36 [INFO] [PSB] 
+2026-01-13 14:38:36 [INFO] [PSB] ACTUAL VALUES:
+2026-01-13 14:38:36 [INFO] [PSB] --------------
+2026-01-13 14:38:36 [INFO] [PSB]   Voltage:                         2.717 V
+2026-01-13 14:38:36 [INFO] [PSB]   Current:                         0.000 A
+2026-01-13 14:38:36 [INFO] [PSB]   Power:                           0.00 W
+2026-01-13 14:38:36 [INFO] [PSB] ======================================================
+2026-01-13 14:38:36 [INFO] [PSB] 
+2026-01-13 14:38:37 [INFO] DIAGNOSTIC: PSB status after configuration:
+2026-01-13 14:38:37 [INFO]   - Regulation Mode: 0 = CV (Constant Voltage)
+2026-01-13 14:38:37 [INFO]   - Output Enabled: 0
+2026-01-13 14:38:37 [INFO]   - Remote Mode: 1
+2026-01-13 14:38:37 [INFO]   - Actual V=2.717V, I=0.000A, P=0.000W
+2026-01-13 14:38:37 [INFO]   - Raw State: 0x00004803
+2026-01-13 14:38:37 [INFO] DIAGNOSTIC: PSB correctly in CV mode
+2026-01-13 14:38:37 [INFO] DIAGNOSTIC: Enabling PSB output
+2026-01-13 14:38:37 [INFO] [PSB] Setting output: ON
+2026-01-13 14:38:37 [INFO] Waiting for PSB output to stabilize...
+2026-01-13 14:38:39 [INFO] ==========================================================
+2026-01-13 14:38:39 [INFO] CRITICAL DIAGNOSTIC: After output enable + stabilization:
+2026-01-13 14:38:39 [INFO] ==========================================================
+2026-01-13 14:38:39 [INFO]   PSB Mode: CP (SOURCE mode)
+2026-01-13 14:38:39 [INFO]   Voltage: 2.715 V (target: 4.200 V)
+2026-01-13 14:38:39 [INFO]   Current: 0.000 A
+2026-01-13 14:38:39 [INFO]   Power: 0.00 W
+2026-01-13 14:38:39 [INFO]   Device State (raw): 0x00004E83
+2026-01-13 14:38:39 [INFO]   Output Enabled: YES
+2026-01-13 14:38:39 [INFO] ==========================================================
+2026-01-13 14:38:39 [ERROR] MODE SWITCHING DETECTED AFTER OUTPUT ENABLE!
+2026-01-13 14:38:39 [ERROR]   Expected: CV mode, Actual: CP SOURCE mode
+2026-01-13 14:38:39 [ERROR]   This indicates the root cause of the charging failure!
+2026-01-13 14:38:39 [INFO] === DIAGNOSTIC: PSB configuration complete ===
+2026-01-13 14:38:39 [INFO] Phase 3 charging started with EIS interruptions at 10.0% SOC intervals
+2026-01-13 14:38:43 [INFO] Phase 3 charging completed - current below threshold for 5 consecutive readings
+2026-01-13 14:38:43 [INFO] Final SOC: 0.0%, Final current: 0.000 A
+2026-01-13 14:38:43 [INFO] [PSB] Setting output: OFF
+2026-01-13 14:38:43 [INFO] Taking final EIS measurement at 0.0% SOC
+2026-01-13 14:38:43 [INFO] Added dynamic EIS target: 0.0% SOC
+2026-01-13 14:38:50 [INFO] Waiting 60 seconds for battery relaxation before EIS measurement...
+2026-01-13 14:39:56 [INFO] Switching to BioLogic...
+2026-01-13 14:39:56 [INFO] [PSB] Setting output: OFF
+2026-01-13 14:39:57 [INFO] Successfully switched to BioLogic
+2026-01-13 14:39:57 [INFO] [BIO] Starting OCV measurement via EC-Lab
+2026-01-13 14:39:57 [INFO] [BIO]   Settings: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_settings\ocv_default.mps
+2026-01-13 14:39:57 [INFO] [BIO]   Output: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260113_143957_C01.mpr
+2026-01-13 14:39:57 [INFO] [BIO] Loading settings from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_settings\ocv_default.mps
+2026-01-13 14:39:57 [INFO] [BIO] Settings loaded successfully
+2026-01-13 14:39:57 [INFO] [BIO] Starting measurement, output: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260113_143957_C01.mpr
+2026-01-13 14:39:57 [INFO] [BIO] Measurement started
+2026-01-13 14:39:57 [INFO] [BIO] Monitoring measurement (timeout: 60000 ms)
+2026-01-13 14:39:57 [INFO] [BIO] Status: 0, Technique: 11, Time: 71.4 s, Points: 31
+2026-01-13 14:40:01 [INFO] [BIO] Measurement started running
+2026-01-13 14:40:03 [INFO] [BIO] Status: 1, Technique: 11, Time: 2.3 s, Points: 31
+2026-01-13 14:40:08 [INFO] [BIO] Status: 1, Technique: 11, Time: 7.6 s, Points: 31
+2026-01-13 14:40:11 [INFO] [BIO] Measurement completed (10.0 s, 31 points)
+2026-01-13 14:40:12 [INFO] [BIO] Converting .mpr file to BIO_TechniqueData: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260113_143957_C01.mpr
+2026-01-13 14:40:12 [INFO] [BIO] Reading number of points from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260113_143957_C01.mpr
+2026-01-13 14:40:12 [INFO] [BIO] File contains 10 data points
+2026-01-13 14:40:12 [INFO] [BIO] Reading 10 data points from .mpr file
+2026-01-13 14:40:12 [INFO] [BIO] Reading DC value at index 0 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260113_143957_C01.mpr
+2026-01-13 14:40:12 [INFO] [BIO] DC data: t=1.000 s, V=2.715970 V, I=0.000000 mA
+2026-01-13 14:40:12 [INFO] [BIO] Reading DC value at index 1 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260113_143957_C01.mpr
+2026-01-13 14:40:12 [INFO] [BIO] DC data: t=2.000 s, V=2.715872 V, I=0.000000 mA
+2026-01-13 14:40:12 [INFO] [BIO] Reading DC value at index 2 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260113_143957_C01.mpr
+2026-01-13 14:40:12 [INFO] [BIO] DC data: t=3.000 s, V=2.715861 V, I=0.000000 mA
+2026-01-13 14:40:12 [INFO] [BIO] Reading DC value at index 3 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260113_143957_C01.mpr
+2026-01-13 14:40:12 [INFO] [BIO] DC data: t=4.000 s, V=2.715855 V, I=0.000000 mA
+2026-01-13 14:40:12 [INFO] [BIO] Reading DC value at index 4 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260113_143957_C01.mpr
+2026-01-13 14:40:12 [INFO] [BIO] DC data: t=5.000 s, V=2.715856 V, I=0.000000 mA
+2026-01-13 14:40:12 [INFO] [BIO] Reading DC value at index 5 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260113_143957_C01.mpr
+2026-01-13 14:40:12 [INFO] [BIO] DC data: t=6.000 s, V=2.715859 V, I=0.000000 mA
+2026-01-13 14:40:12 [INFO] [BIO] Reading DC value at index 6 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260113_143957_C01.mpr
+2026-01-13 14:40:12 [INFO] [BIO] DC data: t=7.000 s, V=2.715862 V, I=0.000000 mA
+2026-01-13 14:40:12 [INFO] [BIO] Reading DC value at index 7 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260113_143957_C01.mpr
+2026-01-13 14:40:12 [INFO] [BIO] DC data: t=8.000 s, V=2.715860 V, I=0.000000 mA
+2026-01-13 14:40:12 [INFO] [BIO] Reading DC value at index 8 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260113_143957_C01.mpr
+2026-01-13 14:40:12 [INFO] [BIO] DC data: t=9.000 s, V=2.715857 V, I=0.000000 mA
+2026-01-13 14:40:12 [INFO] [BIO] Reading DC value at index 9 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\ocv_20260113_143957_C01.mpr
+2026-01-13 14:40:12 [INFO] [BIO] DC data: t=10.000 s, V=2.715860 V, I=0.000000 mA
+2026-01-13 14:40:12 [INFO] [BIO] Successfully converted 10 data points
+2026-01-13 14:40:12 [INFO] [BIO] OCV measurement completed successfully
+2026-01-13 14:40:12 [INFO] [BIO] Starting GEIS measurement via EC-Lab
+2026-01-13 14:40:12 [INFO] [BIO]   Settings: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_settings\geis_default.mps
+2026-01-13 14:40:12 [INFO] [BIO]   Output: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260113_144012_C01.mpr
+2026-01-13 14:40:12 [INFO] [BIO] Loading settings from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_settings\geis_default.mps
+2026-01-13 14:40:12 [INFO] [BIO] Settings loaded successfully
+2026-01-13 14:40:12 [INFO] [BIO] Starting measurement, output: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260113_144012_C01.mpr
+2026-01-13 14:40:12 [INFO] [BIO] Measurement started
+2026-01-13 14:40:12 [INFO] [BIO] Monitoring measurement (timeout: 300000 ms)
+2026-01-13 14:40:12 [INFO] [BIO] Status: 0, Technique: 30, Time: 10.0 s, Points: 31
+2026-01-13 14:40:15 [INFO] [BIO] Measurement started running
+2026-01-13 14:40:18 [INFO] [BIO] Status: 1, Technique: 30, Time: 2.5 s, Points: 31
+2026-01-13 14:40:23 [INFO] [BIO] Status: 1, Technique: 30, Time: 7.9 s, Points: 31
+2026-01-13 14:40:28 [INFO] [BIO] Status: 1, Technique: 30, Time: 13.2 s, Points: 31
+2026-01-13 14:40:34 [INFO] [BIO] Status: 1, Technique: 30, Time: 18.5 s, Points: 31
+2026-01-13 14:40:39 [INFO] [BIO] Status: 1, Technique: 30, Time: 23.8 s, Points: 31
+2026-01-13 14:40:44 [INFO] [BIO] Status: 1, Technique: 30, Time: 29.1 s, Points: 31
+2026-01-13 14:40:49 [INFO] [BIO] Status: 1, Technique: 30, Time: 34.4 s, Points: 31
+2026-01-13 14:40:55 [INFO] [BIO] Status: 1, Technique: 30, Time: 39.7 s, Points: 31
+2026-01-13 14:41:00 [INFO] [BIO] Status: 1, Technique: 30, Time: 45.0 s, Points: 31
+2026-01-13 14:41:05 [INFO] [BIO] Status: 1, Technique: 30, Time: 50.3 s, Points: 31
+2026-01-13 14:41:11 [INFO] [BIO] Status: 1, Technique: 30, Time: 55.6 s, Points: 31
+2026-01-13 14:41:16 [INFO] [BIO] Status: 1, Technique: 30, Time: 60.9 s, Points: 31
+2026-01-13 14:41:21 [INFO] [BIO] Status: 1, Technique: 30, Time: 66.2 s, Points: 31
+2026-01-13 14:41:27 [INFO] [BIO] Status: 5, Technique: 30, Time: 71.4 s, Points: 31
+2026-01-13 14:41:27 [INFO] [BIO] Measurement completed (71.4 s, 31 points)
+2026-01-13 14:41:28 [INFO] [BIO] Converting .mpr file to BIO_TechniqueData: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260113_144012_C01.mpr
+2026-01-13 14:41:28 [INFO] [BIO] Reading number of points from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260113_144012_C01.mpr
+2026-01-13 14:41:28 [INFO] [BIO] File contains 30 data points
+2026-01-13 14:41:28 [INFO] [BIO] Reading 30 data points from .mpr file
+2026-01-13 14:41:28 [INFO] [BIO] Reading EIS value at index 0 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260113_144012_C01.mpr
+2026-01-13 14:41:28 [INFO] [BIO] EIS data: t=1.122 s, f=10002.226 Hz, Re(Z)=0.042453 Ohm, -Im(Z)=-0.030216 Ohm
+2026-01-13 14:41:28 [INFO] [BIO] Reading EIS value at index 1 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260113_144012_C01.mpr
+2026-01-13 14:41:28 [INFO] [BIO] EIS data: t=2.017 s, f=6811.067 Hz, Re(Z)=0.041786 Ohm, -Im(Z)=-0.020730 Ohm
+2026-01-13 14:41:28 [INFO] [BIO] Reading EIS value at index 2 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260113_144012_C01.mpr
+2026-01-13 14:41:28 [INFO] [BIO] EIS data: t=3.148 s, f=4641.485 Hz, Re(Z)=0.041413 Ohm, -Im(Z)=-0.014059 Ohm
+2026-01-13 14:41:28 [INFO] [BIO] Reading EIS value at index 3 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260113_144012_C01.mpr
+2026-01-13 14:41:28 [INFO] [BIO] EIS data: t=4.280 s, f=3161.012 Hz, Re(Z)=0.041274 Ohm, -Im(Z)=-0.009423 Ohm
+2026-01-13 14:41:28 [INFO] [BIO] Reading EIS value at index 4 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260113_144012_C01.mpr
+2026-01-13 14:41:28 [INFO] [BIO] EIS data: t=5.411 s, f=2155.690 Hz, Re(Z)=0.041277 Ohm, -Im(Z)=-0.006088 Ohm
+2026-01-13 14:41:28 [INFO] [BIO] Reading EIS value at index 5 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260113_144012_C01.mpr
+2026-01-13 14:41:28 [INFO] [BIO] EIS data: t=6.543 s, f=1468.590 Hz, Re(Z)=0.041363 Ohm, -Im(Z)=-0.003828 Ohm
+2026-01-13 14:41:28 [INFO] [BIO] Reading EIS value at index 6 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260113_144012_C01.mpr
+2026-01-13 14:41:28 [INFO] [BIO] EIS data: t=7.675 s, f=1000.320 Hz, Re(Z)=0.041585 Ohm, -Im(Z)=-0.002194 Ohm
+2026-01-13 14:41:28 [INFO] [BIO] Reading EIS value at index 7 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260113_144012_C01.mpr
+2026-01-13 14:41:28 [INFO] [BIO] EIS data: t=8.805 s, f=681.090 Hz, Re(Z)=0.041809 Ohm, -Im(Z)=-0.001044 Ohm
+2026-01-13 14:41:28 [INFO] [BIO] Reading EIS value at index 8 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260113_144012_C01.mpr
+2026-01-13 14:41:28 [INFO] [BIO] EIS data: t=9.937 s, f=463.961 Hz, Re(Z)=0.042081 Ohm, -Im(Z)=-0.000209 Ohm
+2026-01-13 14:41:28 [INFO] [BIO] Reading EIS value at index 9 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260113_144012_C01.mpr
+2026-01-13 14:41:28 [INFO] [BIO] EIS data: t=11.063 s, f=316.316 Hz, Re(Z)=0.042417 Ohm, -Im(Z)=0.000351 Ohm
+2026-01-13 14:41:28 [INFO] [BIO] Reading EIS value at index 10 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260113_144012_C01.mpr
+2026-01-13 14:41:28 [INFO] [BIO] EIS data: t=12.194 s, f=215.345 Hz, Re(Z)=0.042741 Ohm, -Im(Z)=0.000826 Ohm
+2026-01-13 14:41:28 [INFO] [BIO] Reading EIS value at index 11 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260113_144012_C01.mpr
+2026-01-13 14:41:28 [INFO] [BIO] EIS data: t=13.314 s, f=146.737 Hz, Re(Z)=0.043152 Ohm, -Im(Z)=0.001124 Ohm
+2026-01-13 14:41:28 [INFO] [BIO] Reading EIS value at index 12 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260113_144012_C01.mpr
+2026-01-13 14:41:28 [INFO] [BIO] EIS data: t=14.445 s, f=100.032 Hz, Re(Z)=0.043559 Ohm, -Im(Z)=0.001367 Ohm
+2026-01-13 14:41:28 [INFO] [BIO] Reading EIS value at index 13 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260113_144012_C01.mpr
+2026-01-13 14:41:28 [INFO] [BIO] EIS data: t=15.603 s, f=68.104 Hz, Re(Z)=0.044003 Ohm, -Im(Z)=0.001578 Ohm
+2026-01-13 14:41:28 [INFO] [BIO] Reading EIS value at index 14 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260113_144012_C01.mpr
+2026-01-13 14:41:28 [INFO] [BIO] EIS data: t=16.703 s, f=46.442 Hz, Re(Z)=0.044449 Ohm, -Im(Z)=0.001741 Ohm
+2026-01-13 14:41:28 [INFO] [BIO] Reading EIS value at index 15 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260113_144012_C01.mpr
+2026-01-13 14:41:28 [INFO] [BIO] EIS data: t=17.784 s, f=31.630 Hz, Re(Z)=0.044814 Ohm, -Im(Z)=0.001790 Ohm
+2026-01-13 14:41:28 [INFO] [BIO] Reading EIS value at index 16 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260113_144012_C01.mpr
+2026-01-13 14:41:28 [INFO] [BIO] EIS data: t=18.845 s, f=21.552 Hz, Re(Z)=0.045262 Ohm, -Im(Z)=0.001916 Ohm
+2026-01-13 14:41:28 [INFO] [BIO] Reading EIS value at index 17 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260113_144012_C01.mpr
+2026-01-13 14:41:28 [INFO] [BIO] EIS data: t=19.997 s, f=14.685 Hz, Re(Z)=0.045698 Ohm, -Im(Z)=0.002117 Ohm
+2026-01-13 14:41:28 [INFO] [BIO] Reading EIS value at index 18 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260113_144012_C01.mpr
+2026-01-13 14:41:28 [INFO] [BIO] EIS data: t=71.401 s, f=9.973 Hz, Re(Z)=0.046208 Ohm, -Im(Z)=0.002398 Ohm
+2026-01-13 14:41:28 [INFO] [BIO] Reading EIS value at index 19 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260113_144012_C01.mpr
+2026-01-13 14:41:28 [INFO] [BIO] EIS data: t=71.402 s, f=6.782 Hz, Re(Z)=0.046769 Ohm, -Im(Z)=0.002717 Ohm
+2026-01-13 14:41:28 [INFO] [BIO] Reading EIS value at index 20 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260113_144012_C01.mpr
+2026-01-13 14:41:28 [INFO] [BIO] EIS data: t=71.402 s, f=4.687 Hz, Re(Z)=0.047433 Ohm, -Im(Z)=0.003051 Ohm
+2026-01-13 14:41:28 [INFO] [BIO] Reading EIS value at index 21 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260113_144012_C01.mpr
+2026-01-13 14:41:28 [INFO] [BIO] EIS data: t=71.402 s, f=3.191 Hz, Re(Z)=0.048226 Ohm, -Im(Z)=0.003416 Ohm
+2026-01-13 14:41:28 [INFO] [BIO] Reading EIS value at index 22 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260113_144012_C01.mpr
+2026-01-13 14:41:28 [INFO] [BIO] EIS data: t=71.403 s, f=2.194 Hz, Re(Z)=0.049107 Ohm, -Im(Z)=0.003756 Ohm
+2026-01-13 14:41:28 [INFO] [BIO] Reading EIS value at index 23 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260113_144012_C01.mpr
+2026-01-13 14:41:28 [INFO] [BIO] EIS data: t=71.403 s, f=1.496 Hz, Re(Z)=0.050056 Ohm, -Im(Z)=0.004065 Ohm
+2026-01-13 14:41:28 [INFO] [BIO] Reading EIS value at index 24 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260113_144012_C01.mpr
+2026-01-13 14:41:28 [INFO] [BIO] EIS data: t=71.404 s, f=0.997 Hz, Re(Z)=0.051110 Ohm, -Im(Z)=0.004314 Ohm
+2026-01-13 14:41:28 [INFO] [BIO] Reading EIS value at index 25 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260113_144012_C01.mpr
+2026-01-13 14:41:28 [INFO] [BIO] EIS data: t=71.404 s, f=0.698 Hz, Re(Z)=0.052039 Ohm, -Im(Z)=0.004645 Ohm
+2026-01-13 14:41:28 [INFO] [BIO] Reading EIS value at index 26 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260113_144012_C01.mpr
+2026-01-13 14:41:28 [INFO] [BIO] EIS data: t=71.405 s, f=0.499 Hz, Re(Z)=0.052866 Ohm, -Im(Z)=0.004988 Ohm
+2026-01-13 14:41:28 [INFO] [BIO] Reading EIS value at index 27 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260113_144012_C01.mpr
+2026-01-13 14:41:28 [INFO] [BIO] EIS data: t=71.405 s, f=0.299 Hz, Re(Z)=0.054240 Ohm, -Im(Z)=0.005677 Ohm
+2026-01-13 14:41:28 [INFO] [BIO] Reading EIS value at index 28 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260113_144012_C01.mpr
+2026-01-13 14:41:28 [INFO] [BIO] EIS data: t=71.406 s, f=0.199 Hz, Re(Z)=0.055295 Ohm, -Im(Z)=0.006687 Ohm
+2026-01-13 14:41:28 [INFO] [BIO] Reading EIS value at index 29 from: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data\geis_20260113_144012_C01.mpr
+2026-01-13 14:41:28 [INFO] [BIO] EIS data: t=71.406 s, f=0.100 Hz, Re(Z)=0.057015 Ohm, -Im(Z)=0.009086 Ohm
+2026-01-13 14:41:28 [INFO] [BIO] Successfully converted 30 data points
+2026-01-13 14:41:28 [INFO] [BIO] GEIS measurement completed successfully
+2026-01-13 14:41:28 [INFO] EIS measurement 2 completed at 0.0% SOC (OCV: 2.716 V)
+2026-01-13 14:41:28 [INFO] [PSB] Setting output: OFF
+2026-01-13 14:41:28 [INFO] Waiting 60 seconds for battery relaxation after charge...
+2026-01-13 14:42:34 [INFO] OCV vs SOC data written to: c:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\data\baseline_20260113_142924\phase_3\ocv_vs_soc.csv
+2026-01-13 14:42:34 [INFO] Phase 3 completed successfully
+2026-01-13 14:42:34 [INFO] === PHASE 4: Discharge to 50% Capacity ===
+2026-01-13 14:42:34 [INFO] === Phase 4: Discharging battery to 50% capacity ===
+2026-01-13 14:42:34 [INFO] Target discharge: 500.00 mAh (50% of 1000.00 mAh usable capacity)
+2026-01-13 14:42:34 [INFO] Switching to PSB...
+2026-01-13 14:42:34 [INFO] [PSB] Setting output: OFF
+2026-01-13 14:42:35 [INFO] Successfully switched to PSB
+2026-01-13 14:42:35 [INFO] Starting discharge of 500.00 mAh at 5.00 A
+2026-01-13 14:42:35 [INFO] [PSB] >>> QUEUE: Executing command SET_VOLTAGE (type 3)
+2026-01-13 14:42:35 [INFO] [PSB] *** WRITING REG 500 (SET_VOLTAGE): 2.70V (0x0937) - WILL ENTER CV MODE ***
+2026-01-13 14:42:35 [INFO] [PSB] Write to REG 500 completed with result: 0
+2026-01-13 14:42:36 [INFO] [PSB] >>> QUEUE: Executing command SET_POWER (type 5)
+2026-01-13 14:42:36 [INFO] [PSB] *** WRITING REG 502 (SET_POWER): 30.00W (0x051E) - WILL ENTER CP MODE ***
+2026-01-13 14:42:36 [INFO] [PSB] Write to REG 502 completed with result: 0
+2026-01-13 14:42:36 [INFO] [PSB] >>> QUEUE: Executing command SET_SINK_POWER (type 13)
+2026-01-13 14:42:36 [INFO] [PSB] *** WRITING REG 498 (SINK_MODE_POWER): 30.00W (0x051E) - MAY ENTER SINK CP MODE ***
+2026-01-13 14:42:36 [INFO] [PSB] Write to REG 498 completed with result: 0
+2026-01-13 14:42:36 [INFO] [PSB] >>> QUEUE: Executing command SET_SINK_CURRENT (type 12)
+2026-01-13 14:42:36 [INFO] [PSB] *** WRITING REG 499 (SINK_MODE_CURRENT): 5.00A (0x1110) - MAY ENTER SINK CC MODE ***
+2026-01-13 14:42:36 [INFO] [PSB] Write to REG 499 completed with result: 0
+2026-01-13 14:42:36 [INFO] [PSB] Setting output: ON
+2026-01-13 14:42:36 [INFO] Waiting for output to stabilize...
+2026-01-13 14:42:44 [INFO] discharge stopped - current below threshold (0.140 A < 0.250 A)
+2026-01-13 14:42:44 [INFO] [PSB] Setting output: OFF
+2026-01-13 14:42:44 [INFO] Discharge complete: 0.00 mAh in 0.1 minutes
+2026-01-13 14:42:44 [WARN] Phase 4 incomplete - failed to discharge to exactly 50% of usable capacity
+2026-01-13 14:42:44 [INFO]   Discharged: 0.00 mAh (target: 500.00 mAh)
+2026-01-13 14:42:44 [INFO]   Percentage of usable capacity: 0.0%
+2026-01-13 14:42:44 [INFO] Phase 4 completed
+2026-01-13 14:42:44 [INFO] === BASELINE EXPERIMENT COMPLETED SUCCESSFULLY ===
+2026-01-13 14:42:44 [INFO] Total experiment time: 0.2 hours
+2026-01-13 14:42:44 [INFO] Comprehensive results written to: c:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\data\baseline_20260113_142924\summary.txt
+2026-01-13 14:42:44 [INFO] Cleaning up baseline experiment...
+2026-01-13 14:42:44 [INFO] Safely disconnecting all devices...
+2026-01-13 14:42:44 [INFO] [PSB] Setting output: OFF
+2026-01-13 14:42:44 [INFO] [DTB] Setting run/stop to STOP for all 2 DTB devices...
+2026-01-13 14:42:45 [INFO] [DTB] Setting Run/Stop: STOP
+2026-01-13 14:42:46 [INFO] [DTB] Setting Run/Stop: STOP
+2026-01-13 14:42:46 [INFO] [DTB] Successfully set run/stop for all DTB devices
+2026-01-13 14:42:46 [INFO] Device disconnect completed
+2026-01-13 14:42:46 [INFO] Baseline experiment cleanup completed
+2026-01-13 15:02:52 [INFO] ========================================
+2026-01-13 15:02:52 [INFO] Shutting down Battery Tester application
+2026-01-13 15:02:52 [INFO] ========================================
+2026-01-13 15:02:52 [INFO] [TNY] Setting 2 pins
+2026-01-13 15:02:52 [INFO] Stopping status monitoring...
+2026-01-13 15:02:52 [INFO] Stopping device status monitoring...
+2026-01-13 15:02:52 [INFO] Status module state: RUNNING -> STOPPING
+2026-01-13 15:02:52 [INFO] Status timer thread stopped
+2026-01-13 15:02:52 [INFO] Status module state: STOPPING -> STOPPED
+2026-01-13 15:02:52 [INFO] Status monitoring stopped
+2026-01-13 15:02:53 [INFO] Cleaning up cDAQ module...
+2026-01-13 15:02:53 [INFO] Cleaning up cDAQ module...
+2026-01-13 15:02:54 [INFO] Cleaned up cDAQ slot 2 task
+2026-01-13 15:02:55 [INFO] Cleaned up cDAQ slot 3 task
+2026-01-13 15:02:55 [INFO] cDAQ module cleaned up
+2026-01-13 15:02:55 [INFO] Shutting down PSB queue manager...
+2026-01-13 15:02:55 [INFO] [PSB] Shutting down PSB 10000 queue manager...
+2026-01-13 15:02:55 [INFO] [PSB] Waiting for processing thread to complete...
+2026-01-13 15:02:55 [INFO] [PSB] All queues empty, processing thread exiting
+2026-01-13 15:02:55 [INFO] [PSB] PSB 10000 queue processing thread stopped
+2026-01-13 15:02:55 [INFO] [PSB] Setting output: OFF
+2026-01-13 15:02:55 [INFO] [PSB] Setting remote mode: OFF
+2026-01-13 15:02:55 [INFO] [PSB] Closing connection on COM3
+2026-01-13 15:02:55 [INFO] [PSB] Disconnected from PSB 10000
+2026-01-13 15:02:55 [INFO] Device queue manager shut down
+2026-01-13 15:02:55 [INFO] Shutting down BioLogic abstraction layer...
+2026-01-13 15:02:55 [INFO] [BIO] Shutting down BioLogic abstraction layer
+2026-01-13 15:02:55 [INFO] [BIO] Shutting down EC-Lab backend
+2026-01-13 15:02:55 [INFO] [BIO] Shutting down EC-Lab OLE COM connection
+2026-01-13 15:02:55 [INFO] [BIO] Disconnecting from EC-Lab device 0
+2026-01-13 15:02:55 [INFO] [BIO] Disconnected from EC-Lab device
+2026-01-13 15:02:55 [INFO] [BIO] EC-Lab OLE COM connection shutdown complete
+2026-01-13 15:02:55 [INFO] [BIO] EC-Lab backend shutdown complete
+2026-01-13 15:02:55 [INFO] [BIO] BioLogic abstraction layer shutdown complete
+2026-01-13 15:02:55 [INFO] Shutting down DTB queue manager...
+2026-01-13 15:02:55 [INFO] [DTB] Shutting down DTB 4848 queue manager...
+2026-01-13 15:02:55 [INFO] [DTB] Waiting for processing thread to complete...
+2026-01-13 15:02:55 [INFO] [DTB] All queues empty, processing thread exiting
+2026-01-13 15:02:55 [INFO] [DTB] DTB 4848 queue processing thread stopped
+2026-01-13 15:02:56 [INFO] [DTB] Stopping DTB slave 2...
+2026-01-13 15:02:56 [INFO] [DTB] Setting Run/Stop: STOP
+2026-01-13 15:02:56 [INFO] [DTB] Stopping DTB slave 3...
+2026-01-13 15:02:56 [INFO] [DTB] Setting Run/Stop: STOP
+2026-01-13 15:02:56 [INFO] [DTB] Closing COM5
+2026-01-13 15:02:56 [INFO] [DTB] Disconnected all DTB devices from COM5
+2026-01-13 15:02:56 [INFO] [DTB] Disconnected from DTB 4848
+2026-01-13 15:02:56 [INFO] Device queue manager shut down
+2026-01-13 15:02:56 [INFO] Shutting down Teensy queue manager...
+2026-01-13 15:02:56 [INFO] [TNY] Shutting down Teensy queue manager...
+2026-01-13 15:02:56 [INFO] [TNY] Waiting for processing thread to complete...
+2026-01-13 15:02:56 [INFO] [TNY] All queues empty, processing thread exiting
+2026-01-13 15:02:56 [INFO] [TNY] Teensy queue processing thread stopped
+2026-01-13 15:02:56 [INFO] [TNY] Closing connection on COM6
+2026-01-13 15:02:56 [INFO] [TNY] Disconnected from Teensy
+2026-01-13 15:02:56 [INFO] Device queue manager shut down
+2026-01-13 15:02:56 [INFO] Cleaning up CDC experiment module...
+2026-01-13 15:02:56 [INFO] Cleaning up Baseline experiment module...
+2026-01-13 15:02:56 [INFO] Cleaning up controls module...
+2026-01-13 15:02:56 [INFO] Controls module cleaned up
+2026-01-13 15:02:56 [INFO] Cleaning up status monitoring...
+2026-01-13 15:02:56 [INFO] Status module state: STOPPED -> UNINITIALIZED
+2026-01-13 15:02:56 [INFO] Status module cleaned up
+2026-01-13 15:02:56 [INFO] Shutting down thread pool...
+2026-01-13 15:02:57 [INFO] Cleanup complete. Exiting application.
+2026-01-13 15:02:57 [INFO] ========================================
+=== Battery Tester Log Ended: 2026-01-13 15:02:57 ===
