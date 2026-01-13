@@ -1,0 +1,333 @@
+================================================================================
+PSB 10000 EXPLICIT SINK REGISTER ZEROING FIX
+================================================================================
+Date: 2026-01-13
+Previous Commit: cc12e67 (zero-current charging approach)
+This Commit: [To be updated after commit]
+
+================================================================================
+PROBLEM SUMMARY
+================================================================================
+
+The "zero-current charging" approach (commit cc12e67) correctly avoided writing
+to REG 501 (SET_CURRENT) but FAILED in ops-log-2026-01-13-04.txt because:
+
+TEST RESULT (ops-log-04):
+  Configuration BEFORE output enable (lines 425-455):
+    - REG 498 (SINK_MODE_POWER): 30.58 W ❌ (NON-ZERO!)
+    - REG 499 (SINK_MODE_CURRENT): 5.10 A ❌ (NON-ZERO!)
+    - REG 500 (SET_VOLTAGE): 4.28 V (target)
+    - REG 501 (SET_CURRENT): 0.00 A ✓ (correctly zeroed)
+    - REG 502 (SET_POWER_SOURCE): 0.00 W ✓
+    - Device state: CV (SOURCE mode) ✓
+
+  AFTER output enable (line 477):
+    - PSB Mode: CP (SOURCE mode) ❌
+    - Current: 0.000 A ❌
+    - Charging failed immediately
+
+ROOT CAUSE IDENTIFIED:
+  The "minimalist approach" of NOT WRITING to sink registers (REG 498/499)
+  was based on the assumption that the PSB would use safe factory defaults.
+
+  WRONG ASSUMPTION: Sink registers RETAIN VALUES from previous operations.
+
+  In ops-log-04:
+    - REG 498 = 30.58W (retained from previous session or changed by firmware)
+    - REG 499 = 5.10A (retained from previous session or changed by firmware)
+
+  PSB mode selection algorithm sees THREE non-zero setpoint registers:
+    - REG 498 (sink power): 30.58W
+    - REG 499 (sink current): 5.10A
+    - REG 500 (voltage): 4.28V
+
+  Multiple non-zero setpoints → AMBIGUOUS MODE → PSB defaults to CP mode
+
+WHY OPS-LOG-02 WORKED:
+  In the successful discharge test (ops-log-02), sink registers had different
+  retained values:
+    - REG 498 = 101.98W (higher value)
+    - REG 499 = 10.20A (higher value)
+
+  These higher values allowed CV SINK mode to work for discharge because the
+  battery voltage (2.74V) was higher than target (2.70V), making SINK the
+  correct operation mode. The 30.58W/5.10A values in ops-log-04 may be hitting
+  some firmware threshold that triggers CP mode instead.
+
+CRITICAL INSIGHT:
+  We cannot assume sink registers are at safe defaults. We must EXPLICITLY
+  WRITE ZERO to ensure ONLY the voltage register (REG 500) has a non-zero value.
+
+================================================================================
+SOLUTION: EXPLICIT SINK REGISTER ZEROING
+================================================================================
+
+Before configuring charging parameters, EXPLICITLY ZERO all setpoint registers
+except voltage:
+
+CONFIGURATION SEQUENCE (revised):
+  Step 0: ZERO SINK REGISTERS (NEW!)
+    - Write REG 498 (SINK_MODE_POWER) = 0.0 W
+    - Write REG 499 (SINK_MODE_CURRENT) = 0.0 A
+
+  Step 1: Set current LIMIT (not setpoint)
+    - Write REG 9002 (CURRENT_MAX) = 3.3 A
+    - Keep REG 501 (SET_CURRENT) = 0.0 A
+
+  Step 2: Set power LIMIT
+    - Write REG 9004 (POWER_MAX) = 30 W
+    - Keep REG 502 (SET_POWER_SOURCE) = 0.0 W
+
+  Step 3: Set voltage SETPOINT (last!)
+    - Write REG 500 (SET_VOLTAGE) = 4.2 V
+
+  Step 4: Verify register state
+    - Log all registers to confirm only REG 500 is non-zero
+
+RESULT:
+  Only ONE setpoint register (REG 500) has a non-zero value → PSB must select
+  CV mode. All other registers are explicitly 0.0, eliminating ambiguity.
+
+================================================================================
+IMPLEMENTATION CHANGES
+================================================================================
+
+File: exp_baseline.c
+Location: Phase 3 charging configuration (before line ~1407)
+
+ADDED (NEW CODE):
+  // CRITICAL FIX: Explicitly ZERO sink registers to prevent CP mode selection
+  // Problem discovered in ops-log-04: Sink registers retained non-zero values (30.58W, 5.10A)
+  // from previous operations, causing PSB to see multiple non-zero setpoints and select CP mode.
+  // Solution: Explicitly write 0.0 to ensure ONLY voltage register is non-zero.
+  LogMessage("DIAGNOSTIC: [0/4] ZEROING sink registers to prevent interference with CV mode");
+
+  result = PSB_SetSinkPowerQueued(0.0, DEVICE_PRIORITY_NORMAL);
+  if (result != PSB_SUCCESS) {
+      LogWarning("Failed to zero sink power (REG 498): %s", PSB_GetErrorString(result));
+  } else {
+      LogMessage("DIAGNOSTIC: REG 498 (SINK_MODE_POWER) set to 0.0 W");
+  }
+  Delay(0.1);
+
+  result = PSB_SetSinkCurrentQueued(0.0, DEVICE_PRIORITY_NORMAL);
+  if (result != PSB_SUCCESS) {
+      LogWarning("Failed to zero sink current (REG 499): %s", PSB_GetErrorString(result));
+  } else {
+      LogMessage("DIAGNOSTIC: REG 499 (SINK_MODE_CURRENT) set to 0.0 A");
+  }
+  Delay(0.1);
+
+  LogMessage("DIAGNOSTIC: Sink registers zeroed - now configuring charging");
+
+UPDATED:
+  - Changed step numbers from [1/3], [2/3], [3/3] to [1/4], [2/4], [3/4]
+  - Added [4/4] for register verification step
+  - Updated diagnostic message to mention "explicit zeroing approach"
+
+================================================================================
+EXPECTED OUTCOMES
+================================================================================
+
+When Phase 3 charging is executed with explicit sink register zeroing:
+
+1. BEFORE OUTPUT ENABLE (register dump should show):
+   - REG 498 (SINK_MODE_POWER): 0.000 W ✓
+   - REG 499 (SINK_MODE_CURRENT): 0.000 A ✓
+   - REG 500 (SET_VOLTAGE): 4.200 V ✓ (only non-zero setpoint)
+   - REG 501 (SET_CURRENT): 0.000 A ✓
+   - REG 502 (SET_POWER_SOURCE): 0.000 W ✓
+   - REG 9002 (CURRENT_MAX): 3.300 A ✓ (limit)
+   - REG 9004 (POWER_MAX): 30.0 W ✓ (limit)
+   - Device state: CV SOURCE mode ✓
+
+2. AFTER OUTPUT ENABLE (critical diagnostic should show):
+   - Mode: CV SOURCE (not CP!) ✓
+   - Current: Non-zero (charging current flowing) ✓
+   - Voltage: Approaching 4.2V ✓
+   - Success message: "PSB correctly in CV SOURCE mode for charging" ✓
+
+3. DURING CHARGING:
+   - Current decreases as battery voltage increases toward 4.2V
+   - SOC increases normally
+   - Phase 3 completes with multiple EIS measurements
+
+4. IF STILL FAILING:
+   - Check register dump for any unexpected non-zero values
+   - Check if PSB firmware version has different mode selection logic
+   - Consider that PSB may require explicit mode selection command
+
+================================================================================
+COMPARISON: ALL THREE APPROACHES
+================================================================================
+
+APPROACH 1: Write Current Setpoint (FAILED - ops-log-03)
+  - REG 501 = 3.3A (setpoint)
+  - REG 500 = 4.2V (setpoint)
+  - Result: CP mode after output enable
+  - Problem: Multiple non-zero setpoints
+
+APPROACH 2: Zero-Current, Untouched Sink (FAILED - ops-log-04)
+  - REG 501 = 0.0A (zeroed)
+  - REG 500 = 4.2V (setpoint)
+  - REG 498/499 = UNTOUCHED (retained 30.58W/5.10A)
+  - Result: CP mode after output enable
+  - Problem: Sink registers retained non-zero values
+
+APPROACH 3: Explicit Zeroing (THIS FIX)
+  - REG 498 = 0.0W (explicitly zeroed)
+  - REG 499 = 0.0A (explicitly zeroed)
+  - REG 501 = 0.0A (explicitly zeroed)
+  - REG 502 = 0.0W (explicitly zeroed)
+  - REG 500 = 4.2V (ONLY non-zero setpoint)
+  - Expected: CV SOURCE mode
+  - Theory: Eliminates ALL ambiguity
+
+================================================================================
+PSB REGISTER STATE EVOLUTION
+================================================================================
+
+INITIALIZATION (minimalist approach):
+  REG 498/499: UNTOUCHED (retained previous values)
+  REG 500: 0.0V (written)
+  REG 501: 0.0A (written)
+  REG 502: 0.0W (written)
+
+AFTER SOME TIME (firmware may adjust sink registers?):
+  REG 498: Changed to 30.58W (unknown trigger)
+  REG 499: Changed to 5.10A (unknown trigger)
+
+PHASE 3 CHARGING (zero-current approach):
+  REG 498/499: STILL 30.58W/5.10A (never zeroed)
+  REG 500: 4.2V (written)
+  REG 501: 0.0A (maintained)
+  REG 502: 0.0W (maintained)
+  → THREE non-zero setpoints → CP mode ❌
+
+PHASE 3 CHARGING (explicit zeroing - THIS FIX):
+  REG 498: 0.0W (explicitly written)
+  REG 499: 0.0A (explicitly written)
+  REG 500: 4.2V (written)
+  REG 501: 0.0A (maintained)
+  REG 502: 0.0W (maintained)
+  → ONE non-zero setpoint → CV mode ✓
+
+================================================================================
+LESSONS LEARNED
+================================================================================
+
+1. NEVER ASSUME DEFAULT VALUES
+   - PSB registers retain values across operations
+   - "Not touching" a register ≠ "setting it to zero"
+   - Always explicitly write desired values
+
+2. PSB MODE SELECTION IS STRICT
+   - Any non-zero value in setpoint registers (498-502) is considered
+   - Multiple non-zero setpoints → ambiguous → defaults to CP mode
+   - Must ensure ONLY ONE setpoint register is non-zero
+
+3. DEBUGGING REQUIRES COMPLETE VISIBILITY
+   - Register dump logging was essential to identify this issue
+   - Without seeing REG 498/499 values, we would have missed the root cause
+   - Always log ALL relevant registers, not just the ones you write
+
+4. INCREMENTAL FIXES CAN REVEAL NEW ISSUES
+   - First fix (cc12e67): Avoided REG 501 writes → still failed
+   - Second fix (this): Must also zero REG 498/499 → TBD
+   - Complex systems require thorough understanding of ALL state
+
+================================================================================
+TESTING PROCEDURE
+================================================================================
+
+1. Build project in LabWindows/CVI 2020
+2. Connect to PSB 10000 on COM3
+3. Run baseline experiment with Phase 3 enabled
+4. Monitor logs carefully for:
+
+   STEP 0 (NEW!):
+     - "ZEROING sink registers to prevent interference with CV mode"
+     - "REG 498 (SINK_MODE_POWER) set to 0.0 W"
+     - "REG 499 (SINK_MODE_CURRENT) set to 0.0 A"
+
+   STEP 4 VERIFICATION:
+     - Register dump showing ALL setpoints:
+       REG 498 = 0.000 W ✓
+       REG 499 = 0.000 A ✓
+       REG 500 = 4.200 V ✓
+       REG 501 = 0.000 A ✓
+       REG 502 = 0.000 W ✓
+
+   AFTER OUTPUT ENABLE:
+     - "CRITICAL DIAGNOSTIC: After output enable + stabilization"
+     - Mode: CV (SOURCE mode) ← MUST be CV, not CP!
+     - Current: Non-zero ← MUST have charging current
+     - "SUCCESS: PSB correctly in CV SOURCE mode for charging" ← SUCCESS!
+
+5. If successful:
+   - Battery charges normally
+   - Current decreases toward cutoff as voltage approaches 4.2V
+   - Phase 3 completes with EIS measurements at 10% SOC intervals
+
+6. If STILL failing:
+   - Examine register dump for ANY non-zero setpoints besides REG 500
+   - Check if PSB firmware has additional hidden registers affecting mode
+   - Consider if PSB requires explicit sink/source mode selection command
+   - May need to consult PSB 10000 technical support or advanced documentation
+
+================================================================================
+RELATED FILES AND COMMITS
+================================================================================
+
+Modified:
+  - exp_baseline.c (Phase 3 charging configuration - explicit sink zeroing)
+
+Documentation:
+  - notes/ZERO-CURRENT-CHARGING-2026-01-13.txt (previous approach)
+  - notes/EXPLICIT-ZEROING-FIX-2026-01-13.txt (this file)
+  - notes/ops-log-2026-01-13-04.txt (test showing sink register problem)
+
+Previous Relevant Commits:
+  - cc12e67: Fix PSB charging by using limit register (zero-current approach)
+  - d5864b2: Implement minimalist approach (skip sink writes)
+  - 428c749: Use moderate decoy values for PSB sink setpoints
+  - e0651de: Fix PSB limit register conflict
+  - [To be added]: Explicit sink register zeroing fix
+
+Test Logs:
+  - ops-log-2026-01-13-02.txt: Discharge success with retained sink values
+  - ops-log-2026-01-13-03.txt: Charging failure with REG 501 = 3.3A
+  - ops-log-2026-01-13-04.txt: Charging failure with REG 498/499 non-zero
+
+================================================================================
+NEXT STEPS IF THIS STILL FAILS
+================================================================================
+
+If explicit zeroing STILL results in CP mode, investigate:
+
+1. PSB FIRMWARE MODE COMMAND
+   - Check if PSB has a Modbus command to explicitly select CV/CC/CP/CR mode
+   - May be a write to a control register we haven't discovered
+
+2. HIDDEN REGISTERS
+   - PSB may have additional registers affecting mode selection
+   - Programming manual may not document all registers
+
+3. TIMING ISSUES
+   - Try longer delays between register writes
+   - Try different write order (zero sink registers, then limits, then voltage)
+
+4. VOLTAGE THRESHOLD
+   - Check if battery voltage vs target voltage affects mode selection
+   - May need battery voltage > target for SOURCE mode
+
+5. FACTORY RESET
+   - Try PSB factory reset command to clear all persistent state
+   - Verify if fresh PSB behaves differently
+
+6. TECHNICAL SUPPORT
+   - Contact EA Elektro-Automatik (PSB manufacturer)
+   - Provide detailed register dumps and mode selection behavior
+   - Ask about undocumented mode selection logic
+
+================================================================================
