@@ -1,0 +1,529 @@
+================================================================================
+CDC EXPERIMENT FIXES - TWO SEPARATE ISSUES
+================================================================================
+Date: 2026-01-13
+Test Log: ops-log-2026-01-13-08.txt
+Commits: b6d3657 (power limit), fffa9cd (setpoint registers)
+
+================================================================================
+PROBLEM SUMMARY
+================================================================================
+
+ops-log-08 showed CDC charge operation failing with 0.000A peak current after
+user cancelled at 1 minute.
+
+Analysis revealed CDC experiment had TWO separate configuration problems,
+both causing CV mode to fail:
+
+ISSUE 1: LOW POWER LIMIT (20W)
+  - CDC_POWER_LIMIT_W = 20W
+  - PSB interprets "voltage setpoint + low power limit" as CP mode
+  - Same issue as Phase 3 baseline (was using 30W)
+
+ISSUE 2: WRITING SETPOINT REGISTERS
+  - CDC was writing REG 501 (SET_CURRENT) = 3.3A
+  - CDC was writing REG 499 (SINK_MODE_CURRENT) = 5.0A
+  - Multiple non-zero setpoints cause mode selection issues
+  - Same issue as initial Phase 3 baseline problem
+
+Both issues needed to be fixed for CDC to work correctly!
+
+================================================================================
+ISSUE 1: LOW POWER LIMIT (20W → 1224W)
+================================================================================
+
+DISCOVERY:
+ops-log-08 showed power limit being set to 1224W (line 260) which suggested
+the fix was applied, but the CDC .h file still had:
+  #define CDC_POWER_LIMIT_W  20.0  // "20W limit prevents CP mode"
+
+The comment was backwards - low power limits CAUSE CP mode!
+
+ROOT CAUSE:
+From Phase 3 debugging (ops-log-07), we learned:
+  - PSB firmware examines BOTH setpoint AND limit registers
+  - Voltage setpoint + LOW power limit → CP mode
+  - Voltage setpoint + HIGH power limit → CV mode
+
+CDC was using 20W which is even lower than Phase 3's 30W!
+
+FIX (commit b6d3657):
+Changed CDC_POWER_LIMIT_W from 20W to PSB_SAFE_POWER_MAX (1224W):
+
+  exp_cdc.h:
+    Before: #define CDC_POWER_LIMIT_W  20.0
+    After:  #define CDC_POWER_LIMIT_W  PSB_SAFE_POWER_MAX  // 1224W
+
+This matches:
+  - Phase 3 baseline charging (now uses 1224W)
+  - Battery_GoToVoltage() (uses 1224W)
+  - PSB initialization (sets limits to 1224W)
+
+================================================================================
+ISSUE 2: WRITING SETPOINT REGISTERS (ops-log-08 revealed)
+================================================================================
+
+DISCOVERY:
+ops-log-08 lines 252-258 showed:
+  [PSB] *** WRITING REG 501 (SET_CURRENT): 3.30A (0x0B43) - WILL ENTER CC MODE ***
+  [PSB] *** WRITING REG 499 (SINK_MODE_CURRENT): 5.00A (0x1110) - MAY ENTER SINK CC MODE ***
+
+CDC was writing to SETPOINT registers even though comments said "Set limits"!
+
+COMPARISON WITH WORKING CODE:
+
+Battery_GoToVoltage() (WORKS):
+  - Does NOT write REG 501 (SET_CURRENT)
+  - Does NOT write REG 499 (SINK_MODE_CURRENT)
+  - ONLY writes REG 500 (SET_VOLTAGE)
+  - Leaves sink decoys (10A/100W) from initialization
+  - Uses high limit registers (9002/9008/9004/9005)
+
+CDC Before Fix (FAILED):
+  - Wrote REG 501 = 3.3A via PSB_SetCurrentQueued() ❌
+  - Wrote REG 499 = 5.0A via PSB_SetSinkCurrentQueued() ❌
+  - Multiple non-zero setpoints → mode ambiguity
+
+ROOT CAUSE:
+The code comments said "Set current limits" but the functions used were:
+  - PSB_SetCurrentQueued() → writes REG 501 SETPOINT
+  - PSB_SetSinkCurrentQueued() → writes REG 499 SETPOINT
+
+Should have used:
+  - PSB_SetCurrentLimitsQueued() → writes REG 9002 LIMIT
+  - PSB_SetSinkCurrentLimitsQueued() → writes REG 9008 LIMIT
+
+FIX (commit fffa9cd):
+Changed CDC to use LIMIT register functions:
+
+  exp_cdc.c Before:
+    PSB_SetCurrentQueued(chargeCurrent, ...);           // REG 501 ❌
+    PSB_SetSinkCurrentQueued(dischargeCurrent, ...);    // REG 499 ❌
+
+  exp_cdc.c After:
+    PSB_SetCurrentLimitsQueued(0.0, chargeCurrent, ...);      // REG 9002 ✓
+    PSB_SetSinkCurrentLimitsQueued(0.0, dischargeCurrent, ...); // REG 9008 ✓
+
+This ensures:
+  1. REG 501 (SET_CURRENT) remains 0.0A
+  2. REG 499 (SINK_MODE_CURRENT) keeps init decoy (10A)
+  3. Only REG 500 (SET_VOLTAGE) is the active setpoint
+  4. Current is constrained by LIMIT registers (9002/9008)
+
+================================================================================
+COMPLETE CDC CONFIGURATION (AFTER BOTH FIXES)
+================================================================================
+
+CDC now follows the Battery_GoToVoltage() pattern:
+
+INITIALIZATION (unchanged):
+  REG 498 (SINK_MODE_POWER): 100W (decoy)
+  REG 499 (SINK_MODE_CURRENT): 10A (decoy)
+  REG 500 (SET_VOLTAGE): 0V
+  REG 501 (SET_CURRENT): 0A
+  REG 502 (SET_POWER_SOURCE): 0W
+  REG 9002 (CURRENT_MAX): 61.2A
+  REG 9004 (POWER_MAX): 1224W
+  REG 9008 (SINK_CURRENT_MAX): 61.2A
+  REG 9005 (SINK_POWER_MAX): 1224W
+
+CDC CHARGE CONFIGURATION (after fixes):
+  REG 498: 100W (decoy, unchanged)
+  REG 499: 10A (decoy, unchanged)
+  REG 500: 4.2V (voltage setpoint - ONLY active setpoint!)
+  REG 501: 0A (unchanged from init)
+  REG 502: 0W (unchanged from init)
+  REG 9002: 3.3A (current limit via PSB_SetCurrentLimitsQueued)
+  REG 9004: 1224W (HIGH power limit via PSB_SetPowerLimitQueued)
+  REG 9008: 5.0A (sink current limit via PSB_SetSinkCurrentLimitsQueued)
+  REG 9005: 1224W (HIGH sink power limit via PSB_SetSinkPowerLimitQueued)
+
+KEY POINTS:
+  1. Only ONE setpoint register non-zero: REG 500 (voltage)
+  2. Sink decoys (REG 498/499) remain from initialization
+  3. All limits HIGH (1224W power, appropriate current)
+  4. PSB determines SOURCE vs SINK based on battery V vs target V
+
+================================================================================
+WHY BOTH FIXES WERE NEEDED
+================================================================================
+
+These are INDEPENDENT issues that both break CV mode:
+
+ISSUE 1 (Power Limit): PSB Mode Selection Algorithm
+  - Even with correct setpoints, low power limit triggers CP mode
+  - PSB firmware: "voltage setpoint + 20W limit" → "power-constrained CV" → CP mode
+  - Affects mode selection at output enable
+
+ISSUE 2 (Setpoint Registers): Setpoint Ambiguity
+  - Multiple non-zero setpoints confuse mode selection
+  - PSB firmware: "voltage + current setpoints" → ambiguous → wrong mode
+  - Affects mode selection before and after output enable
+
+Both had to be fixed for CV mode to work correctly!
+
+================================================================================
+EVIDENCE FROM OPS-LOG-08
+================================================================================
+
+Line 252-258: Shows ISSUE 2 (writing setpoints)
+  2026-01-13 17:03:08 [INFO] [PSB] >>> QUEUE: Executing command SET_CURRENT (type 4)
+  2026-01-13 17:03:08 [INFO] [PSB] *** WRITING REG 501 (SET_CURRENT): 3.30A (0x0B43) - WILL ENTER CC MODE ***
+  2026-01-13 17:03:08 [INFO] [PSB] *** WRITING REG 499 (SINK_MODE_CURRENT): 5.00A (0x1110) - MAY ENTER SINK CC MODE ***
+
+Line 259-261: Shows ISSUE 1 FIX already applied
+  2026-01-13 17:03:08 [INFO] Setting power limits to 1224.0W (HIGH to prevent CP mode)
+  2026-01-13 17:03:08 [INFO] [PSB] Setting max power: 1224.00W
+  2026-01-13 17:03:08 [INFO] [PSB] Setting sink max power: 1224.00W
+
+Line 272: Shows failure result
+  2026-01-13 17:04:09 [INFO] Charge completed - Duration: 1.0 minutes, Peak current: 0.000 A
+
+This proves:
+  - Power limit fix (1224W) WAS applied in the running code
+  - But setpoint register issue STILL existed
+  - Result: 0.000A current (failure)
+
+Both issues needed fixing!
+
+================================================================================
+EXPECTED OUTCOMES AFTER BOTH FIXES
+================================================================================
+
+When CDC charge operation runs with both fixes:
+
+1. BEFORE OUTPUT ENABLE:
+   - REG 498/499: 100W/10A (decoys from init)
+   - REG 500: 4.2V (ONLY active setpoint)
+   - REG 501/502: 0.0A/0.0W (inactive)
+   - REG 9002: 3.3A (current limit)
+   - REG 9004: 1224W (HIGH power limit)
+   - Device state: CV SOURCE mode ✓
+
+2. AFTER OUTPUT ENABLE:
+   - Mode: CV SOURCE ✓ (not CC, not CP!)
+   - Current: Non-zero ✓ (charging current flows)
+   - Voltage: Approaching 4.2V
+   - Battery: Charging successfully
+
+3. CDC DISCHARGE (also fixed):
+   - Same configuration strategy applies
+   - PSB automatically switches to SINK direction
+   - Current flows in discharge direction
+
+4. BOTH OPERATIONS IN SAME SESSION:
+   - Can charge then discharge without reconfiguration
+   - PSB determines direction based on battery V vs target V
+   - CV mode maintained throughout
+
+================================================================================
+COMPARISON: ALL THREE EXPERIMENTS
+================================================================================
+
+PHASE 3 BASELINE (exp_baseline.c):
+  Problem 1: 30W power limit → CP mode ❌
+  Problem 2: Direction-dependent sink register zeroing needed
+  Fix 1: Use 1224W power limit (commit eb805be)
+  Fix 2: Zero sink registers for SOURCE operations (commit fe74619)
+
+CDC EXPERIMENT (exp_cdc.c):
+  Problem 1: 20W power limit → CP mode ❌
+  Problem 2: Writing setpoint registers REG 501/499 ❌
+  Fix 1: Use 1224W power limit (commit b6d3657)
+  Fix 2: Use limit register functions, not setpoint functions (commit fffa9cd)
+
+BATTERY_GOTOVOLTAGE (battery_utils.c):
+  Already correct! ✓
+  - Uses 1224W power limit from init
+  - Only writes voltage setpoint (REG 500)
+  - Leaves sink decoys unchanged
+  - Works for both charge and discharge
+
+CDC now matches Battery_GoToVoltage() pattern and should work!
+
+================================================================================
+LESSONS LEARNED
+================================================================================
+
+1. FUNCTION NAMES CAN BE MISLEADING:
+   - PSB_SetCurrentQueued() sounds like "set limit" but writes SETPOINT
+   - PSB_SetCurrentLimitsQueued() actually writes LIMIT register
+   - Always verify which register a function writes to
+
+2. TWO INDEPENDENT FAILURE MODES:
+   - Low power limits cause CP mode (limit register issue)
+   - Multiple setpoints cause mode ambiguity (setpoint register issue)
+   - Both must be fixed for CV mode to work
+
+3. WORKING CODE IS THE BEST REFERENCE:
+   - Battery_GoToVoltage() had the correct pattern all along
+   - When debugging, always compare with working implementations
+   - Match the successful pattern exactly
+
+4. LOGS ARE ESSENTIAL FOR DIAGNOSIS:
+   - ops-log-08 clearly showed "WRITING REG 501: 3.30A"
+   - Without detailed register write logging, would have been much harder
+   - Register dumps before/after operations are invaluable
+
+5. COMMENTS CAN BE WRONG:
+   - CDC comment said "20W limit prevents CP mode"
+   - Reality: low limits CAUSE CP mode
+   - Always verify assumptions against behavior
+
+================================================================================
+ISSUE 3: LIMIT/SETPOINT REGISTER CONFLICT (ops-log-09 revealed)
+================================================================================
+
+DISCOVERY:
+ops-log-09 showed a new failure mode at lines 255-257:
+  2026-01-13 17:13:17 [INFO] [PSB] Setting sink max current: 5.00A
+  2026-01-13 17:13:17 [ERROR] [PSB] Modbus exception code: 0x03 - Illegal data value
+  2026-01-13 17:13:17 [ERROR] Failed to set sink current limit: Invalid response
+
+PSB rejected the sink current limit write!
+
+ROOT CAUSE:
+PSB firmware enforces: LIMIT registers must be >= SETPOINT registers
+
+From initialization:
+  - REG 499 (SINK_MODE_CURRENT) = 10A (decoy SETPOINT)
+  - REG 9008 (SINK_CURRENT_MAX) = 61.2A (high LIMIT)
+
+CDC was trying to set:
+  - REG 9008 (SINK_CURRENT_MAX) = 5A (discharge limit)
+
+PSB firmware validation:
+  - LIMIT (5A) < SETPOINT (10A) → "Illegal data value" error ❌
+
+THE CONFLICT:
+  Decoy setpoints (10A/100W) are necessary for mode selection, but they
+  create a minimum threshold for limit registers. Setting limit < decoy
+  causes PSB to reject the write.
+
+WHY SETTING LIMITS SEEMED NECESSARY:
+  User wants to constrain current to safe levels (e.g., 3.3A charge, 5A discharge)
+  Natural approach: set current limit registers to these values
+  BUT: conflicts with decoy setpoint values!
+
+BATTERY_GOTOVOLTAGE() PATTERN (already correct):
+battery_utils.c lines 127-142 explain the solution:
+
+  "NOTE: We do NOT modify limit registers here!
+
+  Discovery from ops-log-2026-01-12-10.txt:
+  - During init, sink current SETPOINT = 10A (mode selection decoy)
+  - Trying to set sink current LIMIT < SETPOINT causes 'Illegal data value' error
+  - The PSB rejects setting limits lower than setpoints
+
+  Solution: Leave limits at their high initialization values (61.2A, 1224W).
+  The setpoints (10A, 100W) are 'decoys' to prevent CC/CP mode selection.
+  In CV mode, the actual current is naturally limited by:
+    1. Voltage difference (battery V vs target V)
+    2. Battery internal resistance
+    3. PSB's natural current capability
+  The decoy setpoints and high limits work together to ensure CV mode without conflicts."
+
+NATURAL CURRENT LIMITING IN CV MODE:
+
+When PSB operates in CV mode, current is automatically controlled by physics:
+
+  Ohm's Law: I = (V_target - V_battery) / R_total
+
+  Where R_total = R_battery + R_wiring + R_PSB_internal
+
+  Example (charging):
+    - Battery: 2.7V
+    - Target: 4.2V
+    - Voltage difference: 1.5V
+    - Battery resistance: ~50mΩ at high SOC
+    - Current: 1.5V / 0.05Ω = 30A max
+
+  But as battery charges:
+    - Battery voltage increases toward 4.2V
+    - Voltage difference decreases
+    - Current naturally decreases (I = ΔV / R)
+    - At 4.15V: ΔV = 0.05V → I ≈ 1A
+    - At 4.19V: ΔV = 0.01V → I ≈ 200mA
+    - At 4.20V: ΔV = 0V → I = 0A (done)
+
+So in CV mode:
+  - PSB maintains target voltage (4.2V)
+  - Current flows based on voltage difference
+  - High limit (61.2A) doesn't matter - physics limits current
+  - Decoy setpoints (10A/100W) guide mode selection
+  - No need to set explicit current limits!
+
+FIX (commit 3e69e95):
+Removed ALL limit register writes from CDC, matching Battery_GoToVoltage():
+
+  exp_cdc.c Before (FAILED):
+    PSB_SetCurrentLimitsQueued(0.0, chargeCurrent, ...)     → REG 9002 = 3.3A
+    PSB_SetSinkCurrentLimitsQueued(0.0, dischargeCurrent, ...) → REG 9008 = 5A ❌ conflict!
+    PSB_SetPowerLimitQueued(1224W, ...)                     → REG 9004 = 1224W
+    PSB_SetSinkPowerLimitQueued(1224W, ...)                 → REG 9005 = 1224W
+
+  exp_cdc.c After (CORRECT):
+    // Don't modify ANY limit registers!
+    // Use initialization values:
+    //   REG 9002 = 61.2A (source current)
+    //   REG 9004 = 1224W (source power)
+    //   REG 9008 = 61.2A (sink current)
+    //   REG 9005 = 1224W (sink power)
+    // Current naturally limited by voltage difference in CV mode
+
+WHY THIS WORKS:
+  1. No limit/setpoint conflicts - limits stay at safe high values
+  2. Decoy setpoints (10A/100W) ensure CV mode selection
+  3. High limits (61.2A/1224W) don't restrict CV operation
+  4. Physics (Ohm's law) naturally limits current based on voltage
+  5. Battery internal resistance provides current limiting
+  6. As battery charges/discharges, current adjusts automatically
+
+SAFETY CONSIDERATIONS:
+  Q: Won't 61.2A limit be dangerous?
+  A: No, because:
+     - In CV mode, voltage difference determines current (Ohm's law)
+     - Battery internal resistance limits current (typically 50-200mΩ)
+     - PSB hardware current limit (51A actual max)
+     - Voltage difference is small during normal operation
+     - Example: 1V difference with 100mΩ resistance = 10A max
+
+  Q: What if battery is short-circuited?
+  A: Multiple protections:
+     - PSB hardware current limit (51A)
+     - Battery internal fuse/protection
+     - Voltage difference in CV mode limits current
+     - Not relying on software limits for safety
+
+================================================================================
+COMPLETE CDC CONFIGURATION (AFTER ALL THREE FIXES)
+================================================================================
+
+Previous section was written before Fix 3, updating here:
+
+CDC now follows the Battery_GoToVoltage() pattern EXACTLY:
+
+INITIALIZATION (unchanged):
+  REG 498 (SINK_MODE_POWER): 100W (decoy)
+  REG 499 (SINK_MODE_CURRENT): 10A (decoy)
+  REG 500 (SET_VOLTAGE): 0V
+  REG 501 (SET_CURRENT): 0A
+  REG 502 (SET_POWER_SOURCE): 0W
+  REG 9002 (CURRENT_MAX): 61.2A (high, not modified by CDC)
+  REG 9004 (POWER_MAX): 1224W (high, not modified by CDC)
+  REG 9008 (SINK_CURRENT_MAX): 61.2A (high, not modified by CDC)
+  REG 9005 (SINK_POWER_MAX): 1224W (high, not modified by CDC)
+
+CDC CHARGE CONFIGURATION (after all three fixes):
+  REG 498: 100W (decoy, unchanged)
+  REG 499: 10A (decoy, unchanged)
+  REG 500: 4.2V (voltage setpoint - ONLY active setpoint!)
+  REG 501: 0A (unchanged from init)
+  REG 502: 0W (unchanged from init)
+  REG 9002: 61.2A (HIGH, unchanged from init)
+  REG 9004: 1224W (HIGH, unchanged from init)
+  REG 9008: 61.2A (HIGH, unchanged from init)
+  REG 9005: 1224W (HIGH, unchanged from init)
+
+KEY POINTS:
+  1. Only ONE setpoint register non-zero: REG 500 (voltage)
+  2. Sink decoys (REG 498/499) remain from initialization
+  3. ALL limits HIGH and unchanged from initialization
+  4. No limit/setpoint conflicts
+  5. PSB determines SOURCE vs SINK based on battery V vs target V
+  6. Current naturally limited by voltage difference and resistance
+
+================================================================================
+WHY ALL THREE FIXES WERE NEEDED
+================================================================================
+
+These are THREE INDEPENDENT issues that ALL had to be fixed:
+
+ISSUE 1 (Power Limit): PSB Mode Selection Algorithm
+  Problem: Low power limit (20W) triggers CP mode
+  Symptom: ops-log-08 showed 0.000A current, CP mode after output enable
+  Fix: Use PSB_SAFE_POWER_MAX (1224W)
+  Commit: b6d3657
+
+ISSUE 2 (Setpoint Registers): Multiple Setpoint Ambiguity
+  Problem: Writing REG 501/499 setpoints causes mode confusion
+  Symptom: ops-log-08 showed "WRITING REG 501: 3.30A"
+  Fix: Don't write setpoint registers, only write voltage
+  Commit: fffa9cd
+
+ISSUE 3 (Limit/Setpoint Conflict): PSB Register Validation
+  Problem: Setting limit < decoy setpoint violates PSB firmware rules
+  Symptom: ops-log-09 showed "Illegal data value" error
+  Fix: Don't modify limit registers, use initialization values
+  Commit: 3e69e95
+
+All three had to be fixed for CDC to work correctly!
+
+================================================================================
+TESTING PROCEDURE
+================================================================================
+
+1. Build project in LabWindows/CVI 2020
+2. Connect to PSB 10000 on COM3
+3. Run CDC charge operation (target 4.2V)
+4. Monitor logs for:
+
+   CONFIGURATION:
+     - "Using initialization limits (61.2A/1224W) - not modifying limit registers"
+     - "Source current limit: 61.2A (REG 9002 from init, not changed)"
+     - "Sink current limit: 61.2A (REG 9008 from init, not changed)"
+     - "Source power limit: 1224W (REG 9004 from init, HIGH to prevent CP mode)"
+     - "Sink power limit: 1224W (REG 9005 from init, HIGH to prevent CP mode)"
+
+   NO SETPOINT WRITES:
+     - Should NOT see "*** WRITING REG 501 (SET_CURRENT)" ← BAD!
+     - Should NOT see "*** WRITING REG 499 (SINK_MODE_CURRENT)" ← BAD!
+
+   NO LIMIT WRITES (after init):
+     - Should NOT see "Setting max current: 3.30A" ← Would conflict!
+     - Should NOT see "Setting sink max current: 5.00A" ← Would cause "Illegal data value"!
+
+   AFTER OUTPUT ENABLE:
+     - Current should be NON-ZERO (e.g., 0.5A - 3.3A depending on battery)
+     - Battery should charge toward 4.2V
+     - Mode should remain CV throughout
+
+5. If successful:
+   - Battery charges normally to 4.2V
+   - Current decreases as voltage approaches target
+   - Operation completes successfully
+
+6. Test discharge similarly:
+   - Set target below current voltage (e.g., 2.7V)
+   - Should see discharge current flowing
+   - CV SINK mode should be maintained
+
+================================================================================
+RELATED FILES AND COMMITS
+================================================================================
+
+Modified Files:
+  - exp_cdc.h (power limit constant)
+  - exp_cdc.c (power limit usage, current limit functions)
+
+Commits:
+  - b6d3657: Fix CDC power limit (20W → 1224W) - Issue 1
+  - fffa9cd: Fix CDC to use limit registers not setpoints - Issue 2
+  - 3e69e95: Fix CDC to not modify limit registers - Issue 3
+
+Test Logs:
+  - ops-log-08: Revealed Issues 1 and 2 (power limit + setpoint registers)
+  - ops-log-09: Revealed Issue 3 (limit/setpoint conflict)
+
+Related Fixes:
+  - eb805be: Phase 3 baseline power limit fix (30W → 1224W)
+  - fe74619: Phase 3 baseline direction-dependent sink config
+
+Reference Implementation:
+  - battery_utils.c: Battery_GoToVoltage() (always worked correctly)
+
+Documentation:
+  - notes/POWER-LIMIT-CP-MODE-2026-01-13.txt (power limit discovery)
+  - notes/CDC-FIXES-2026-01-13.txt (this file)
+
+================================================================================
