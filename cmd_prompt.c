@@ -17,6 +17,12 @@
 #include "tests/psb10000_test.h"
 
 /******************************************************************************
+ * External References
+ ******************************************************************************/
+
+extern PSBQueueManager *g_psbQueueMgr;
+
+/******************************************************************************
  * Static Functions
  ******************************************************************************/
 
@@ -631,8 +637,8 @@ static int PSBCommandManager(CommandContext *ctx) {
 
 		if (error == SUCCESS) {
 			snprintf(message, sizeof(message),
-			        "Connection test: OK (Mode: %d, Direction: %d, Output: %s)",
-			        status.mode, status.direction, status.outputEnabled ? "ON" : "OFF");
+			        "Connection test: OK (Mode: %d, Sink: %d, Output: %s)",
+			        status.regulationMode, status.sinkMode, status.outputEnabled ? "ON" : "OFF");
 			LogPromptTextbox(CMD_OUTPUT, message);
 		} else {
 			snprintf(message, sizeof(message), "Connection test failed: %s", GetErrorString(error));
