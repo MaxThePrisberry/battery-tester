@@ -2081,44 +2081,47 @@ static int InitializePSBForMatrixTest(char *errorMsg, int errorMsgSize) {
     LogMessage("Initializing PSB with decoy values and high limits");
     LogMessage("========================================");
 
-    // CRITICAL: Set decoy values for sink mode (prevent unwanted mode selection)
-    // These are written ONCE and never touched again during tests
-    // See PSB-MODE-SELECTION-RULES document for why this is necessary
-    LogMessage("Setting decoy values (to prevent sink mode confusion)...");
-    LogMessage("  REG 498 (SINK_POWER): 100.0 W (decoy)");
+    // PSB REGISTER CONFIGURATION:
+    // REG 502 = power limit (20W) - CRITICAL: 0W would block all current!
+    // REG 500 = voltage setpoint (for CV mode)
+    // REG 501 = current setpoint (for CC mode)
+    // REG 498/499 = sink mode decoys
+
+    LogMessage("Setting source power limit (REG 502) - enables current flow...");
+    LogMessage("  REG 502 (POWER): %.1f W (power limit for CV/CC modes)", PSB_SOURCE_POWER_LIMIT);
+    result = PSB_SetPowerQueued(PSB_SOURCE_POWER_LIMIT, DEVICE_PRIORITY_NORMAL);
+    if (result != PSB_SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Failed to set REG 502 power limit");
+        return result;
+    }
+
+    LogMessage("Setting sink decoy values...");
+    LogMessage("  REG 498 (SINK_POWER): 100.0 W");
     result = PSB_SetSinkPowerQueued(100.0, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
-        snprintf(errorMsg, errorMsgSize, "Failed to set REG 498 decoy");
+        snprintf(errorMsg, errorMsgSize, "Failed to set REG 498");
         return result;
     }
 
-    LogMessage("  REG 499 (SINK_CURRENT): 10.0 A (decoy)");
+    LogMessage("  REG 499 (SINK_CURRENT): 10.0 A");
     result = PSB_SetSinkCurrentQueued(10.0, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
-        snprintf(errorMsg, errorMsgSize, "Failed to set REG 499 decoy");
+        snprintf(errorMsg, errorMsgSize, "Failed to set REG 499");
         return result;
     }
 
-    // Zero all source setpoints (will be written individually per test)
-    LogMessage("Zeroing source setpoints (will write per-test)...");
+    LogMessage("Setting initial setpoints...");
     LogMessage("  REG 500 (VOLTAGE): 0.0 V");
     result = PSB_SetVoltageQueued(0.0, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
-        snprintf(errorMsg, errorMsgSize, "Failed to zero REG 500");
+        snprintf(errorMsg, errorMsgSize, "Failed to set REG 500");
         return result;
     }
 
     LogMessage("  REG 501 (CURRENT): 0.0 A");
     result = PSB_SetCurrentQueued(0.0, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
-        snprintf(errorMsg, errorMsgSize, "Failed to zero REG 501");
-        return result;
-    }
-
-    LogMessage("  REG 502 (POWER): 0.0 W");
-    result = PSB_SetPowerQueued(0.0, DEVICE_PRIORITY_NORMAL);
-    if (result != PSB_SUCCESS) {
-        snprintf(errorMsg, errorMsgSize, "Failed to zero REG 502");
+        snprintf(errorMsg, errorMsgSize, "Failed to set REG 501");
         return result;
     }
 
@@ -2137,7 +2140,7 @@ static int InitializePSBForMatrixTest(char *errorMsg, int errorMsgSize) {
         return result;
     }
 
-    LogMessage("Initialization complete - decoys set, all limits high, ready for testing");
+    LogMessage("Initialization complete - REG 502=%.0fW, sink decoys set, limits high", PSB_SOURCE_POWER_LIMIT);
     Delay(TEST_DELAY_SHORT);
 
     return SUCCESS;
