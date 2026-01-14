@@ -426,41 +426,31 @@ static int RunOperation(CDCExperimentContext *ctx) {
     GetCtrlVal(g_mainPanelHandle, PANEL_NUM_SET_CHARGE_I, &chargeCurrent);
     GetCtrlVal(g_mainPanelHandle, PANEL_NUM_SET_DISCHARGE_I, &dischargeCurrent);
     
-    // IMPORTANT: Set LIMIT registers (not setpoint registers) to constrain current
+    // IMPORTANT: Do NOT modify LIMIT registers! Follow Battery_GoToVoltage() pattern.
     // CRITICAL: Do NOT write to REG 501 (SET_CURRENT) or REG 499 (SINK_MODE_CURRENT)
     // Writing to setpoint registers causes mode selection issues (CC/CP mode)
     // Discovery from Phase 3 debugging: Only REG 500 (voltage) should be non-zero setpoint
+    //
+    // Discovery from ops-log-09: Cannot set LIMIT registers lower than SETPOINT registers!
+    // - Sink current SETPOINT (REG 499) = 10A (decoy from initialization)
+    // - Trying to set sink current LIMIT (REG 9008) = 5A → "Illegal data value" error
+    // - PSB firmware rejects: LIMIT < SETPOINT
+    //
+    // Solution (from battery_utils.c): Leave ALL limits at high initialization values:
+    // - Current limits: 61.2A (source and sink)
+    // - Power limits: 1224W (source and sink)
+    // - Voltage setpoint controls operation in CV mode
+    // - Current is naturally limited by voltage difference and battery resistance
+    //
+    // The decoy setpoints (10A/100W) and high limits (61.2A/1224W) work together to
+    // ensure CV mode without conflicts.
 
-    // Set source current LIMIT (REG 9002) - NOT setpoint (REG 501)
-    result = PSB_SetCurrentLimitsQueued(0.0, chargeCurrent, DEVICE_PRIORITY_NORMAL);
-    if (result != PSB_SUCCESS) {
-        LogError("Failed to set source current limit: %s", PSB_GetErrorString(result));
-        return result;
-    }
-    LogMessage("Source current LIMIT set to %.2fA (REG 9002, REG 501 remains 0.0A)", chargeCurrent);
-
-    // Set sink current LIMIT (REG 9008/9009) - NOT setpoint (REG 499)
-    result = PSB_SetSinkCurrentLimitsQueued(0.0, dischargeCurrent, DEVICE_PRIORITY_NORMAL);
-    if (result != PSB_SUCCESS) {
-        LogError("Failed to set sink current limit: %s", PSB_GetErrorString(result));
-        return result;
-    }
-    LogMessage("Sink current LIMIT set to %.2fA (REG 9008, REG 499 remains 0.0A)", dischargeCurrent);
-
-    // Set power LIMITS to HIGH values (1224W) to avoid triggering CP mode
-    // CRITICAL: Use limit registers (REG 9004/9005), not setpoint registers (REG 502/498)
-    // CRITICAL: Must be HIGH (1224W) - low values (20W/30W) cause CP mode!
-    // Discovery: PSB interprets "voltage + low power limit" as CP mode
-    LogMessage("Setting power limits to %.1fW (HIGH to prevent CP mode)", CDC_POWER_LIMIT_W);
-    result = PSB_SetPowerLimitQueued(CDC_POWER_LIMIT_W, DEVICE_PRIORITY_NORMAL);
-    if (result != PSB_SUCCESS) {
-        LogWarning("Failed to set power limit: %s", PSB_GetErrorString(result));
-    }
-
-    result = PSB_SetSinkPowerLimitQueued(CDC_POWER_LIMIT_W, DEVICE_PRIORITY_NORMAL);
-    if (result != PSB_SUCCESS) {
-        LogWarning("Failed to set sink power limit: %s", PSB_GetErrorString(result));
-    }
+    LogMessage("Using initialization limits (61.2A/1224W) - not modifying limit registers");
+    LogMessage("  Source current limit: 61.2A (REG 9002 from init, not changed)");
+    LogMessage("  Sink current limit: 61.2A (REG 9008 from init, not changed)");
+    LogMessage("  Source power limit: 1224W (REG 9004 from init, HIGH to prevent CP mode)");
+    LogMessage("  Sink power limit: 1224W (REG 9005 from init, HIGH to prevent CP mode)");
+    LogMessage("  Current will be naturally limited by voltage difference and battery resistance");
 
     // Set voltage setpoint last to enter voltage-controlled mode
     result = PSB_SetVoltageQueued(ctx->params.targetVoltage, DEVICE_PRIORITY_NORMAL);
