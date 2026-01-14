@@ -1,0 +1,68 @@
+Build Status (BatteryTester.prj - Debug)
+ battery_utils.c
+ BatteryTester.c
+ biologic_abstract.c - 11 warnings
+  92, 1    warning: default label in switch which covers all enumeration values 
+  93, 1    warning: will never be executed 
+  197, 1    warning: default label in switch which covers all enumeration values 
+  264, 1    warning: default label in switch which covers all enumeration values 
+  333, 1    warning: default label in switch which covers all enumeration values 
+  352, 1    warning: default label in switch which covers all enumeration values 
+  353, 1    warning: will never be executed 
+  377, 1    warning: default label in switch which covers all enumeration values 
+  393, 1    warning: default label in switch which covers all enumeration values 
+  402, 1    warning: default label in switch which covers all enumeration values 
+  402, 1    warning: will never be executed 
+ biologic_dll.c
+ biologic_eclab.c
+ biologic_queue.c
+ biologic_test.c
+ cdaq_utils.c
+ cmd_prompt.c - 3 errors
+  587, 52    error: use of undeclared identifier 'g_psbQueueMgr'
+  622, 52    error: use of undeclared identifier 'g_psbQueueMgr'
+  635, 28    error: no member named 'mode' in 'PSB_Status'
+ common.c
+ controls.c
+ device_queue.c - 4 warnings
+  438, 1    warning: default label in switch which covers all enumeration values 
+  438, 1    warning: will never be executed 
+  1080, 1    warning: default label in switch which covers all enumeration values 
+  1080, 1    warning: will never be executed 
+ device_queue_test.c
+ dtb4848_dll.c
+ dtb4848_queue.c
+ eclab_olecom.c
+ exp_baseline.c - 19 warnings
+  174, 9    warning: default label in switch which covers all enumeration values 
+  223, 9    warning: default label in switch which covers all enumeration values 
+  223, 25    warning: will never be executed 
+  243, 9    warning: default label in switch which covers all enumeration values 
+  243, 25    warning: will never be executed 
+  527, 86    warning: will never be executed 
+  524, 96    warning: will never be executed 
+  472, 53    warning: will never be executed 
+  743, 9    warning: will never be executed 
+  943, 72    warning: will never be executed 
+  870, 9    warning: will never be executed 
+  1935, 9    warning: will never be executed 
+  1963, 9    warning: will never be executed 
+  2047, 9    warning: will never be executed 
+  2704, 36    warning: will never be executed 
+  2691, 9    warning: will never be executed 
+  2897, 69    warning: will never be executed 
+  2896, 79    warning: will never be executed 
+  2894, 9    warning: will never be executed 
+ exp_cdc.c
+ logging.c
+ psb10000_dll.c - 2 warnings
+  922, 26    warning: implicit conversion loses integer precision: 'int' to 'unsigned char' 
+  940, 50    warning: implicit conversion loses integer precision: 'int' to 'unsigned short' 
+ psb10000_queue.c
+ psb10000_test.c
+ status.c - 2 warnings
+  983, 9    warning: default label in switch which covers all enumeration values 
+  983, 25    warning: will never be executed 
+ teensy_dll.c
+ teensy_queue.c
+Build failed.
