@@ -426,40 +426,49 @@ static int RunOperation(CDCExperimentContext *ctx) {
     GetCtrlVal(g_mainPanelHandle, PANEL_NUM_SET_CHARGE_I, &chargeCurrent);
     GetCtrlVal(g_mainPanelHandle, PANEL_NUM_SET_DISCHARGE_I, &dischargeCurrent);
     
-    // IMPORTANT: Do NOT modify LIMIT registers! Follow Battery_GoToVoltage() pattern.
-    // CRITICAL: Do NOT write to REG 501 (SET_CURRENT) or REG 499 (SINK_MODE_CURRENT)
-    // Writing to setpoint registers causes mode selection issues (CC/CP mode)
-    // Discovery from Phase 3 debugging: Only REG 500 (voltage) should be non-zero setpoint
+    // ORIGINAL WORKING PATTERN (from commit e7015ad):
+    // The original exp_cdc.c set ALL setpoint registers with non-zero values:
+    // 1. REG 500 (voltage) = targetVoltage
+    // 2. REG 501 (source current) = chargeCurrent (NON-ZERO!)
+    // 3. REG 499 (sink current) = dischargeCurrent
+    // 4. REG 502 (source power) = 20W (set by initialization)
+    // 5. REG 498 (sink power) = 20W (set by initialization)
     //
-    // Discovery from ops-log-09: Cannot set LIMIT registers lower than SETPOINT registers!
-    // - Sink current SETPOINT (REG 499) = 10A (decoy from initialization)
-    // - Trying to set sink current LIMIT (REG 9008) = 5A → "Illegal data value" error
-    // - PSB firmware rejects: LIMIT < SETPOINT
+    // The "decoy" approach (setting REG 501=0) was an incorrect hypothesis.
+    // Analysis of the original working code shows REG 501 must be non-zero.
     //
-    // Solution (from battery_utils.c): Leave ALL limits at high initialization values:
-    // - Current limits: 61.2A (source and sink)
-    // - Power limits: 1224W (source and sink)
-    // - Voltage setpoint controls operation in CV mode
-    // - Current is naturally limited by voltage difference and battery resistance
-    //
-    // The decoy setpoints (10A/100W) and high limits (61.2A/1224W) work together to
-    // ensure CV mode without conflicts.
+    // Power limits (REG 502/498 = 20W from init) constrain max power, while
+    // current setpoints (REG 501/499) enable current flow with the target value.
 
-    LogMessage("Using initialization limits (61.2A/1224W) - not modifying limit registers");
-    LogMessage("  Source current limit: 61.2A (REG 9002 from init, not changed)");
-    LogMessage("  Sink current limit: 61.2A (REG 9008 from init, not changed)");
-    LogMessage("  Source power limit: 1224W (REG 9004 from init, HIGH to prevent CP mode)");
-    LogMessage("  Sink power limit: 1224W (REG 9005 from init, HIGH to prevent CP mode)");
-    LogMessage("  Current will be naturally limited by voltage difference and battery resistance");
+    LogMessage("Following original working pattern - setting all setpoint registers:");
+    LogMessage("  REG 500 (voltage): %.2fV", ctx->params.targetVoltage);
+    LogMessage("  REG 501 (source current): %.2fA", chargeCurrent);
+    LogMessage("  REG 499 (sink current): %.2fA", dischargeCurrent);
+    LogMessage("  REG 502/498 (power): already set to 20W by initialization");
 
-    // Set voltage setpoint last to enter voltage-controlled mode
+    // Set source current (REG 501) - CRITICAL: original code sets this non-zero!
+    result = PSB_SetCurrentQueued(chargeCurrent, DEVICE_PRIORITY_NORMAL);
+    if (result != PSB_SUCCESS) {
+        LogError("Failed to set source current: %s", PSB_GetErrorString(result));
+        return result;
+    }
+
+    // Set sink current (REG 499) - for discharge direction
+    result = PSB_SetSinkCurrentQueued(dischargeCurrent, DEVICE_PRIORITY_NORMAL);
+    if (result != PSB_SUCCESS) {
+        LogError("Failed to set sink current: %s", PSB_GetErrorString(result));
+        return result;
+    }
+
+    // Set voltage setpoint (REG 500) - this controls CV mode target
     result = PSB_SetVoltageQueued(ctx->params.targetVoltage, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         LogError("Failed to set target voltage: %s", PSB_GetErrorString(result));
         return result;
     }
 
-    LogMessage("Target voltage set to %.2fV", ctx->params.targetVoltage);
+    LogMessage("All setpoints configured - Voltage: %.2fV, Current: %.2fA",
+               ctx->params.targetVoltage, chargeCurrent);
 
 	// Connect PSB to battery using Teensy relay
 	result = TNY_SetPinQueued(TNY_PSB_PIN, TNY_STATE_CONNECTED, DEVICE_PRIORITY_NORMAL);
