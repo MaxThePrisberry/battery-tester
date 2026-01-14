@@ -1,0 +1,376 @@
+================================================================================
+PSB 10000 DIRECTION-DEPENDENT SINK REGISTER CONFIGURATION
+================================================================================
+Date: 2026-01-13
+Previous Commit: 043de7a (decoy values restored)
+This Commit: [To be updated after commit]
+
+================================================================================
+PROBLEM SUMMARY
+================================================================================
+
+After restoring decoy values (commit 043de7a), ops-log-2026-01-13-06.txt showed
+that Phase 3 charging STILL FAILED with CP mode:
+
+Configuration Before Output Enable (lines 450-455):
+  REG 498 (SINK_MODE_POWER): 100W (decoy, as intended)
+  REG 499 (SINK_MODE_CURRENT): 10.20A (decoy, as intended)
+  REG 500 (SET_VOLTAGE): 4.28V (charging target)
+  REG 501 (SET_CURRENT): 0.00A ✓
+  REG 502 (SET_POWER_SOURCE): 0.00W ✓
+  Device State: CV (SOURCE mode) ✓ (correct BEFORE output enable!)
+
+After Output Enable (lines 499-505):
+  PSB Mode: CP (SOURCE mode) ❌
+  Current: 0.000 A ❌
+  Charging: FAILED
+
+The decoy values (100W/10A) were present, but the PSB STILL entered CP mode!
+
+================================================================================
+ROOT CAUSE: THE DECOY VALUE PARADOX
+================================================================================
+
+Analysis reveals that decoy values have OPPOSITE effects depending on operation
+direction:
+
+CV SINK (Discharge) - DECOYS HELP:
+  - Battery voltage (2.74V) > Target voltage (2.70V) → SINK operation needed
+  - Sink setpoints (100W/10A) tell PSB "I can sink up to these values"
+  - Voltage setpoint (2.70V) controls the operation
+  - PSB interprets: "CV SINK mode with sink capability declared"
+  - Result: CV SINK mode ✓ WORKS (as seen in ops-log-02)
+
+CV SOURCE (Charging) - DECOYS INTERFERE:
+  - Battery voltage (2.72V) < Target voltage (4.20V) → SOURCE operation needed
+  - Sink setpoints (100W/10A) confuse the PSB firmware
+  - PSB sees BOTH voltage setpoint (4.2V) AND sink power setpoint (100W)
+  - PSB interprets: "CV mode with 100W power limit" = CP mode!
+  - Result: CP SOURCE mode ❌ FAILS (all charging tests)
+
+THE PARADOX:
+  Sink register values that ENABLE discharge to work properly (by providing
+  context) PREVENT charging from working (by being interpreted as power limits).
+
+PSB FIRMWARE MODE SELECTION LOGIC (INFERRED):
+
+When output is enabled, PSB examines all setpoint registers (498-502):
+
+  If voltage setpoint + sink power setpoint are non-zero:
+    → Interprets as "power-limited constant voltage"
+    → Selects CP (Constant Power) mode
+    → Power limit = sink power setpoint value
+
+  If voltage setpoint ONLY is non-zero:
+    → Interprets as "pure constant voltage"
+    → Selects CV mode
+    → Direction (SOURCE/SINK) based on battery V vs target V
+
+  If current setpoint is non-zero:
+    → Selects CC (Constant Current) mode
+
+CRITICAL INSIGHT:
+  The PSB doesn't distinguish between "background capability parameters" and
+  "active operating constraints." Any non-zero sink power value is treated as
+  an ACTIVE POWER LIMIT, causing CP mode selection.
+
+================================================================================
+WHY THIS TOOK SO LONG TO DISCOVER
+================================================================================
+
+This issue went through 40+ debugging commits because:
+
+1. DISCHARGE WORKED WITH DECOYS:
+   - ops-log-02 showed successful discharge with REG 498/499 = 101.98W/10.20A
+   - This led us to believe decoy values were the solution
+   - We didn't realize discharge (SINK) and charging (SOURCE) have different needs
+
+2. MULTIPLE VARIABLES CHANGED:
+   - We changed: zeroing vs decoys, timing, register write order, limit registers
+   - Each change affected behavior, making patterns hard to identify
+   - The DIRECTION dependency was hidden by other changes
+
+3. PSB FIRMWARE IS OPAQUE:
+   - No documentation on how sink registers affect SOURCE mode
+   - Mode selection algorithm not published by manufacturer
+   - Had to infer behavior from register dumps and observed modes
+
+4. BEFORE/AFTER OUTPUT ENABLE DIFFERENCE:
+   - PSB shows CV mode BEFORE output enable
+   - Switches to CP mode AFTER output enable
+   - This suggests output enable triggers a mode re-evaluation
+
+5. ASYMMETRY WAS UNEXPECTED:
+   - Intuition: "If it works for discharge, it should work for charging"
+   - Reality: Discharge and charging need OPPOSITE sink register configurations
+   - This violated our mental model of how the PSB should work
+
+================================================================================
+SOLUTION: DIRECTION-DEPENDENT SINK REGISTER CONFIGURATION
+================================================================================
+
+The fix is to configure sink registers based on operation direction:
+
+CV SOURCE (Charging):
+  Battery V < Target V → Need to SOURCE power TO battery
+  Configuration:
+    REG 498 (SINK_MODE_POWER) = 0.0 W (ZERO - no sink needed)
+    REG 499 (SINK_MODE_CURRENT) = 0.0 A (ZERO - no sink needed)
+    REG 500 (SET_VOLTAGE) = 4.2 V (control setpoint)
+    REG 501 (SET_CURRENT) = 0.0 A (not active)
+    REG 502 (SET_POWER_SOURCE) = 0.0 W (not active)
+  Result: Only voltage setpoint is non-zero → CV SOURCE mode
+
+CV SINK (Discharge):
+  Battery V > Target V → Need to SINK power FROM battery
+  Configuration:
+    REG 498 (SINK_MODE_POWER) = 100.0 W (DECOY - sink capability)
+    REG 499 (SINK_MODE_CURRENT) = 10.0 A (DECOY - sink capability)
+    REG 500 (SET_VOLTAGE) = 2.7 V (control setpoint)
+    REG 501 (SET_CURRENT) = 0.0 A (not active)
+    REG 502 (SET_POWER_SOURCE) = 0.0 W (not active)
+  Result: Voltage + sink decoys → CV SINK mode
+
+RULE:
+  - If battery V < target V (SOURCE operation): ZERO sink registers
+  - If battery V > target V (SINK operation): KEEP/SET sink decoys
+
+================================================================================
+IMPLEMENTATION CHANGES
+================================================================================
+
+File: exp_baseline.c
+Location: Phase 3 charging configuration (lines 1407-1431)
+
+BEFORE (Decoy Values Restored - FAILED):
+  // Restore decoy values for all operations
+  LogMessage("DIAGNOSTIC: [0/4] RESTORING sink decoy values for proper CV mode selection");
+  result = PSB_SetSinkPowerQueued(PSB_SINK_POWER_DECOY, DEVICE_PRIORITY_NORMAL);
+  result = PSB_SetSinkCurrentQueued(PSB_SINK_CURRENT_DECOY, DEVICE_PRIORITY_NORMAL);
+
+AFTER (Direction-Dependent - CORRECT):
+  // DIRECTION-DEPENDENT SINK REGISTER CONFIGURATION
+  // Discovery from ops-log-06: Decoy values (100W/10A) cause CP mode for SOURCE operations!
+  // Analysis shows:
+  //   - CV SINK (discharge): Decoy values HELP mode selection (battery V > target V)
+  //   - CV SOURCE (charging): Decoy values CAUSE CP mode (battery V < target V)
+  // Root cause: PSB interprets sink power setpoint as "power-limited CV" = CP mode
+  // Solution: ZERO sink registers for SOURCE operations (charging)
+  LogMessage("DIAGNOSTIC: [0/4] ZEROING sink registers for CV SOURCE operation (charging)");
+  LogMessage("  Charging is CV SOURCE: battery voltage (%.3fV) < target (%.3fV)", ...);
+
+  result = PSB_SetSinkPowerQueued(0.0, DEVICE_PRIORITY_NORMAL);
+  LogMessage("DIAGNOSTIC: REG 498 (SINK_MODE_POWER) set to 0.0 W (CV SOURCE needs no sink)");
+
+  result = PSB_SetSinkCurrentQueued(0.0, DEVICE_PRIORITY_NORMAL);
+  LogMessage("DIAGNOSTIC: REG 499 (SINK_MODE_CURRENT) set to 0.0 A (CV SOURCE needs no sink)");
+
+NOTE: Battery_GoToVoltage() in battery_utils.c already handles direction-
+dependent configuration correctly (it only writes voltage setpoint). The issue
+was specific to Phase 3 charging which was trying to be "helpful" by restoring
+decoy values.
+
+================================================================================
+EXPECTED OUTCOMES
+================================================================================
+
+When Phase 3 charging is executed with direction-dependent configuration:
+
+1. BEFORE OUTPUT ENABLE:
+   - REG 498 (SINK_MODE_POWER): 0.000 W ✓ (ZEROED for SOURCE)
+   - REG 499 (SINK_MODE_CURRENT): 0.000 A ✓ (ZEROED for SOURCE)
+   - REG 500 (SET_VOLTAGE): 4.200 V ✓ (ONLY non-zero setpoint!)
+   - REG 501 (SET_CURRENT): 0.000 A ✓
+   - REG 502 (SET_POWER_SOURCE): 0.000 W ✓
+   - REG 9002 (CURRENT_MAX): 3.300 A (limit)
+   - REG 9004 (POWER_MAX): 30.0 W (limit)
+   - Device state: CV SOURCE mode ✓
+
+2. AFTER OUTPUT ENABLE:
+   - Mode: CV SOURCE ✓ (not CP!)
+   - Current: Non-zero ✓ (charging)
+   - Voltage: Approaching 4.2V
+   - Message: "SUCCESS: PSB correctly in CV SOURCE mode for charging"
+
+3. DURING CHARGING:
+   - PSB maintains CV SOURCE mode
+   - Current decreases as battery voltage increases
+   - Charging completes successfully with multiple EIS measurements
+
+4. DISCHARGE OPERATIONS (unaffected):
+   - Battery_GoToVoltage() continues to work correctly
+   - Battery_DischargeCapacity() writes appropriate sink values
+   - CV SINK mode works as before
+
+5. IF STILL FAILING:
+   - Would indicate PSB firmware has additional undocumented logic
+   - May need explicit mode command beyond register configuration
+   - Would require PSB manufacturer technical support
+
+================================================================================
+WHY THIS SHOULD WORK
+================================================================================
+
+1. ELIMINATES AMBIGUITY FOR SOURCE OPERATIONS:
+   - Only ONE non-zero setpoint register (voltage)
+   - No sink power value to be misinterpreted as a limit
+   - PSB has clear, unambiguous configuration
+
+2. MATCHES SUCCESSFUL DISCHARGE PATTERN:
+   - Discharge uses Battery_GoToVoltage() which only writes voltage
+   - It doesn't pre-configure sink registers before operation
+   - Charging now follows the same pattern
+
+3. ALIGNS WITH PSB FIRMWARE EXPECTATIONS:
+   - SOURCE operation: No sink capability needed → zero sink registers
+   - SINK operation: Sink capability needed → sink decoys present
+   - Configuration matches the physical operation
+
+4. CONSISTENT WITH ORIGINAL DESIGN:
+   - Battery_GoToVoltage() was designed correctly
+   - Phase 3 charging tried to "help" by pre-configuring sink values
+   - Removing that "help" restores correct behavior
+
+5. SIMPLE AND PREDICTABLE:
+   - Clear rule: SOURCE = zero sink, SINK = decoy sink
+   - No complex timing or register ordering dependencies
+   - Easy to understand and maintain
+
+================================================================================
+LESSONS LEARNED
+================================================================================
+
+1. SYMMETRY ASSUMPTIONS CAN BE WRONG:
+   - "If it works for discharge, it works for charging" was incorrect
+   - SOURCE and SINK operations have fundamentally different needs
+   - Always test BOTH directions independently
+
+2. OPTIMIZATION CAN INTRODUCE BUGS:
+   - Phase 3 tried to "pre-configure" sink registers to "help"
+   - This "optimization" caused the failure
+   - Sometimes the simplest approach (do nothing extra) is best
+
+3. FIRMWARE BEHAVIOR IS CONTEXT-DEPENDENT:
+   - Same register values mean different things in different contexts
+   - Sink power = 100W means "capability" for SINK, "limit" for SOURCE
+   - Must understand full context to predict firmware behavior
+
+4. NEGATIVE SPACE MATTERS:
+   - What you DON'T write can be as important as what you DO write
+   - Zero values have meaning (no capability/limit), not just "empty"
+   - Absence of configuration is itself a configuration choice
+
+5. INCREMENTAL DEBUGGING REVEALS PATTERNS:
+   - Each failed attempt provided new information
+   - Comparing working (discharge) vs failing (charging) was key
+   - Eventually accumulated enough data to see the pattern
+
+6. DOCUMENTATION LIMITATIONS:
+   - PSB programming manual doesn't explain mode selection edge cases
+   - Had to reverse-engineer firmware behavior from observations
+   - Sometimes you need to experiment beyond the manual
+
+================================================================================
+TESTING PROCEDURE
+================================================================================
+
+1. Build project in LabWindows/CVI 2020
+2. Connect to PSB 10000 on COM3
+3. Run baseline experiment with Phase 3 enabled
+4. Monitor logs for:
+
+   PHASE 3 CONFIGURATION:
+     - "[0/4] ZEROING sink registers for CV SOURCE operation"
+     - "REG 498 (SINK_MODE_POWER) set to 0.0 W (CV SOURCE needs no sink)"
+     - "REG 499 (SINK_MODE_CURRENT) set to 0.0 A (CV SOURCE needs no sink)"
+
+   REGISTER DUMP:
+     - REG 498 = 0.000 W ✓ (not 100W!)
+     - REG 499 = 0.000 A ✓ (not 10A!)
+     - REG 500 = 4.200 V ✓ (only non-zero setpoint)
+     - REG 501 = 0.000 A ✓
+     - REG 502 = 0.000 W ✓
+
+   AFTER OUTPUT ENABLE:
+     - "PSB Mode: CV (SOURCE mode)" ← MUST be CV, not CP!
+     - "Current: <non-zero> A" ← Must have charging current!
+     - "SUCCESS: PSB correctly in CV SOURCE mode for charging"
+
+5. If successful:
+   - Battery charges normally to 4.2V
+   - Current decreases as voltage approaches target
+   - Phase 3 completes with EIS measurements at 10% SOC intervals
+   - No CP mode switching throughout charging
+
+6. If STILL failing:
+   - Check if PSB firmware version is different
+   - Try different battery voltage starting points
+   - Consider that PSB may have undocumented mode selection logic
+   - Contact EA Elektro-Automatik technical support
+
+================================================================================
+RELATED FILES AND COMMITS
+================================================================================
+
+Modified:
+  - exp_baseline.c (Phase 3 charging sink register configuration)
+
+Documentation:
+  - notes/DIRECTION-DEPENDENT-SINK-2026-01-13.txt (this file)
+  - notes/DECOY-VALUES-RESTORED-2026-01-13.txt (previous attempt)
+  - notes/EXPLICIT-ZEROING-FIX-2026-01-13.txt (earlier attempt)
+  - notes/ZERO-CURRENT-CHARGING-2026-01-13.txt (earlier attempt)
+
+Commit History (40+ debugging attempts):
+  - 043de7a: Restore decoy values (failed in ops-log-06)
+  - 811a6a0: Explicit sink zeroing (failed in ops-log-05)
+  - cc12e67: Zero-current charging (failed in ops-log-04)
+  - d5864b2: Minimalist approach (broke decoy assumptions)
+  - 428c749: Original decoy values (worked for discharge, not charging)
+  - 30+ other commits attempting various register configurations
+
+Test Logs:
+  - ops-log-2026-01-13-06.txt: Decoy values caused CP mode for charging
+  - ops-log-2026-01-13-05.txt: Zero values caused CP mode for charging
+  - ops-log-2026-01-13-04.txt: Retained values caused CP mode for charging
+  - ops-log-2026-01-13-03.txt: Current setpoint caused CP mode
+  - ops-log-2026-01-13-02.txt: Discharge WORKED with retained sink values
+
+Key Insight:
+  The asymmetry between SOURCE and SINK operations was the missing piece.
+  Discharge (SINK) needs sink decoys, charging (SOURCE) needs sink zeros.
+  This direction-dependent configuration should finally solve the 40+ commit
+  problem.
+
+================================================================================
+ARCHITECTURAL IMPLICATIONS
+================================================================================
+
+For future PSB operations:
+
+1. ALWAYS CHECK DIRECTION:
+   Before configuring PSB, determine if operation is SOURCE or SINK:
+     if (battery_voltage < target_voltage) → SOURCE operation
+     if (battery_voltage > target_voltage) → SINK operation
+
+2. CONFIGURE ACCORDINGLY:
+   SOURCE operations:
+     - Zero sink registers (REG 498, 499)
+     - Set voltage register only (REG 500)
+     - Use limit registers for constraints (REG 9002, 9004)
+
+   SINK operations:
+     - Set sink decoys (REG 498 = 100W, REG 499 = 10A)
+     - Set voltage register (REG 500)
+     - Sink values provide "capability context"
+
+3. DOCUMENT THE PATTERN:
+   Leave clear comments explaining why sink registers are configured
+   differently for SOURCE vs SINK operations, so future developers
+   don't "optimize" this away.
+
+4. TEST BOTH DIRECTIONS:
+   When adding new battery operations, test charging AND discharging
+   separately. Don't assume symmetric behavior.
+
+================================================================================
