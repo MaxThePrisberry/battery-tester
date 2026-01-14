@@ -1,0 +1,387 @@
+================================================================================
+PSB 10000 POWER LIMIT CAUSING CP MODE SELECTION
+================================================================================
+Date: 2026-01-13
+Previous Commit: fe74619 (direction-dependent sink register configuration)
+This Commit: [To be updated after commit]
+
+================================================================================
+PROBLEM SUMMARY
+================================================================================
+
+After 40+ debugging commits and 4 major approaches (zero-current, explicit
+zeroing, decoy values restoration, direction-dependent configuration), Phase 3
+charging STILL entered CP mode in ops-log-2026-01-13-07.txt:
+
+Configuration Before Output Enable (ops-log-07, lines 450-467):
+  REG 498 (SINK_MODE_POWER): 0.00 W ✓ (correctly zeroed for SOURCE)
+  REG 499 (SINK_MODE_CURRENT): 0.00 A ✓ (correctly zeroed for SOURCE)
+  REG 500 (SET_VOLTAGE): 4.28 V ✓ (only non-zero setpoint!)
+  REG 501 (SET_CURRENT): 0.00 A ✓
+  REG 502 (SET_POWER_SOURCE): 0.00 W ✓
+  REG 9002 (CURRENT_MAX): 3.37 A (current limit)
+  REG 9004 (POWER_MAX): 30.58 W ← PROBLEM!!!
+  Device State: CV SOURCE mode ✓
+
+After Output Enable (ops-log-07, lines 498-509):
+  PSB Mode: CP (SOURCE mode) ❌
+  Current: 0.000 A ❌
+  Charging: FAILED
+
+All setpoint registers were correct, sink registers properly zeroed, but PSB
+STILL switched to CP mode after output enable!
+
+================================================================================
+ROOT CAUSE DISCOVERED
+================================================================================
+
+The critical clue was in ops-log-07, lines 437-439:
+
+  DIAGNOSTIC: [2/4] Setting power LIMIT to 0.0 W (REG 9004)
+  [PSB] Setting max power: 30.00W
+  DIAGNOSTIC: Power limit command completed
+
+The diagnostic message SAID "0.0 W" but PSB actually wrote "30.00W"!
+
+Looking at exp_baseline.c line 1455:
+  LogMessage("DIAGNOSTIC: [2/4] Setting power LIMIT to %.1f W (REG 9004)",
+             BASELINE_POWER_LIMIT);
+  result = PSB_SetPowerLimitQueued(BASELINE_POWER_LIMIT, DEVICE_PRIORITY_NORMAL);
+
+And exp_baseline.h line 66:
+  #define BASELINE_POWER_LIMIT            30      // 30W power limit
+
+**Phase 3 charging was setting REG 9004 (POWER_MAX) to 30W!**
+
+Comparing with successful discharge operations in battery_utils.c line 142:
+  LogMessage("Using initialization setpoints (10A/100W decoys) and
+             high limits (61.2A/1224W)");
+
+**Battery_GoToVoltage() uses 1224W power limit, NOT 30W!**
+
+PSB MODE SELECTION LOGIC (COMPLETE PICTURE):
+
+When output is enabled, PSB firmware examines BOTH setpoint registers (498-502)
+AND limit registers (9000-9009):
+
+  If voltage setpoint is non-zero AND power limit is LOW (e.g., 30W):
+    → Interprets as "constant voltage with power constraint"
+    → Selects CP (Constant Power) mode to honor the power limit
+    → Power limit = REG 9004 value (30W)
+    → Result: CP mode, current limited by P/V = 30W/4.2V = 7.1A max
+
+  If voltage setpoint is non-zero AND power limit is HIGH (e.g., 1224W):
+    → Interprets as "pure constant voltage with non-restrictive limit"
+    → Selects CV (Constant Voltage) mode
+    → Current controlled naturally by voltage difference
+    → Result: CV mode, power limit doesn't restrict operation
+
+CRITICAL INSIGHT:
+  Limit registers (particularly REG 9004 POWER_MAX) DO affect mode selection!
+  They're not just passive safety limits - the PSB firmware uses them as part
+  of its mode selection algorithm. A LOW power limit triggers CP mode, while
+  a HIGH power limit allows CV mode.
+
+================================================================================
+WHY THIS WAS SO HARD TO FIND
+================================================================================
+
+This issue took 40+ commits because:
+
+1. FOCUSED ON SETPOINT REGISTERS (498-502):
+   - All documentation and intuition suggested mode is determined by setpoints
+   - Spent weeks manipulating REG 498/499/501/502
+   - Never suspected limit registers could affect mode selection
+
+2. LIMIT VS SETPOINT CONFUSION:
+   - Thought limit registers (9000-9009) were purely safety constraints
+   - Didn't realize PSB firmware uses limits in mode selection logic
+   - Battery_GoToVoltage() comment (line 127) says "do NOT modify limit registers"
+
+3. WORKING DISCHARGE OBSCURED THE PATTERN:
+   - Battery_GoToVoltage() works with 1224W limit
+   - Phase 3 charging fails with 30W limit
+   - Difference was RIGHT THERE but we were focused on setpoint registers
+
+4. MISLEADING LOG MESSAGE:
+   - ops-log-06 showed "Setting power LIMIT to 0.0 W"
+   - But the actual value was 30W (BASELINE_POWER_LIMIT)
+   - The %.1f formatter in the log message showed BASELINE_POWER_LIMIT value
+   - We were looking for setpoint problems, not limit register problems
+
+5. REGISTER DUMP SHOWED 30W BUT DIDN'T HIGHLIGHT IT:
+   - REG 9004 appeared in every register dump showing ~30W
+   - But we were scanning for non-zero SETPOINT registers
+   - The "30W power limit" was visible but not recognized as problematic
+
+================================================================================
+SOLUTION: USE HIGH POWER LIMIT LIKE DISCHARGE OPERATIONS
+================================================================================
+
+The fix is simple - match the successful discharge pattern:
+
+BEFORE (FAILED):
+  #define BASELINE_POWER_LIMIT            30      // 30W power limit
+
+  result = PSB_SetPowerLimitQueued(BASELINE_POWER_LIMIT, DEVICE_PRIORITY_NORMAL);
+
+  Result:
+    REG 9004 = 30W → PSB enters CP mode
+
+AFTER (CORRECT):
+  // Use high power limit to avoid triggering CP mode
+  result = PSB_SetPowerLimitQueued(PSB_SAFE_POWER_MAX, DEVICE_PRIORITY_NORMAL);
+
+  Result:
+    REG 9004 = 1224W → PSB stays in CV mode
+
+psb10000_dll.h defines:
+  #define PSB_SAFE_POWER_MAX      1224.0  // W (102% of nominal)
+
+This matches the power limit used by:
+  1. PSB initialization (psb10000_queue.c line 748)
+  2. Battery_GoToVoltage() (battery_utils.c line 142)
+  3. PSB safe limits setup (psb10000_queue.c)
+
+CONFIGURATION COMPARISON:
+
+  Successful Discharge (Battery_GoToVoltage):
+    REG 498/499: 10A/100W (decoys)
+    REG 500: 2.7V (voltage setpoint)
+    REG 501/502: 0.0A/0.0W
+    REG 9002: 61.2A (high current limit)
+    REG 9004: 1224W (high power limit) ← KEY!
+    Result: CV SINK mode ✓
+
+  Failed Charging (Phase 3 before fix):
+    REG 498/499: 0.0A/0.0W (zeroed for SOURCE)
+    REG 500: 4.2V (voltage setpoint)
+    REG 501/502: 0.0A/0.0W
+    REG 9002: 3.3A (current limit)
+    REG 9004: 30W (LOW power limit) ← PROBLEM!
+    Result: CP SOURCE mode ❌
+
+  Corrected Charging (Phase 3 after fix):
+    REG 498/499: 0.0A/0.0W (zeroed for SOURCE)
+    REG 500: 4.2V (voltage setpoint)
+    REG 501/502: 0.0A/0.0W
+    REG 9002: 3.3A (current limit)
+    REG 9004: 1224W (HIGH power limit) ← FIXED!
+    Expected: CV SOURCE mode ✓
+
+================================================================================
+IMPLEMENTATION CHANGES
+================================================================================
+
+File: exp_baseline.c
+Location: Phase 3 charging configuration (lines ~1453-1461)
+
+BEFORE (INCORRECT):
+  LogMessage("DIAGNOSTIC: [2/4] Setting power LIMIT to %.1f W (REG 9004)",
+             BASELINE_POWER_LIMIT);
+  result = PSB_SetPowerLimitQueued(BASELINE_POWER_LIMIT, DEVICE_PRIORITY_NORMAL);
+  // This writes 30W, causing CP mode!
+
+AFTER (CORRECT):
+  // Set power limit to HIGH value (1224W) to avoid triggering CP mode
+  // CRITICAL: A LOW power limit (30W) causes PSB to enter CP mode!
+  // Discovery from ops-log-07: REG 9004=30W caused CP mode after output enable
+  // Battery_GoToVoltage() uses PSB_SAFE_POWER_MAX (1224W) and works correctly
+  // Solution: Use high power limit like successful discharge operations
+  LogMessage("DIAGNOSTIC: [2/4] Setting power LIMIT to %.1f W (REG 9004) - HIGH to avoid CP mode",
+             PSB_SAFE_POWER_MAX);
+  result = PSB_SetPowerLimitQueued(PSB_SAFE_POWER_MAX, DEVICE_PRIORITY_NORMAL);
+  LogMessage("DIAGNOSTIC: Power limit set to %.1f W (same as discharge operations)",
+             PSB_SAFE_POWER_MAX);
+
+ALSO UPDATED:
+  Line 1404-1405: Diagnostic header showing power limit value
+  Changed from BASELINE_POWER_LIMIT to PSB_SAFE_POWER_MAX
+
+================================================================================
+EXPECTED OUTCOMES
+================================================================================
+
+When Phase 3 charging is executed with high power limit:
+
+1. BEFORE OUTPUT ENABLE:
+   - REG 498 (SINK_MODE_POWER): 0.000 W ✓
+   - REG 499 (SINK_MODE_CURRENT): 0.000 A ✓
+   - REG 500 (SET_VOLTAGE): 4.200 V ✓
+   - REG 501 (SET_CURRENT): 0.000 A ✓
+   - REG 502 (SET_POWER_SOURCE): 0.000 W ✓
+   - REG 9002 (CURRENT_MAX): 3.300 A ✓
+   - REG 9004 (POWER_MAX): 1224.0 W ✓ (HIGH, not 30W!)
+   - Device state: CV SOURCE mode ✓
+
+2. AFTER OUTPUT ENABLE:
+   - Mode: CV SOURCE ✓ (not CP!)
+   - Current: Non-zero ✓ (charging current flowing)
+   - Voltage: Approaching 4.2V
+   - Message: "SUCCESS: PSB correctly in CV SOURCE mode for charging"
+
+3. DURING CHARGING:
+   - PSB maintains CV SOURCE mode throughout
+   - Current decreases naturally as battery voltage increases
+   - Power naturally limited by I*V, not by firmware mode switching
+   - Charging completes successfully with EIS measurements at 10% SOC intervals
+
+4. WHY THIS SHOULD WORK:
+   - Matches successful discharge pattern exactly
+   - High power limit (1224W) doesn't trigger CP mode logic
+   - PSB sees ONLY voltage setpoint as active control
+   - All other registers provide non-restrictive limits
+
+================================================================================
+LESSONS LEARNED
+================================================================================
+
+1. LIMIT REGISTERS CAN AFFECT MODE SELECTION:
+   - Not just passive safety constraints
+   - PSB firmware uses them in mode selection algorithm
+   - Low limits can trigger mode changes (CV → CP)
+
+2. LOOK AT WORKING CODE FIRST:
+   - Battery_GoToVoltage() had the answer all along (1224W power limit)
+   - Should have compared ALL registers (setpoints AND limits) earlier
+   - Working reference implementations are invaluable
+
+3. CROSS-REFERENCE REGISTER DUMPS WITH CODE:
+   - ops-log-07 showed "30W" in register dump
+   - Code showed BASELINE_POWER_LIMIT = 30
+   - Should have connected these dots sooner
+
+4. BEWARE OF MISLEADING LOG MESSAGES:
+   - Log said "Setting power LIMIT to 0.0 W"
+   - But code actually used BASELINE_POWER_LIMIT (30W)
+   - Always verify log messages match actual values
+
+5. MODE SELECTION IS COMPLEX:
+   - Not just "last register written wins"
+   - Not just setpoint registers (498-502)
+   - Firmware evaluates BOTH setpoints AND limits
+   - Low power limit + voltage setpoint = CP mode
+   - High power limit + voltage setpoint = CV mode
+
+6. DEBUGGING REQUIRES COMPLETE PICTURE:
+   - Must examine ALL configuration: setpoints, limits, timing
+   - A single "wrong" value in a limit register can break everything
+   - Register dumps are essential but must be analyzed holistically
+
+================================================================================
+PSB FIRMWARE MODE SELECTION ALGORITHM (REVISED COMPLETE UNDERSTANDING)
+================================================================================
+
+Based on 40+ commits and comprehensive testing, the PSB firmware mode selection
+logic appears to be:
+
+STEP 1: Check which SETPOINT registers (498-502) have non-zero values
+  - If only REG 500 (voltage): Candidate for CV mode
+  - If REG 501 (current) non-zero: Candidate for CC mode
+  - If REG 502 (power) non-zero: Candidate for CP mode
+  - If multiple setpoints: Ambiguous, firmware chooses based on additional logic
+
+STEP 2: Check LIMIT registers (9000-9009) for restrictive values
+  - If REG 9004 (POWER_MAX) is LOW relative to expected operation:
+    → Firmware interprets as "power-constrained operation"
+    → OVERRIDES CV candidate and selects CP mode
+    → Example: CV with 30W power limit → CP mode
+  - If REG 9004 (POWER_MAX) is HIGH (non-restrictive):
+    → Firmware interprets as "safety limit only"
+    → Allows CV mode selection to proceed
+    → Example: CV with 1224W power limit → CV mode
+
+STEP 3: Determine SOURCE vs SINK direction
+  - Compare battery voltage to voltage setpoint (REG 500)
+  - If battery V < target V: SOURCE mode (charging)
+  - If battery V > target V: SINK mode (discharging)
+
+CRITICAL RULES FOR CV MODE:
+  1. Only REG 500 (voltage) should be non-zero setpoint
+  2. REG 9004 (power limit) must be HIGH (>1000W) to avoid CP mode
+  3. REG 9002 (current limit) provides current constraint without mode change
+  4. Sink registers (498/499): ZERO for SOURCE, DECOY for SINK
+
+================================================================================
+TESTING PROCEDURE
+================================================================================
+
+1. Build project in LabWindows/CVI 2020
+2. Connect to PSB 10000 on COM3
+3. Run baseline experiment with Phase 3 enabled
+4. Monitor logs for:
+
+   PHASE 3 CONFIGURATION:
+     - "Setting power LIMIT to 1224.0 W (REG 9004) - HIGH to avoid CP mode"
+     - "Power limit set to 1224.0 W (same as discharge operations)"
+
+   REGISTER DUMP:
+     - REG 498 = 0.000 W ✓
+     - REG 499 = 0.000 A ✓
+     - REG 500 = 4.200 V ✓
+     - REG 501 = 0.000 A ✓
+     - REG 502 = 0.000 W ✓
+     - REG 9002 = 3.300 A ✓
+     - REG 9004 = 1224.0 W ✓ (NOT 30W!)
+
+   AFTER OUTPUT ENABLE:
+     - "PSB Mode: CV (SOURCE mode)" ← MUST be CV!
+     - "Current: <non-zero> A" ← Charging current!
+     - "SUCCESS: PSB correctly in CV SOURCE mode for charging"
+
+5. If successful:
+   - Battery charges normally to 4.2V
+   - Current decreases naturally
+   - Phase 3 completes with EIS measurements
+   - No CP mode switching
+
+6. If STILL failing:
+   - Verify REG 9004 is actually 1224W (not 30W)
+   - Check for other limit registers affecting mode
+   - PSB firmware may have additional undocumented logic
+   - Contact EA Elektro-Automatik technical support
+
+================================================================================
+RELATED FILES AND COMMITS
+================================================================================
+
+Modified:
+  - exp_baseline.c (Phase 3 charging power limit configuration)
+
+Documentation:
+  - notes/POWER-LIMIT-CP-MODE-2026-01-13.txt (this file)
+  - notes/DIRECTION-DEPENDENT-SINK-2026-01-13.txt (direction-dependent sink config)
+  - notes/DECOY-VALUES-RESTORED-2026-01-13.txt (decoy value restoration)
+  - notes/EXPLICIT-ZEROING-FIX-2026-01-13.txt (explicit sink zeroing)
+  - notes/ZERO-CURRENT-CHARGING-2026-01-13.txt (zero-current approach)
+
+Reference Code:
+  - battery_utils.c line 142: Shows successful discharge uses 1224W power limit
+  - psb10000_queue.c line 748: Initialization uses PSB_SAFE_POWER_MAX (1224W)
+  - psb10000_dll.h line 31: Defines PSB_SAFE_POWER_MAX = 1224.0W
+
+Commit History (40+ debugging attempts):
+  - fe74619: Direction-dependent sink configuration (failed with 30W power limit)
+  - 043de7a: Restore decoy values (failed with 30W power limit)
+  - 811a6a0: Explicit sink zeroing (failed with 30W power limit)
+  - cc12e67: Zero-current charging (failed with 30W power limit)
+  - 428c749: Moderate decoy values (failed with 30W power limit)
+  - [To be added]: Power limit fix (1224W) - should finally work!
+
+Test Logs:
+  - ops-log-2026-01-13-07.txt: Direction-dependent config STILL failed - revealed 30W power limit issue
+  - ops-log-2026-01-13-06.txt: Decoy values caused CP mode
+  - ops-log-2026-01-13-05.txt: Explicit zeroing caused CP mode
+  - ops-log-2026-01-13-04.txt: Retained sink values caused CP mode
+  - ops-log-2026-01-13-03.txt: Current setpoint caused CP mode
+  - ops-log-2026-01-13-02.txt: Discharge SUCCESS (used 1224W power limit!)
+
+Key Insight:
+  The "30W power limit" was the culprit all along! It was RIGHT THERE in every
+  register dump, but we were so focused on setpoint registers (498-502) that we
+  missed the limit register (9004) causing the mode switching.
+
+  Battery_GoToVoltage() had the answer from the beginning: use high power limits
+  (1224W) for CV operations. All 40+ commits were trying to fix the wrong thing.
+
+================================================================================

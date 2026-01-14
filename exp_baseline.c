@@ -1401,8 +1401,8 @@ static int RunPhase3_EISCharge(BaselineExperimentContext *ctx) {
     // IMPORTANT: Set limits first, then voltage setpoint last to enter voltage-controlled mode
     // (PSB control mode is determined by which setpoint register is written last)
     LogMessage("=== DIAGNOSTIC: Starting PSB configuration for Phase 3 charging ===");
-    LogMessage("DIAGNOSTIC: Target voltage=%.3fV, current limit=%.3fA, power limit=%.1fW",
-               ctx->params.chargeVoltage, ctx->params.chargeCurrent, BASELINE_POWER_LIMIT);
+    LogMessage("DIAGNOSTIC: Target voltage=%.3fV, current limit=%.3fA, power limit=%.1fW (HIGH to avoid CP mode)",
+               ctx->params.chargeVoltage, ctx->params.chargeCurrent, PSB_SAFE_POWER_MAX);
 
     // DIRECTION-DEPENDENT SINK REGISTER CONFIGURATION
     // Discovery from ops-log-06: Decoy values (100W/10A) cause CP mode for SOURCE operations!
@@ -1450,14 +1450,18 @@ static int RunPhase3_EISCharge(BaselineExperimentContext *ctx) {
     LogMessage("DIAGNOSTIC: Current limit set via REG 9002, REG 501 remains at 0.0A");
     Delay(0.2);  // Brief delay to ensure command completes
 
-    // Set power limit (acts as constraint in voltage mode)
+    // Set power limit to HIGH value (1224W) to avoid triggering CP mode
     // Use LIMIT register (REG 9004), not setpoint register (REG 502)
-    LogMessage("DIAGNOSTIC: [2/4] Setting power LIMIT to %.1f W (REG 9004)", BASELINE_POWER_LIMIT);
-    result = PSB_SetPowerLimitQueued(BASELINE_POWER_LIMIT, DEVICE_PRIORITY_NORMAL);
+    // CRITICAL: A LOW power limit (30W) causes PSB to enter CP mode!
+    // Discovery from ops-log-07: REG 9004=30W caused CP mode after output enable
+    // Battery_GoToVoltage() uses PSB_SAFE_POWER_MAX (1224W) and works correctly
+    // Solution: Use high power limit like successful discharge operations
+    LogMessage("DIAGNOSTIC: [2/4] Setting power LIMIT to %.1f W (REG 9004) - HIGH to avoid CP mode", PSB_SAFE_POWER_MAX);
+    result = PSB_SetPowerLimitQueued(PSB_SAFE_POWER_MAX, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         LogWarning("Failed to set power limit: %s", PSB_GetErrorString(result));
     }
-    LogMessage("DIAGNOSTIC: Power limit command completed");
+    LogMessage("DIAGNOSTIC: Power limit set to %.1f W (same as discharge operations)", PSB_SAFE_POWER_MAX);
     Delay(0.2);  // Brief delay to ensure command completes
 
     // Set voltage setpoint last to enter voltage-controlled mode
