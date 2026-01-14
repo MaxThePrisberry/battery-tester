@@ -19,6 +19,7 @@
 #include "BatteryTester.h"
 #include "psb10000_test.h"
 #include "psb10000_queue.h"
+#include "teensy_queue.h"  // For relay control
 #include "common.h"
 #include "logging.h"
 #include <stdio.h>
@@ -2405,10 +2406,20 @@ static int RunSingleRegisterTest(RegisterTestCase *test, char *errorMsg, int err
                dirNames[test->preEnableDirection],
                test->preEnableOutput ? "ON" : "OFF");
 
-    // Step 5: Enable output (CRITICAL MOMENT - mode may change!)
-    LogMessage("Step 5: Enabling output...");
+    // Step 5: Connect relay and enable output
+    LogMessage("Step 5: Connecting PSB relay to battery...");
+    result = TNY_SetPinQueued(TNY_PSB_PIN, TNY_STATE_CONNECTED, DEVICE_PRIORITY_NORMAL);
+    if (result != SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Failed to connect PSB relay");
+        return result;
+    }
+    Delay(0.1);  // Brief delay for relay to settle
+
+    LogMessage("  Enabling PSB output...");
     result = PSB_SetOutputEnableQueued(1, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
+        // Disconnect relay on failure
+        TNY_SetPinQueued(TNY_PSB_PIN, TNY_STATE_DISCONNECTED, DEVICE_PRIORITY_NORMAL);
         snprintf(errorMsg, errorMsgSize, "Failed to enable output");
         return result;
     }
@@ -2475,6 +2486,7 @@ static int RunSingleRegisterTest(RegisterTestCase *test, char *errorMsg, int err
                 fabs(status.power) > TEST_MATRIX_MAX_POWER) {
                 LogError("SAFETY ABORT: Exceeded safety thresholds!");
                 PSB_SetOutputEnableQueued(0, DEVICE_PRIORITY_NORMAL);
+                TNY_SetPinQueued(TNY_PSB_PIN, TNY_STATE_DISCONNECTED, DEVICE_PRIORITY_NORMAL);
                 snprintf(errorMsg, errorMsgSize, "Safety abort: I=%.2fA, V=%.2fV, P=%.2fW",
                          status.current, status.voltage, status.power);
                 return ERR_SAFETY_ABORT;
@@ -2500,12 +2512,21 @@ static int RunSingleRegisterTest(RegisterTestCase *test, char *errorMsg, int err
     LogMessage("  Avg Power: %.2f W", test->avgPower);
     LogMessage("  Current Non-Zero: %s", test->currentNonZero ? "YES" : "NO");
 
-    // Step 8: Disable output
+    // Step 8: Disable output and disconnect relay
     LogMessage("Step 8: Disabling output...");
     result = PSB_SetOutputEnableQueued(0, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
+        // Still try to disconnect relay
+        TNY_SetPinQueued(TNY_PSB_PIN, TNY_STATE_DISCONNECTED, DEVICE_PRIORITY_NORMAL);
         snprintf(errorMsg, errorMsgSize, "Failed to disable output");
         return result;
+    }
+
+    LogMessage("  Disconnecting PSB relay from battery...");
+    result = TNY_SetPinQueued(TNY_PSB_PIN, TNY_STATE_DISCONNECTED, DEVICE_PRIORITY_NORMAL);
+    if (result != SUCCESS) {
+        LogWarning("Failed to disconnect PSB relay");
+        // Continue anyway - output is already off
     }
 
     Delay(TEST_DELAY_SHORT);
