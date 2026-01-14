@@ -2095,16 +2095,16 @@ static int InitializePSBForMatrixTest(char *errorMsg, int errorMsgSize) {
         return result;
     }
 
-    LogMessage("Setting sink decoy values...");
-    LogMessage("  REG 498 (SINK_POWER): 100.0 W");
-    result = PSB_SetSinkPowerQueued(100.0, DEVICE_PRIORITY_NORMAL);
+    LogMessage("Setting sink power limit and current...");
+    LogMessage("  REG 498 (SINK_POWER): %.1f W (discharge power limit)", PSB_SINK_POWER_LIMIT);
+    result = PSB_SetSinkPowerQueued(PSB_SINK_POWER_LIMIT, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to set REG 498");
         return result;
     }
 
-    LogMessage("  REG 499 (SINK_CURRENT): 10.0 A");
-    result = PSB_SetSinkCurrentQueued(10.0, DEVICE_PRIORITY_NORMAL);
+    LogMessage("  REG 499 (SINK_CURRENT): %.1f A", PSB_SINK_CURRENT_DECOY);
+    result = PSB_SetSinkCurrentQueued(PSB_SINK_CURRENT_DECOY, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to set REG 499");
         return result;
@@ -2140,7 +2140,8 @@ static int InitializePSBForMatrixTest(char *errorMsg, int errorMsgSize) {
         return result;
     }
 
-    LogMessage("Initialization complete - REG 502=%.0fW, sink decoys set, limits high", PSB_SOURCE_POWER_LIMIT);
+    LogMessage("Initialization complete - REG 502=%.0fW (source), REG 498=%.0fW (sink)",
+               PSB_SOURCE_POWER_LIMIT, PSB_SINK_POWER_LIMIT);
     Delay(TEST_DELAY_SHORT);
 
     return SUCCESS;

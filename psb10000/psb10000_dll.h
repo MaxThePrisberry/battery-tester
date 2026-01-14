@@ -40,11 +40,11 @@
 #define PSB_SINK_CURRENT_DECOY  10.0    // A (mode selection decoy, not operating point)
 #define PSB_SINK_POWER_DECOY    100.0   // W (mode selection decoy, not operating point)
 
-// Source power limit (REG 502)
-// REG 502 acts as max power limit for CV/CC modes. Setting to 0W prevents any current flow!
-// This value limits power delivery in CV mode (voltage control) and CC mode (current control).
+// Power limits for source and sink modes (REG 502 and REG 498)
+// These registers control MAX POWER in CV/CC modes. Setting to 0W prevents current flow!
 // 20W is conservative and safe for typical battery testing while allowing operation.
-#define PSB_SOURCE_POWER_LIMIT  20.0    // W (max power in CV/CC modes)
+#define PSB_SOURCE_POWER_LIMIT  20.0    // W (max power when charging - REG 502)
+#define PSB_SINK_POWER_LIMIT    20.0    // W (max power when discharging - REG 498)
 
 // PSB-specific error codes (using base from common.h)
 #define PSB_SUCCESS                 SUCCESS

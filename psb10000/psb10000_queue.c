@@ -161,20 +161,20 @@ static int PSB_AdapterConnect(void *deviceContext, void *connectionParams) {
             LogWarningEx(LOG_DEVICE_PSB, "Failed to clear source current (REG 501): %s", PSB_GetErrorString(result));
         }
 
-        // Step 3: Write sink decoy values (REG 498, 499)
-        LogMessageEx(LOG_DEVICE_PSB, "Step 3: Writing sink decoy values");
-        LogMessageEx(LOG_DEVICE_PSB, "  Setting REG 498 (sink power) to %.1f W", PSB_SINK_POWER_DECOY);
+        // Step 3: Set sink power limit (REG 498) and current decoy (REG 499)
+        LogMessageEx(LOG_DEVICE_PSB, "Step 3: Setting sink power limit and current decoy");
+        LogMessageEx(LOG_DEVICE_PSB, "  Setting REG 498 (sink power limit) to %.1f W", PSB_SINK_POWER_LIMIT);
 
-        result = PSB_SetSinkPower(&ctx->handle, PSB_SINK_POWER_DECOY);
+        result = PSB_SetSinkPower(&ctx->handle, PSB_SINK_POWER_LIMIT);
         if (result != PSB_SUCCESS) {
-            LogWarningEx(LOG_DEVICE_PSB, "Failed to set sink power decoy: %s", PSB_GetErrorString(result));
+            LogWarningEx(LOG_DEVICE_PSB, "Failed to set sink power limit: %s", PSB_GetErrorString(result));
         }
 
         LogMessageEx(LOG_DEVICE_PSB, "  Setting REG 499 (sink current) to %.1f A", PSB_SINK_CURRENT_DECOY);
 
         result = PSB_SetSinkCurrent(&ctx->handle, PSB_SINK_CURRENT_DECOY);
         if (result != PSB_SUCCESS) {
-            LogWarningEx(LOG_DEVICE_PSB, "Failed to set sink current decoy: %s", PSB_GetErrorString(result));
+            LogWarningEx(LOG_DEVICE_PSB, "Failed to set sink current: %s", PSB_GetErrorString(result));
         }
 
         // Step 4: Set initial voltage setpoint (REG 500) to 0V
@@ -184,10 +184,10 @@ static int PSB_AdapterConnect(void *deviceContext, void *connectionParams) {
             LogWarningEx(LOG_DEVICE_PSB, "Failed to set voltage: %s", PSB_GetErrorString(result));
         }
 
-        LogMessageEx(LOG_DEVICE_PSB, "PSB configuration: REG 502=%.0fW (power limit), REG 500=0V, REG 501=0A",
-                    PSB_SOURCE_POWER_LIMIT);
-        LogMessageEx(LOG_DEVICE_PSB, "Sink decoys: REG 498=%.0fW, REG 499=%.0fA",
-                    PSB_SINK_POWER_DECOY, PSB_SINK_CURRENT_DECOY);
+        LogMessageEx(LOG_DEVICE_PSB, "PSB configuration: REG 502=%.0fW (source), REG 498=%.0fW (sink)",
+                    PSB_SOURCE_POWER_LIMIT, PSB_SINK_POWER_LIMIT);
+        LogMessageEx(LOG_DEVICE_PSB, "Setpoints: REG 500=0V, REG 501=0A, REG 499=%.0fA",
+                    PSB_SINK_CURRENT_DECOY);
 
         // DIAGNOSTIC: Log ALL registers to understand complete PSB state
         PSB_LogAllRegisters(&ctx->handle, "After initialization (decoy value approach)");
@@ -811,19 +811,19 @@ int PSB_ZeroAllValuesQueued(DevicePriority priority) {
         overallResult = result;
     }
 
-    // Set sink decoy values (REG 498, 499)
-    LogMessageEx(LOG_DEVICE_PSB, "Setting sink decoys: %.1fA, %.1fW",
-                PSB_SINK_CURRENT_DECOY, PSB_SINK_POWER_DECOY);
+    // Set sink power limit (REG 498) and current (REG 499)
+    LogMessageEx(LOG_DEVICE_PSB, "Setting sink: REG 498=%.0fW, REG 499=%.0fA",
+                PSB_SINK_POWER_LIMIT, PSB_SINK_CURRENT_DECOY);
 
-    result = PSB_SetSinkCurrentQueued(PSB_SINK_CURRENT_DECOY, priority);
+    result = PSB_SetSinkPowerQueued(PSB_SINK_POWER_LIMIT, priority);
     if (result != PSB_SUCCESS) {
-        LogWarningEx(LOG_DEVICE_PSB, "Failed to set sink current decoy: %s", PSB_GetErrorString(result));
+        LogWarningEx(LOG_DEVICE_PSB, "Failed to set sink power limit: %s", PSB_GetErrorString(result));
         overallResult = result;
     }
 
-    result = PSB_SetSinkPowerQueued(PSB_SINK_POWER_DECOY, priority);
+    result = PSB_SetSinkCurrentQueued(PSB_SINK_CURRENT_DECOY, priority);
     if (result != PSB_SUCCESS) {
-        LogWarningEx(LOG_DEVICE_PSB, "Failed to set sink power decoy: %s", PSB_GetErrorString(result));
+        LogWarningEx(LOG_DEVICE_PSB, "Failed to set sink current: %s", PSB_GetErrorString(result));
         overallResult = result;
     }
 
@@ -834,8 +834,8 @@ int PSB_ZeroAllValuesQueued(DevicePriority priority) {
         overallResult = result;
     }
 
-    LogMessageEx(LOG_DEVICE_PSB, "PSB config: REG 502=%.0fW, REG 501=0A, REG 500=0V, sink decoys set",
-                PSB_SOURCE_POWER_LIMIT);
+    LogMessageEx(LOG_DEVICE_PSB, "PSB config: REG 502=%.0fW (source), REG 498=%.0fW (sink), REG 500=0V",
+                PSB_SOURCE_POWER_LIMIT, PSB_SINK_POWER_LIMIT);
     
     if (overallResult == PSB_SUCCESS) {
         LogMessageEx(LOG_DEVICE_PSB, "All PSB values zeroed and decoy values restored successfully");
