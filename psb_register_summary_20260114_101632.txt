@@ -1,0 +1,256 @@
+================================================================================
+PSB 10000 REGISTER MATRIX TEST RESULTS
+================================================================================
+Date: 2026-01-14 10:25:06
+Total Tests: 30
+Passed: 0 (0.0%)
+Failed: 30 (100.0%)
+Mode Switches Detected: 21
+
+Test Breakdown:
+  CV Mode Tests: 12
+  CC Mode Tests: 9
+  CP Mode Tests: 9
+
+================================================================================
+KEY FINDINGS
+================================================================================
+
+1. CV MODE - Power Limit Effects:
+
+   Power Limit 20W: FAIL (Post-enable mode: CP, Current: 0.000A)
+   Power Limit 30W: FAIL (Post-enable mode: CP, Current: 0.000A)
+   Power Limit 50W: FAIL (Post-enable mode: CP, Current: 0.000A)
+   Power Limit 100W: FAIL (Post-enable mode: CP, Current: 0.000A)
+   Power Limit 200W: FAIL (Post-enable mode: CP, Current: 0.000A)
+   Power Limit 1224W: FAIL (Post-enable mode: CP, Current: 0.000A)
+
+2. CV MODE - Decoy Value Effects:
+
+   Decoy 0A/0W: FAIL (Post-enable mode: CP, Current: 0.000A)
+   Decoy 5A/50W: FAIL (Post-enable mode: CP, Current: 0.000A)
+   Decoy 10A/100W: FAIL (Post-enable mode: CP, Current: 0.000A)
+
+3. CV MODE - Secondary Setpoint Effects:
+
+   Secondary 0.0A: FAIL (Post-enable mode: CP, Current: 0.000A)
+   Secondary 0.5A: FAIL (Post-enable mode: CP, Current: 0.000A)
+   Secondary 1.0A: FAIL (Post-enable mode: CP, Current: 0.000A)
+
+================================================================================
+DETAILED TEST RESULTS
+================================================================================
+
+Test 1: CV-PowerLimit-20W - FAIL
+  Configuration: V=4.20V, I=0.00A, P=0.00W
+  Decoys: 10A/100W, Power Limit: 20W
+  Mode: CV -> CP (SWITCHED!)
+  Results: Avg I=0.000A, Peak I=0.000A, Avg P=0.00W
+  Notes: FAIL - Zero current (mode issue?)
+
+Test 2: CV-PowerLimit-30W - FAIL
+  Configuration: V=4.20V, I=0.00A, P=0.00W
+  Decoys: 10A/100W, Power Limit: 30W
+  Mode: CV -> CP (SWITCHED!)
+  Results: Avg I=0.000A, Peak I=0.000A, Avg P=0.00W
+  Notes: FAIL - Zero current (mode issue?)
+
+Test 3: CV-PowerLimit-50W - FAIL
+  Configuration: V=4.20V, I=0.00A, P=0.00W
+  Decoys: 10A/100W, Power Limit: 50W
+  Mode: CV -> CP (SWITCHED!)
+  Results: Avg I=0.000A, Peak I=0.000A, Avg P=0.00W
+  Notes: FAIL - Zero current (mode issue?)
+
+Test 4: CV-PowerLimit-100W - FAIL
+  Configuration: V=4.20V, I=0.00A, P=0.00W
+  Decoys: 10A/100W, Power Limit: 100W
+  Mode: CV -> CP (SWITCHED!)
+  Results: Avg I=0.000A, Peak I=0.000A, Avg P=0.00W
+  Notes: FAIL - Zero current (mode issue?)
+
+Test 5: CV-PowerLimit-200W - FAIL
+  Configuration: V=4.20V, I=0.00A, P=0.00W
+  Decoys: 10A/100W, Power Limit: 200W
+  Mode: CV -> CP (SWITCHED!)
+  Results: Avg I=0.000A, Peak I=0.000A, Avg P=0.00W
+  Notes: FAIL - Zero current (mode issue?)
+
+Test 6: CV-PowerLimit-1224W - FAIL
+  Configuration: V=4.20V, I=0.00A, P=0.00W
+  Decoys: 10A/100W, Power Limit: 1224W
+  Mode: CV -> CP (SWITCHED!)
+  Results: Avg I=0.000A, Peak I=0.000A, Avg P=0.00W
+  Notes: FAIL - Zero current (mode issue?)
+
+Test 7: CV-Decoy-0A-0W - FAIL
+  Configuration: V=4.20V, I=0.00A, P=0.00W
+  Decoys: 0A/0W, Power Limit: 1224W
+  Mode: CV -> CP (SWITCHED!)
+  Results: Avg I=0.000A, Peak I=0.000A, Avg P=0.00W
+  Notes: FAIL - Zero current (mode issue?)
+
+Test 8: CV-Decoy-5A-50W - FAIL
+  Configuration: V=4.20V, I=0.00A, P=0.00W
+  Decoys: 5A/50W, Power Limit: 1224W
+  Mode: CV -> CP (SWITCHED!)
+  Results: Avg I=0.000A, Peak I=0.000A, Avg P=0.00W
+  Notes: FAIL - Zero current (mode issue?)
+
+Test 9: CV-Decoy-10A-100W - FAIL
+  Configuration: V=4.20V, I=0.00A, P=0.00W
+  Decoys: 10A/100W, Power Limit: 1224W
+  Mode: CV -> CP (SWITCHED!)
+  Results: Avg I=0.000A, Peak I=0.000A, Avg P=0.00W
+  Notes: FAIL - Zero current (mode issue?)
+
+Test 10: CV-Secondary-0.0A - FAIL
+  Configuration: V=4.20V, I=0.00A, P=0.00W
+  Decoys: 10A/100W, Power Limit: 1224W
+  Mode: CV -> CP (SWITCHED!)
+  Results: Avg I=0.000A, Peak I=0.000A, Avg P=0.00W
+  Notes: FAIL - Zero current (mode issue?)
+
+Test 11: CV-Secondary-0.5A - FAIL
+  Configuration: V=4.20V, I=0.50A, P=0.00W
+  Decoys: 10A/100W, Power Limit: 1224W
+  Mode: CV -> CP (SWITCHED!)
+  Results: Avg I=0.000A, Peak I=0.000A, Avg P=0.00W
+  Notes: FAIL - Zero current (mode issue?)
+
+Test 12: CV-Secondary-1.0A - FAIL
+  Configuration: V=4.20V, I=1.00A, P=0.00W
+  Decoys: 10A/100W, Power Limit: 1224W
+  Mode: CV -> CP (SWITCHED!)
+  Results: Avg I=0.000A, Peak I=0.000A, Avg P=0.00W
+  Notes: FAIL - Zero current (mode issue?)
+
+Test 13: CC-0.5A-3.0V - FAIL
+  Configuration: V=0.00V, I=0.50A, P=0.00W
+  Decoys: 10A/100W, Power Limit: 1224W
+  Mode: CV -> CP (SWITCHED!)
+  Results: Avg I=0.000A, Peak I=0.000A, Avg P=0.00W
+  Notes: FAIL - Zero current (mode issue?)
+
+Test 14: CC-0.5A-3.7V - FAIL
+  Configuration: V=0.00V, I=0.50A, P=0.00W
+  Decoys: 10A/100W, Power Limit: 1224W
+  Mode: CV -> CP (SWITCHED!)
+  Results: Avg I=0.000A, Peak I=0.000A, Avg P=0.00W
+  Notes: FAIL - Zero current (mode issue?)
+
+Test 15: CC-0.5A-4.2V - FAIL
+  Configuration: V=0.00V, I=0.50A, P=0.00W
+  Decoys: 10A/100W, Power Limit: 1224W
+  Mode: CV -> CP (SWITCHED!)
+  Results: Avg I=0.000A, Peak I=0.000A, Avg P=0.00W
+  Notes: FAIL - Zero current (mode issue?)
+
+Test 16: CC-1.0A-3.0V - FAIL
+  Configuration: V=0.00V, I=1.00A, P=0.00W
+  Decoys: 10A/100W, Power Limit: 1224W
+  Mode: CV -> CP (SWITCHED!)
+  Results: Avg I=0.000A, Peak I=0.000A, Avg P=0.00W
+  Notes: FAIL - Zero current (mode issue?)
+
+Test 17: CC-1.0A-3.7V - FAIL
+  Configuration: V=0.00V, I=1.00A, P=0.00W
+  Decoys: 10A/100W, Power Limit: 1224W
+  Mode: CV -> CP (SWITCHED!)
+  Results: Avg I=0.000A, Peak I=0.000A, Avg P=0.00W
+  Notes: FAIL - Zero current (mode issue?)
+
+Test 18: CC-1.0A-4.2V - FAIL
+  Configuration: V=0.00V, I=1.00A, P=0.00W
+  Decoys: 10A/100W, Power Limit: 1224W
+  Mode: CV -> CP (SWITCHED!)
+  Results: Avg I=0.000A, Peak I=0.000A, Avg P=0.00W
+  Notes: FAIL - Zero current (mode issue?)
+
+Test 19: CC-3.0A-3.0V - FAIL
+  Configuration: V=0.00V, I=3.00A, P=0.00W
+  Decoys: 10A/100W, Power Limit: 1224W
+  Mode: CV -> CP (SWITCHED!)
+  Results: Avg I=0.000A, Peak I=0.000A, Avg P=0.00W
+  Notes: FAIL - Zero current (mode issue?)
+
+Test 20: CC-3.0A-3.7V - FAIL
+  Configuration: V=0.00V, I=3.00A, P=0.00W
+  Decoys: 10A/100W, Power Limit: 1224W
+  Mode: CV -> CP (SWITCHED!)
+  Results: Avg I=0.000A, Peak I=0.000A, Avg P=0.00W
+  Notes: FAIL - Zero current (mode issue?)
+
+Test 21: CC-3.0A-4.2V - FAIL
+  Configuration: V=0.00V, I=3.00A, P=0.00W
+  Decoys: 10A/100W, Power Limit: 1224W
+  Mode: CV -> CP (SWITCHED!)
+  Results: Avg I=0.000A, Peak I=0.000A, Avg P=0.00W
+  Notes: FAIL - Zero current (mode issue?)
+
+Test 22: CP-5W-3.0V - FAIL
+  Configuration: V=0.00V, I=0.00A, P=5.00W
+  Decoys: 10A/100W, Power Limit: 1224W
+  Mode: CV -> CV
+  Results: Avg I=0.000A, Peak I=0.000A, Avg P=0.00W
+  Notes: FAIL - Zero current (mode issue?)
+
+Test 23: CP-5W-3.7V - FAIL
+  Configuration: V=0.00V, I=0.00A, P=5.00W
+  Decoys: 10A/100W, Power Limit: 1224W
+  Mode: CV -> CV
+  Results: Avg I=0.000A, Peak I=0.000A, Avg P=0.00W
+  Notes: FAIL - Zero current (mode issue?)
+
+Test 24: CP-5W-4.2V - FAIL
+  Configuration: V=0.00V, I=0.00A, P=5.00W
+  Decoys: 10A/100W, Power Limit: 1224W
+  Mode: CV -> CV
+  Results: Avg I=0.000A, Peak I=0.000A, Avg P=0.00W
+  Notes: FAIL - Zero current (mode issue?)
+
+Test 25: CP-10W-3.0V - FAIL
+  Configuration: V=0.00V, I=0.00A, P=10.00W
+  Decoys: 10A/100W, Power Limit: 1224W
+  Mode: CV -> CV
+  Results: Avg I=0.000A, Peak I=0.000A, Avg P=0.00W
+  Notes: FAIL - Zero current (mode issue?)
+
+Test 26: CP-10W-3.7V - FAIL
+  Configuration: V=0.00V, I=0.00A, P=10.00W
+  Decoys: 10A/100W, Power Limit: 1224W
+  Mode: CV -> CV
+  Results: Avg I=0.000A, Peak I=0.000A, Avg P=0.00W
+  Notes: FAIL - Zero current (mode issue?)
+
+Test 27: CP-10W-4.2V - FAIL
+  Configuration: V=0.00V, I=0.00A, P=10.00W
+  Decoys: 10A/100W, Power Limit: 1224W
+  Mode: CV -> CV
+  Results: Avg I=0.000A, Peak I=0.000A, Avg P=0.00W
+  Notes: FAIL - Zero current (mode issue?)
+
+Test 28: CP-20W-3.0V - FAIL
+  Configuration: V=0.00V, I=0.00A, P=20.00W
+  Decoys: 10A/100W, Power Limit: 1224W
+  Mode: CV -> CV
+  Results: Avg I=0.000A, Peak I=0.000A, Avg P=0.00W
+  Notes: FAIL - Zero current (mode issue?)
+
+Test 29: CP-20W-3.7V - FAIL
+  Configuration: V=0.00V, I=0.00A, P=20.00W
+  Decoys: 10A/100W, Power Limit: 1224W
+  Mode: CV -> CV
+  Results: Avg I=0.000A, Peak I=0.000A, Avg P=0.00W
+  Notes: FAIL - Zero current (mode issue?)
+
+Test 30: CP-20W-4.2V - FAIL
+  Configuration: V=0.00V, I=0.00A, P=20.00W
+  Decoys: 10A/100W, Power Limit: 1224W
+  Mode: CV -> CV
+  Results: Avg I=0.000A, Peak I=0.000A, Avg P=0.00W
+  Notes: FAIL - Zero current (mode issue?)
+
+================================================================================
+See CSV file for complete data suitable for analysis/graphing
+================================================================================
