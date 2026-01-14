@@ -1858,11 +1858,13 @@ static int GenerateCVModeTests(RegisterTestCase **tests, int *numTests) {
         test->targetVoltage = targetV;
 
         // CV configuration: only voltage setpoint
+        // NOTE: Set power setpoint to 20W (not 0W) so if PSB incorrectly switches
+        // to CP mode, it will deliver measurable current for diagnosis
         test->reg498_sinkPower = TEST_DECOY_POWER_MID;    // 100W decoy
         test->reg499_sinkCurrent = TEST_DECOY_CURRENT_MID; // 10A decoy
         test->reg500_voltage = targetV;
         test->reg501_current = 0.0;
-        test->reg502_power = 0.0;
+        test->reg502_power = 20.0;  // 20W for CP mode fallback measurement
 
         // Limits - vary power limit
         test->reg9000_voltageMax = PSB_SAFE_VOLTAGE_MAX;
@@ -1889,11 +1891,12 @@ static int GenerateCVModeTests(RegisterTestCase **tests, int *numTests) {
         test->targetVoltage = targetV;
 
         // CV with variable decoys
+        // NOTE: Set power setpoint to 20W for CP mode fallback measurement
         test->reg498_sinkPower = decoyPowers[i];   // VARIABLE
         test->reg499_sinkCurrent = decoyCurrents[i]; // VARIABLE
         test->reg500_voltage = targetV;
         test->reg501_current = 0.0;
-        test->reg502_power = 0.0;
+        test->reg502_power = 20.0;  // 20W for CP mode fallback measurement
 
         // High safe limits
         test->reg9000_voltageMax = PSB_SAFE_VOLTAGE_MAX;
@@ -1919,11 +1922,12 @@ static int GenerateCVModeTests(RegisterTestCase **tests, int *numTests) {
         test->targetVoltage = targetV;
 
         // CV with small secondary setpoint
+        // NOTE: Set power setpoint to 20W for CP mode fallback measurement
         test->reg498_sinkPower = TEST_DECOY_POWER_MID;
         test->reg499_sinkCurrent = TEST_DECOY_CURRENT_MID;
         test->reg500_voltage = targetV;
         test->reg501_current = secondaryCurrents[i];  // Small secondary
-        test->reg502_power = 0.0;
+        test->reg502_power = 20.0;  // 20W for CP mode fallback measurement
 
         // High safe limits
         test->reg9000_voltageMax = PSB_SAFE_VOLTAGE_MAX;
@@ -1971,11 +1975,12 @@ static int GenerateCCModeTests(RegisterTestCase **tests, int *numTests) {
             test->targetVoltage = testVoltages[j];
 
             // CC configuration: only current setpoint
+            // NOTE: Set voltage/power setpoints reasonable for mode fallback
             test->reg498_sinkPower = TEST_DECOY_POWER_MID;
             test->reg499_sinkCurrent = TEST_DECOY_CURRENT_MID;
-            test->reg500_voltage = 0.0;              // Zero
+            test->reg500_voltage = testVoltages[j];   // Set to target voltage
             test->reg501_current = testCurrents[i];   // ACTIVE SETPOINT
-            test->reg502_power = 0.0;
+            test->reg502_power = 20.0;                // 20W for mode fallback
 
             // High safe limits
             test->reg9000_voltageMax = PSB_SAFE_VOLTAGE_MAX;
@@ -2024,11 +2029,13 @@ static int GenerateCPModeTests(RegisterTestCase **tests, int *numTests) {
             test->targetVoltage = testVoltages[j];
 
             // CP configuration: only power setpoint
+            // NOTE: Set voltage/current setpoints high so PSB uses power setpoint
+            // If PSB incorrectly switches modes, we'll still get measurable current
             test->reg498_sinkPower = TEST_DECOY_POWER_MID;
             test->reg499_sinkCurrent = TEST_DECOY_CURRENT_MID;
-            test->reg500_voltage = 0.0;
-            test->reg501_current = 0.0;
-            test->reg502_power = testPowers[i];  // ACTIVE SETPOINT
+            test->reg500_voltage = testVoltages[j];  // Set to target voltage
+            test->reg501_current = 10.0;             // Set high (10A) for mode fallback
+            test->reg502_power = testPowers[i];      // ACTIVE SETPOINT
 
             // High safe limits
             test->reg9000_voltageMax = PSB_SAFE_VOLTAGE_MAX;
