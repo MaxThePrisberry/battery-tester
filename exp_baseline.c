@@ -1398,75 +1398,41 @@ static int RunPhase3_EISCharge(BaselineExperimentContext *ctx) {
     }
     
     // Configure PSB for charging
-    // IMPORTANT: Set limits first, then voltage setpoint last to enter voltage-controlled mode
-    // (PSB control mode is determined by which setpoint register is written last)
-    LogMessage("=== DIAGNOSTIC: Starting PSB configuration for Phase 3 charging ===");
-    LogMessage("DIAGNOSTIC: Target voltage=%.3fV, current limit=%.3fA, power limit=%.1fW (HIGH to avoid CP mode)",
-               ctx->params.chargeVoltage, ctx->params.chargeCurrent, PSB_SAFE_POWER_MAX);
+    // ORIGINAL WORKING PATTERN (from commit e7015ad, validated in exp_cdc.c):
+    // ALL setpoint registers must be set with non-zero values:
+    // - REG 501 (source current) = chargeCurrent (NON-ZERO!)
+    // - REG 499 (sink current) = dischargeCurrent
+    // - REG 500 (voltage) = targetVoltage
+    // - REG 502/498 (power) = 20W from initialization
+    //
+    // The "zero REG 501" approach was an INCORRECT hypothesis that caused zero current.
+    LogMessage("=== Configuring PSB for Phase 3 charging (original working pattern) ===");
+    LogMessage("  Target: V=%.3fV, I=%.3fA", ctx->params.chargeVoltage, ctx->params.chargeCurrent);
+    LogMessage("  Power limits: 20W (set by initialization)");
 
-    // DIRECTION-DEPENDENT SINK REGISTER CONFIGURATION
-    // Discovery from ops-log-06: Decoy values (100W/10A) cause CP mode for SOURCE operations!
-    // Analysis shows:
-    //   - CV SINK (discharge): Decoy values HELP mode selection (battery V > target V)
-    //   - CV SOURCE (charging): Decoy values CAUSE CP mode (battery V < target V)
-    // Root cause: PSB interprets sink power setpoint as "power-limited CV" = CP mode
-    // Solution: ZERO sink registers for SOURCE operations (charging)
-    LogMessage("DIAGNOSTIC: [0/4] ZEROING sink registers for CV SOURCE operation (charging)");
-    LogMessage("  Charging is CV SOURCE: battery voltage (%.3fV) < target (%.3fV)",
-               ctx->eisMeasurementCount > 0 ? ctx->eisMeasurements[ctx->eisMeasurementCount-1].ocvVoltage : 2.7,
-               ctx->params.chargeVoltage);
-
-    result = PSB_SetSinkPowerQueued(0.0, DEVICE_PRIORITY_NORMAL);
+    // Set source current (REG 501) - CRITICAL: must be non-zero!
+    LogMessage("Setting source current (REG 501) to %.3f A", ctx->params.chargeCurrent);
+    result = PSB_SetCurrentQueued(ctx->params.chargeCurrent, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
-        LogWarning("Failed to zero sink power (REG 498): %s", PSB_GetErrorString(result));
-    } else {
-        LogMessage("DIAGNOSTIC: REG 498 (SINK_MODE_POWER) set to 0.0 W (CV SOURCE needs no sink)");
-    }
-    Delay(0.1);
-
-    result = PSB_SetSinkCurrentQueued(0.0, DEVICE_PRIORITY_NORMAL);
-    if (result != PSB_SUCCESS) {
-        LogWarning("Failed to zero sink current (REG 499): %s", PSB_GetErrorString(result));
-    } else {
-        LogMessage("DIAGNOSTIC: REG 499 (SINK_MODE_CURRENT) set to 0.0 A (CV SOURCE needs no sink)");
-    }
-    Delay(0.1);
-
-    LogMessage("DIAGNOSTIC: Sink registers zeroed for SOURCE operation - now configuring charging");
-
-    // Set current limit using LIMIT register (REG 9002), NOT setpoint register (REG 501)
-    // CRITICAL: Keep REG 501 at 0.0A to avoid interfering with CV mode selection
-    // This mirrors the successful discharge pattern where only voltage setpoint is written
-    LogMessage("DIAGNOSTIC: [1/4] Setting current LIMIT to %.3f A (REG 9002, NOT REG 501)", ctx->params.chargeCurrent);
-    result = PSB_SetCurrentLimitsQueued(0.0, ctx->params.chargeCurrent, DEVICE_PRIORITY_NORMAL);
-    if (result != PSB_SUCCESS) {
-        LogError("Failed to set charge current limit: %s", PSB_GetErrorString(result));
+        LogError("Failed to set source current: %s", PSB_GetErrorString(result));
         if (ctx->currentPhaseLogFile) {
             fclose(ctx->currentPhaseLogFile);
             ctx->currentPhaseLogFile = NULL;
         }
         return result;
     }
-    LogMessage("DIAGNOSTIC: Current limit set via REG 9002, REG 501 remains at 0.0A");
-    Delay(0.2);  // Brief delay to ensure command completes
+    Delay(0.1);
 
-    // Set power limit to HIGH value (1224W) to avoid triggering CP mode
-    // Use LIMIT register (REG 9004), not setpoint register (REG 502)
-    // CRITICAL: A LOW power limit (30W) causes PSB to enter CP mode!
-    // Discovery from ops-log-07: REG 9004=30W caused CP mode after output enable
-    // Battery_GoToVoltage() uses PSB_SAFE_POWER_MAX (1224W) and works correctly
-    // Solution: Use high power limit like successful discharge operations
-    LogMessage("DIAGNOSTIC: [2/4] Setting power LIMIT to %.1f W (REG 9004) - HIGH to avoid CP mode", PSB_SAFE_POWER_MAX);
-    result = PSB_SetPowerLimitQueued(PSB_SAFE_POWER_MAX, DEVICE_PRIORITY_NORMAL);
+    // Set sink current (REG 499) - for discharge direction (use same value)
+    LogMessage("Setting sink current (REG 499) to %.3f A", ctx->params.dischargeCurrent);
+    result = PSB_SetSinkCurrentQueued(ctx->params.dischargeCurrent, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
-        LogWarning("Failed to set power limit: %s", PSB_GetErrorString(result));
+        LogWarning("Failed to set sink current: %s", PSB_GetErrorString(result));
     }
-    LogMessage("DIAGNOSTIC: Power limit set to %.1f W (same as discharge operations)", PSB_SAFE_POWER_MAX);
-    Delay(0.2);  // Brief delay to ensure command completes
+    Delay(0.1);
 
-    // Set voltage setpoint last to enter voltage-controlled mode
-    LogMessage("DIAGNOSTIC: [3/4] Setting voltage SETPOINT to %.3f V (REG 500) - THIS SHOULD ENTER CV MODE",
-               ctx->params.chargeVoltage);
+    // Set voltage setpoint (REG 500) - this controls CV mode target
+    LogMessage("Setting voltage (REG 500) to %.3f V", ctx->params.chargeVoltage);
     result = PSB_SetVoltageQueued(ctx->params.chargeVoltage, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         LogError("Failed to set charge voltage: %s", PSB_GetErrorString(result));
@@ -1476,18 +1442,18 @@ static int RunPhase3_EISCharge(BaselineExperimentContext *ctx) {
         }
         return result;
     }
-    LogMessage("DIAGNOSTIC: Voltage setpoint command completed");
-    Delay(0.2);  // Brief delay to ensure command completes
+    Delay(0.1);
 
-    // COMPREHENSIVE DIAGNOSTIC: Log all register values before output enable
-    // This verifies REG 498/499 = 0.0 (zeroed for SOURCE), REG 501 = 0.0A (not active)
-    LogMessage("DIAGNOSTIC: [4/4] Verifying all setpoint registers before output enable");
-    extern PSBQueueManager* g_psbQueueMgr;  // Global PSB queue manager
-    extern PSB_Handle* PSB_QueueGetHandle(PSBQueueManager *mgr);  // Get handle from queue
+    LogMessage("PSB configured: REG 500=%.3fV, REG 501=%.3fA (power limits from init)",
+               ctx->params.chargeVoltage, ctx->params.chargeCurrent);
+
+    // Log register state for debugging
+    extern PSBQueueManager* g_psbQueueMgr;
+    extern PSB_Handle* PSB_QueueGetHandle(PSBQueueManager *mgr);
     if (g_psbQueueMgr) {
         PSB_Handle *psbHandle = PSB_QueueGetHandle(g_psbQueueMgr);
         if (psbHandle && psbHandle->isConnected) {
-            PSB_LogAllRegisters(psbHandle, "After Phase 3 charging configuration (zero-current approach)");
+            PSB_LogAllRegisters(psbHandle, "After Phase 3 charging configuration");
         }
     }
 

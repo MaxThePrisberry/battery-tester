@@ -120,35 +120,32 @@ int Battery_GoToVoltage(VoltageTargetParams *params) {
                                                      "Configuring discharge parameters...");
     }
 
-    // IMPORTANT: For voltage control, only write REG 500 (voltage setpoint).
-    // Use LIMIT registers (not setpoint registers) to constrain current/power.
-    // Writing setpoint registers REG 498/499/501/502 would change the control mode.
-
-    // NOTE: We do NOT modify limit registers here!
+    // ORIGINAL WORKING PATTERN (from commit e7015ad, validated in exp_cdc.c):
+    // ALL setpoint registers must be set with non-zero values:
+    // - REG 501 (source current) = maxCurrent (NON-ZERO!)
+    // - REG 499 (sink current) = maxCurrent
+    // - REG 500 (voltage) = targetVoltage
+    // - REG 502/498 (power) = 20W from initialization
     //
-    // Discovery from ops-log-2026-01-12-10.txt:
-    // - During init, sink current SETPOINT = 10A (mode selection decoy)
-    // - Trying to set sink current LIMIT < SETPOINT causes "Illegal data value" error
-    // - The PSB rejects setting limits lower than setpoints
-    //
-    // Solution: Leave limits at their high initialization values (61.2A, 1224W).
-    // The setpoints (10A, 100W) are "decoys" to prevent CC/CP mode selection.
-    // In CV mode, the actual current is naturally limited by:
-    //   1. Voltage difference (battery V vs target V)
-    //   2. Battery internal resistance
-    //   3. PSB's natural current capability
-    // The decoy setpoints and high limits work together to ensure CV mode without conflicts.
+    // The "only write voltage" approach was an INCORRECT hypothesis that caused zero current.
 
-    LogMessage("Using initialization setpoints (10A/100W decoys) and high limits (61.2A/1224W)");
+    LogMessage("Configuring PSB with current=%.3fA, voltage=%.3fV",
+               params->maxCurrent_A, params->targetVoltage_V);
 
-    // CRITICAL: Only write voltage register (REG 500), do NOT write current or power
-    // Discovery from ops-log-2026-01-12-05.txt:
-    //   - PSB is in CV mode when output is OFF (line 222)
-    //   - PSB switches to CP mode when output is enabled (line 229)
-    //   - This happens because PSB re-evaluates "active setpoint" on output enable
-    //   - If current (REG 501) or power (REG 502) were written, PSB uses those instead
-    // Solution: ONLY write voltage register to force CV mode selection
-    LogMessage("Setting voltage setpoint (no other setpoints to avoid mode conflict)...");
+    // Set source current (REG 501) - CRITICAL: must be non-zero!
+    result = PSB_SetCurrentQueued(params->maxCurrent_A, DEVICE_PRIORITY_NORMAL);
+    if (result != PSB_SUCCESS) {
+        LogError("Failed to set source current: %s", PSB_GetErrorString(result));
+        return result;
+    }
+
+    // Set sink current (REG 499) - for discharge direction
+    result = PSB_SetSinkCurrentQueued(params->maxCurrent_A, DEVICE_PRIORITY_NORMAL);
+    if (result != PSB_SUCCESS) {
+        LogWarning("Failed to set sink current: %s", PSB_GetErrorString(result));
+    }
+
+    // Set voltage setpoint (REG 500) - this controls CV mode target
     result = PSB_SetVoltageQueued(params->targetVoltage_V, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         LogError("Failed to set voltage: %s", PSB_GetErrorString(result));
