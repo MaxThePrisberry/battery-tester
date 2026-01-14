@@ -14,6 +14,7 @@
 #include <string.h>
 #include <time.h>
 #include <math.h>
+#include <errno.h>
 
 /******************************************************************************
  * Additional Test Constants (not in header)
@@ -2318,11 +2319,15 @@ static int WriteCSVRow(FILE *fp, RegisterTestCase *test) {
  ******************************************************************************/
 
 static void GenerateSummary(RegisterTestCase *allTests, int numTests, const char *summaryPath) {
+    LogMessage("Creating summary file: %s", summaryPath);
     FILE *fp = fopen(summaryPath, "w");
     if (!fp) {
-        LogError("Failed to create summary file: %s", summaryPath);
+        int err = errno;
+        LogError("Failed to create summary file: %s (errno=%d: %s)",
+                summaryPath, err, strerror(err));
         return;
     }
+    LogMessage("Summary file created successfully");
 
     time_t now = time(NULL);
     struct tm *timeinfo = localtime(&now);
@@ -2455,11 +2460,12 @@ int Test_RegisterMatrix(char *errorMsg, int errorMsgSize) {
     struct tm *timeinfo = localtime(&now);
     strftime(timestamp, sizeof(timestamp), "%Y%m%d_%H%M%S", timeinfo);
 
+    // Use current working directory (more portable)
     snprintf(csvPath, sizeof(csvPath),
-             "C:\\Users\\nrasm\\Documents\\battery_tester\\psb_register_matrix_%s.csv",
+             "psb_register_matrix_%s.csv",
              timestamp);
     snprintf(summaryPath, sizeof(summaryPath),
-             "C:\\Users\\nrasm\\Documents\\battery_tester\\psb_register_summary_%s.txt",
+             "psb_register_summary_%s.txt",
              timestamp);
 
     LogMessage("========================================");
@@ -2530,12 +2536,18 @@ int Test_RegisterMatrix(char *errorMsg, int errorMsgSize) {
     }
 
     // Open CSV file
+    LogMessage("Creating CSV file: %s", csvPath);
     csvFile = fopen(csvPath, "w");
     if (!csvFile) {
-        snprintf(errorMsg, errorMsgSize, "Failed to create CSV file: %s", csvPath);
+        int err = errno;
+        snprintf(errorMsg, errorMsgSize,
+                "Failed to create CSV file: %s (errno=%d: %s)",
+                csvPath, err, strerror(err));
+        LogError("%s", errorMsg);
         free(allTests);
         return ERR_FILE_OPEN;
     }
+    LogMessage("CSV file created successfully");
 
     WriteCSVHeader(csvFile);
 

@@ -118,14 +118,14 @@ The test generates two files:
    - Every register value, mode before/after, measurements
    - Import into Excel/Python for analysis
 
-   Location: C:\Users\nrasm\Documents\battery_tester\
+   Location: Current working directory (application folder)
 
 2. SUMMARY FILE: psb_register_summary_YYYYMMDD_HHMMSS.txt
    - Human-readable analysis
    - Key findings
    - Test-by-test breakdown
 
-   Location: C:\Users\nrasm\Documents\battery_tester\
+   Location: Current working directory (application folder)
 
 ================================================================================
 INTERPRETING RESULTS

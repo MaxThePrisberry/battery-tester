@@ -179,7 +179,7 @@ TO ADD TO YOUR APPLICATION:
    - Click "PSB Register Matrix Test" button
    - Confirm the dialog
    - Wait ~20 minutes for completion
-   - Check output files in: C:\Users\nrasm\Documents\battery_tester\
+   - Check output files in application folder (current directory)
 
 4. OUTPUT FILES:
 
