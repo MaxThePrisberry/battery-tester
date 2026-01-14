@@ -1760,4 +1760,846 @@ void GenerateTestSummary(TestSummary *summary, TestCase *tests, int numTests) {
             }
         }
     }
+}/******************************************************************************
+ * PSB REGISTER MATRIX TEST IMPLEMENTATION
+ *
+ * Comprehensive systematic testing of PSB register configurations to
+ * empirically determine mode selection behavior.
+ *
+ * This code will be appended to tests/psb10000_test.c
+ ******************************************************************************/
+
+/******************************************************************************
+ * Register Test Case Structure
+ ******************************************************************************/
+
+typedef struct {
+    int testId;
+    char testName[128];
+
+    // Battery conditions
+    double batteryVoltageStart;
+    double targetVoltage;
+
+    // Register configuration (setpoints)
+    double reg498_sinkPower;
+    double reg499_sinkCurrent;
+    double reg500_voltage;
+    double reg501_current;
+    double reg502_power;
+
+    // Register configuration (limits)
+    double reg9000_voltageMax;
+    double reg9001_voltageMin;
+    double reg9002_currentMax;
+    double reg9003_currentMin;
+    double reg9004_powerMax;
+    double reg9005_sinkPowerMax;
+    double reg9008_sinkCurrentMax;
+    double reg9009_sinkCurrentMin;
+
+    // Results - pre-enable
+    int preEnableMode;           // 0=CV, 1=CR, 2=CC, 3=CP
+    int preEnableDirection;      // 0=SOURCE, 1=SINK
+    int preEnableOutput;         // 0=OFF, 1=ON
+
+    // Results - post-enable
+    int postEnableMode;          // 0=CV, 1=CR, 2=CC, 3=CP
+    int postEnableDirection;     // 0=SOURCE, 1=SINK
+    int postEnableOutput;        // 0=OFF, 1=ON
+    int modeSwitched;            // Did mode change after enable?
+
+    // Measurement results
+    double avgVoltage;
+    double avgCurrent;
+    double peakCurrent;
+    double avgPower;
+    int currentNonZero;          // Was current > 0.1A?
+
+    // Test result
+    int testResult;              // 0=not run, 1=PASS, -1=FAIL
+    char notes[256];
+} RegisterTestCase;
+
+/******************************************************************************
+ * Test Matrix Generation Functions
+ ******************************************************************************/
+
+// Generate CV mode tests (primary focus)
+static int GenerateCVModeTests(RegisterTestCase **tests, int *numTests) {
+    int count = 0;
+    RegisterTestCase *testArray = (RegisterTestCase*)malloc(sizeof(RegisterTestCase) * 30);
+    if (!testArray) return ERR_OUT_OF_MEMORY;
+
+    memset(testArray, 0, sizeof(RegisterTestCase) * 30);
+
+    // Battery starting voltage (typical discharged state)
+    double batteryV = 2.7;
+    double targetV = TEST_CV_VOLTAGE_TARGET;  // 4.2V
+
+    // Test 1-6: CV with varying power limits (test CP mode threshold)
+    double powerLimits[] = {
+        TEST_POWER_LIMIT_VERY_LOW,   // 20W - known to cause CP
+        TEST_POWER_LIMIT_LOW,         // 30W - boundary
+        TEST_POWER_LIMIT_MID,         // 50W
+        TEST_POWER_LIMIT_HIGH,        // 100W
+        TEST_POWER_LIMIT_VERY_HIGH,   // 200W
+        TEST_POWER_LIMIT_SAFE         // 1224W - known working
+    };
+
+    for (int i = 0; i < 6; i++) {
+        RegisterTestCase *test = &testArray[count++];
+        test->testId = count;
+        snprintf(test->testName, sizeof(test->testName),
+                 "CV-PowerLimit-%.0fW", powerLimits[i]);
+
+        test->batteryVoltageStart = batteryV;
+        test->targetVoltage = targetV;
+
+        // CV configuration: only voltage setpoint
+        test->reg498_sinkPower = TEST_DECOY_POWER_MID;    // 100W decoy
+        test->reg499_sinkCurrent = TEST_DECOY_CURRENT_MID; // 10A decoy
+        test->reg500_voltage = targetV;
+        test->reg501_current = 0.0;
+        test->reg502_power = 0.0;
+
+        // Limits - vary power limit
+        test->reg9000_voltageMax = PSB_SAFE_VOLTAGE_MAX;
+        test->reg9001_voltageMin = 0.0;
+        test->reg9002_currentMax = PSB_SAFE_CURRENT_MAX;
+        test->reg9003_currentMin = 0.0;
+        test->reg9004_powerMax = powerLimits[i];  // VARIABLE
+        test->reg9005_sinkPowerMax = PSB_SAFE_POWER_MAX;
+        test->reg9008_sinkCurrentMax = PSB_SAFE_SINK_CURRENT_MAX;
+        test->reg9009_sinkCurrentMin = 0.0;
+    }
+
+    // Test 7-9: CV with varying decoy values
+    double decoyCurrents[] = {0.0, 5.0, 10.0};  // No decoy, low decoy, standard decoy
+    double decoyPowers[] = {0.0, 50.0, 100.0};
+
+    for (int i = 0; i < 3; i++) {
+        RegisterTestCase *test = &testArray[count++];
+        test->testId = count;
+        snprintf(test->testName, sizeof(test->testName),
+                 "CV-Decoy-%.0fA-%.0fW", decoyCurrents[i], decoyPowers[i]);
+
+        test->batteryVoltageStart = batteryV;
+        test->targetVoltage = targetV;
+
+        // CV with variable decoys
+        test->reg498_sinkPower = decoyPowers[i];   // VARIABLE
+        test->reg499_sinkCurrent = decoyCurrents[i]; // VARIABLE
+        test->reg500_voltage = targetV;
+        test->reg501_current = 0.0;
+        test->reg502_power = 0.0;
+
+        // High safe limits
+        test->reg9000_voltageMax = PSB_SAFE_VOLTAGE_MAX;
+        test->reg9001_voltageMin = 0.0;
+        test->reg9002_currentMax = PSB_SAFE_CURRENT_MAX;
+        test->reg9003_currentMin = 0.0;
+        test->reg9004_powerMax = PSB_SAFE_POWER_MAX;  // High
+        test->reg9005_sinkPowerMax = PSB_SAFE_POWER_MAX;
+        test->reg9008_sinkCurrentMax = PSB_SAFE_SINK_CURRENT_MAX;
+        test->reg9009_sinkCurrentMin = 0.0;
+    }
+
+    // Test 10-12: CV with small secondary setpoints (test interference)
+    double secondaryCurrents[] = {0.0, 0.5, 1.0};
+
+    for (int i = 0; i < 3; i++) {
+        RegisterTestCase *test = &testArray[count++];
+        test->testId = count;
+        snprintf(test->testName, sizeof(test->testName),
+                 "CV-Secondary-%.1fA", secondaryCurrents[i]);
+
+        test->batteryVoltageStart = batteryV;
+        test->targetVoltage = targetV;
+
+        // CV with small secondary setpoint
+        test->reg498_sinkPower = TEST_DECOY_POWER_MID;
+        test->reg499_sinkCurrent = TEST_DECOY_CURRENT_MID;
+        test->reg500_voltage = targetV;
+        test->reg501_current = secondaryCurrents[i];  // Small secondary
+        test->reg502_power = 0.0;
+
+        // High safe limits
+        test->reg9000_voltageMax = PSB_SAFE_VOLTAGE_MAX;
+        test->reg9001_voltageMin = 0.0;
+        test->reg9002_currentMax = PSB_SAFE_CURRENT_MAX;
+        test->reg9003_currentMin = 0.0;
+        test->reg9004_powerMax = PSB_SAFE_POWER_MAX;
+        test->reg9005_sinkPowerMax = PSB_SAFE_POWER_MAX;
+        test->reg9008_sinkCurrentMax = PSB_SAFE_SINK_CURRENT_MAX;
+        test->reg9009_sinkCurrentMin = 0.0;
+    }
+
+    *tests = testArray;
+    *numTests = count;
+    return SUCCESS;
+}
+
+// Generate CC mode tests (limited - safe current values only)
+static int GenerateCCModeTests(RegisterTestCase **tests, int *numTests) {
+    int count = 0;
+    RegisterTestCase *testArray = (RegisterTestCase*)malloc(sizeof(RegisterTestCase) * 15);
+    if (!testArray) return ERR_OUT_OF_MEMORY;
+
+    memset(testArray, 0, sizeof(RegisterTestCase) * 15);
+
+    double batteryV = 2.7;
+
+    // Test with safe current values (0.5A, 1A, 3A MAX)
+    double testCurrents[] = {
+        TEST_CC_CURRENT_LOW,   // 0.5A
+        TEST_CC_CURRENT_MID,   // 1.0A
+        TEST_CC_CURRENT_HIGH   // 3.0A (MAX - SAFE LIMIT)
+    };
+
+    double testVoltages[] = {3.0, 3.7, 4.2};
+
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 3; j++) {
+            RegisterTestCase *test = &testArray[count++];
+            test->testId = count;
+            snprintf(test->testName, sizeof(test->testName),
+                     "CC-%.1fA-%.1fV", testCurrents[i], testVoltages[j]);
+
+            test->batteryVoltageStart = batteryV;
+            test->targetVoltage = testVoltages[j];
+
+            // CC configuration: only current setpoint
+            test->reg498_sinkPower = TEST_DECOY_POWER_MID;
+            test->reg499_sinkCurrent = TEST_DECOY_CURRENT_MID;
+            test->reg500_voltage = 0.0;              // Zero
+            test->reg501_current = testCurrents[i];   // ACTIVE SETPOINT
+            test->reg502_power = 0.0;
+
+            // High safe limits
+            test->reg9000_voltageMax = PSB_SAFE_VOLTAGE_MAX;
+            test->reg9001_voltageMin = 0.0;
+            test->reg9002_currentMax = PSB_SAFE_CURRENT_MAX;
+            test->reg9003_currentMin = 0.0;
+            test->reg9004_powerMax = PSB_SAFE_POWER_MAX;
+            test->reg9005_sinkPowerMax = PSB_SAFE_POWER_MAX;
+            test->reg9008_sinkCurrentMax = PSB_SAFE_SINK_CURRENT_MAX;
+            test->reg9009_sinkCurrentMin = 0.0;
+        }
+    }
+
+    *tests = testArray;
+    *numTests = count;
+    return SUCCESS;
+}
+
+// Generate CP mode tests (limited - safe power values only)
+static int GenerateCPModeTests(RegisterTestCase **tests, int *numTests) {
+    int count = 0;
+    RegisterTestCase *testArray = (RegisterTestCase*)malloc(sizeof(RegisterTestCase) * 15);
+    if (!testArray) return ERR_OUT_OF_MEMORY;
+
+    memset(testArray, 0, sizeof(RegisterTestCase) * 15);
+
+    double batteryV = 2.7;
+
+    // Test with safe power values (5W, 10W, 20W MAX)
+    double testPowers[] = {
+        TEST_CP_POWER_LOW,   // 5W
+        TEST_CP_POWER_MID,   // 10W
+        TEST_CP_POWER_HIGH   // 20W (MAX - SAFE LIMIT)
+    };
+
+    double testVoltages[] = {3.0, 3.7, 4.2};
+
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 3; j++) {
+            RegisterTestCase *test = &testArray[count++];
+            test->testId = count;
+            snprintf(test->testName, sizeof(test->testName),
+                     "CP-%.0fW-%.1fV", testPowers[i], testVoltages[j]);
+
+            test->batteryVoltageStart = batteryV;
+            test->targetVoltage = testVoltages[j];
+
+            // CP configuration: only power setpoint
+            test->reg498_sinkPower = TEST_DECOY_POWER_MID;
+            test->reg499_sinkCurrent = TEST_DECOY_CURRENT_MID;
+            test->reg500_voltage = 0.0;
+            test->reg501_current = 0.0;
+            test->reg502_power = testPowers[i];  // ACTIVE SETPOINT
+
+            // High safe limits
+            test->reg9000_voltageMax = PSB_SAFE_VOLTAGE_MAX;
+            test->reg9001_voltageMin = 0.0;
+            test->reg9002_currentMax = PSB_SAFE_CURRENT_MAX;
+            test->reg9003_currentMin = 0.0;
+            test->reg9004_powerMax = PSB_SAFE_POWER_MAX;
+            test->reg9005_sinkPowerMax = PSB_SAFE_POWER_MAX;
+            test->reg9008_sinkCurrentMax = PSB_SAFE_SINK_CURRENT_MAX;
+            test->reg9009_sinkCurrentMin = 0.0;
+        }
+    }
+
+    *tests = testArray;
+    *numTests = count;
+    return SUCCESS;
+}
+
+/******************************************************************************
+ * Single Test Execution
+ ******************************************************************************/
+
+static int RunSingleRegisterTest(RegisterTestCase *test, char *errorMsg, int errorMsgSize) {
+    int result;
+    PSB_Status status;
+
+    LogMessage("========================================");
+    LogMessage("Test %d: %s", test->testId, test->testName);
+    LogMessage("========================================");
+
+    // Step 1: Disable output and zero registers
+    LogMessage("Step 1: Disabling output and resetting...");
+    result = PSB_SetOutputQueued(0, DEVICE_PRIORITY_NORMAL);
+    if (result != PSB_SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Failed to disable output");
+        return result;
+    }
+    Delay(TEST_DELAY_SHORT);
+
+    // Step 2: Write setpoint registers
+    LogMessage("Step 2: Configuring setpoint registers...");
+    LogMessage("  REG 498 (SINK_POWER): %.2f W", test->reg498_sinkPower);
+    result = PSB_SetSinkPowerQueued(test->reg498_sinkPower, DEVICE_PRIORITY_NORMAL);
+    if (result != PSB_SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Failed to set REG 498");
+        return result;
+    }
+
+    LogMessage("  REG 499 (SINK_CURRENT): %.2f A", test->reg499_sinkCurrent);
+    result = PSB_SetSinkCurrentQueued(test->reg499_sinkCurrent, DEVICE_PRIORITY_NORMAL);
+    if (result != PSB_SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Failed to set REG 499");
+        return result;
+    }
+
+    LogMessage("  REG 500 (VOLTAGE): %.2f V", test->reg500_voltage);
+    result = PSB_SetVoltageQueued(test->reg500_voltage, DEVICE_PRIORITY_NORMAL);
+    if (result != PSB_SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Failed to set REG 500");
+        return result;
+    }
+
+    LogMessage("  REG 501 (CURRENT): %.2f A", test->reg501_current);
+    result = PSB_SetCurrentQueued(test->reg501_current, DEVICE_PRIORITY_NORMAL);
+    if (result != PSB_SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Failed to set REG 501");
+        return result;
+    }
+
+    LogMessage("  REG 502 (POWER): %.2f W", test->reg502_power);
+    result = PSB_SetPowerQueued(test->reg502_power, DEVICE_PRIORITY_NORMAL);
+    if (result != PSB_SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Failed to set REG 502");
+        return result;
+    }
+
+    Delay(TEST_DELAY_SHORT);
+
+    // Step 3: Write limit registers
+    LogMessage("Step 3: Configuring limit registers...");
+    LogMessage("  REG 9004 (POWER_MAX): %.2f W", test->reg9004_powerMax);
+    result = PSB_SetPowerLimitQueued(test->reg9004_powerMax, DEVICE_PRIORITY_NORMAL);
+    if (result != PSB_SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Failed to set REG 9004");
+        return result;
+    }
+
+    Delay(TEST_DELAY_SHORT);
+
+    // Step 4: Read pre-enable status (CRITICAL - before output enable)
+    LogMessage("Step 4: Reading pre-enable status...");
+    result = PSB_GetStatusQueued(&status, DEVICE_PRIORITY_NORMAL);
+    if (result != PSB_SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Failed to get pre-enable status");
+        return result;
+    }
+
+    test->preEnableMode = status.regulationMode;
+    test->preEnableDirection = status.sinkMode;
+    test->preEnableOutput = status.outputEnabled;
+
+    const char *modeNames[] = {"CV", "CR", "CC", "CP"};
+    const char *dirNames[] = {"SOURCE", "SINK"};
+    LogMessage("  Pre-Enable: %s (%s mode), Output: %s",
+               modeNames[test->preEnableMode],
+               dirNames[test->preEnableDirection],
+               test->preEnableOutput ? "ON" : "OFF");
+
+    // Step 5: Enable output (CRITICAL MOMENT - mode may change!)
+    LogMessage("Step 5: Enabling output...");
+    result = PSB_SetOutputQueued(1, DEVICE_PRIORITY_NORMAL);
+    if (result != PSB_SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Failed to enable output");
+        return result;
+    }
+
+    // Wait for stabilization
+    LogMessage("  Waiting %.1f seconds for stabilization...", TEST_MATRIX_STABILIZATION_TIME);
+    Delay(TEST_MATRIX_STABILIZATION_TIME);
+
+    // Step 6: Read post-enable status (CRITICAL - check for mode switching!)
+    LogMessage("Step 6: Reading post-enable status...");
+    result = PSB_GetStatusQueued(&status, DEVICE_PRIORITY_NORMAL);
+    if (result != PSB_SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Failed to get post-enable status");
+        return result;
+    }
+
+    test->postEnableMode = status.regulationMode;
+    test->postEnableDirection = status.sinkMode;
+    test->postEnableOutput = status.outputEnabled;
+    test->modeSwitched = (test->preEnableMode != test->postEnableMode) ? 1 : 0;
+
+    LogMessage("  Post-Enable: %s (%s mode), Output: %s",
+               modeNames[test->postEnableMode],
+               dirNames[test->postEnableDirection],
+               test->postEnableOutput ? "ON" : "OFF");
+
+    if (test->modeSwitched) {
+        LogWarning("  MODE SWITCHED: %s -> %s",
+                   modeNames[test->preEnableMode],
+                   modeNames[test->postEnableMode]);
+    }
+
+    // Step 7: Measure operation for 10 seconds
+    LogMessage("Step 7: Measuring operation (10 samples over 10 seconds)...");
+    double sumVoltage = 0.0, sumCurrent = 0.0, sumPower = 0.0;
+    double maxCurrent = 0.0;
+    int numSamples = 0;
+    int nonZeroCount = 0;
+
+    for (int i = 0; i < 10; i++) {
+        result = PSB_GetStatusQueued(&status, DEVICE_PRIORITY_NORMAL);
+        if (result == PSB_SUCCESS) {
+            sumVoltage += status.voltage;
+            sumCurrent += fabs(status.current);
+            sumPower += fabs(status.power);
+
+            if (fabs(status.current) > maxCurrent) {
+                maxCurrent = fabs(status.current);
+            }
+
+            if (fabs(status.current) > 0.1) {
+                nonZeroCount++;
+            }
+
+            numSamples++;
+
+            LogMessage("  Sample %d: V=%.3fV, I=%.3fA, P=%.2fW, Mode=%s",
+                       i+1, status.voltage, status.current, status.power,
+                       modeNames[status.regulationMode]);
+
+            // Safety check
+            if (fabs(status.current) > TEST_MATRIX_MAX_CURRENT ||
+                fabs(status.voltage) > TEST_MATRIX_MAX_VOLTAGE ||
+                fabs(status.power) > TEST_MATRIX_MAX_POWER) {
+                LogError("SAFETY ABORT: Exceeded safety thresholds!");
+                PSB_SetOutputQueued(0, DEVICE_PRIORITY_NORMAL);
+                snprintf(errorMsg, errorMsgSize, "Safety abort: I=%.2fA, V=%.2fV, P=%.2fW",
+                         status.current, status.voltage, status.power);
+                return ERR_SAFETY_ABORT;
+            }
+        }
+
+        Delay(TEST_MATRIX_SAMPLE_INTERVAL);
+    }
+
+    // Calculate averages
+    if (numSamples > 0) {
+        test->avgVoltage = sumVoltage / numSamples;
+        test->avgCurrent = sumCurrent / numSamples;
+        test->avgPower = sumPower / numSamples;
+        test->peakCurrent = maxCurrent;
+        test->currentNonZero = (nonZeroCount > 0) ? 1 : 0;
+    }
+
+    LogMessage("Measurement Results:");
+    LogMessage("  Avg Voltage: %.3f V", test->avgVoltage);
+    LogMessage("  Avg Current: %.3f A", test->avgCurrent);
+    LogMessage("  Peak Current: %.3f A", test->peakCurrent);
+    LogMessage("  Avg Power: %.2f W", test->avgPower);
+    LogMessage("  Current Non-Zero: %s", test->currentNonZero ? "YES" : "NO");
+
+    // Step 8: Disable output
+    LogMessage("Step 8: Disabling output...");
+    result = PSB_SetOutputQueued(0, DEVICE_PRIORITY_NORMAL);
+    if (result != PSB_SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Failed to disable output");
+        return result;
+    }
+
+    Delay(TEST_DELAY_SHORT);
+
+    // Determine test result
+    // Success criteria: current > 0.1A for CV/CC/CP modes
+    if (test->currentNonZero) {
+        test->testResult = 1;  // PASS
+        snprintf(test->notes, sizeof(test->notes), "PASS - Current flowing");
+        LogMessage("TEST RESULT: PASS");
+    } else {
+        test->testResult = -1;  // FAIL
+        snprintf(test->notes, sizeof(test->notes), "FAIL - Zero current (mode issue?)");
+        LogError("TEST RESULT: FAIL - No current flow");
+    }
+
+    return SUCCESS;
+}
+
+/******************************************************************************
+ * CSV Output Generation
+ ******************************************************************************/
+
+static int WriteCSVHeader(FILE *fp) {
+    fprintf(fp, "test_id,test_name,battery_v_start,target_v,");
+    fprintf(fp, "reg498_sink_power,reg499_sink_current,reg500_voltage,reg501_current,reg502_power,");
+    fprintf(fp, "reg9000_v_max,reg9001_v_min,reg9002_i_max,reg9003_i_min,");
+    fprintf(fp, "reg9004_p_max,reg9005_p_sink_max,reg9008_i_sink_max,reg9009_i_sink_min,");
+    fprintf(fp, "pre_enable_mode,pre_enable_direction,pre_enable_output,");
+    fprintf(fp, "post_enable_mode,post_enable_direction,post_enable_output,mode_switched,");
+    fprintf(fp, "avg_voltage,avg_current,peak_current,avg_power,current_nonzero,");
+    fprintf(fp, "test_result,notes\n");
+    return SUCCESS;
+}
+
+static int WriteCSVRow(FILE *fp, RegisterTestCase *test) {
+    const char *modeNames[] = {"CV", "CR", "CC", "CP"};
+    const char *dirNames[] = {"SOURCE", "SINK"};
+    const char *resultNames[] = {"NOT_RUN", "PASS", "", "FAIL"};  // index: 0, 1, skip 2, -1+3=2
+
+    fprintf(fp, "%d,%s,%.3f,%.3f,",
+            test->testId, test->testName,
+            test->batteryVoltageStart, test->targetVoltage);
+
+    fprintf(fp, "%.2f,%.2f,%.2f,%.2f,%.2f,",
+            test->reg498_sinkPower, test->reg499_sinkCurrent,
+            test->reg500_voltage, test->reg501_current, test->reg502_power);
+
+    fprintf(fp, "%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,",
+            test->reg9000_voltageMax, test->reg9001_voltageMin,
+            test->reg9002_currentMax, test->reg9003_currentMin,
+            test->reg9004_powerMax, test->reg9005_sinkPowerMax,
+            test->reg9008_sinkCurrentMax, test->reg9009_sinkCurrentMin);
+
+    fprintf(fp, "%s,%s,%d,",
+            modeNames[test->preEnableMode],
+            dirNames[test->preEnableDirection],
+            test->preEnableOutput);
+
+    fprintf(fp, "%s,%s,%d,%d,",
+            modeNames[test->postEnableMode],
+            dirNames[test->postEnableDirection],
+            test->postEnableOutput,
+            test->modeSwitched);
+
+    fprintf(fp, "%.3f,%.3f,%.3f,%.2f,%d,",
+            test->avgVoltage, test->avgCurrent,
+            test->peakCurrent, test->avgPower,
+            test->currentNonZero);
+
+    const char *resultStr = (test->testResult == 1) ? "PASS" :
+                            (test->testResult == -1) ? "FAIL" : "NOT_RUN";
+    fprintf(fp, "%s,\"%s\"\n", resultStr, test->notes);
+
+    return SUCCESS;
+}
+
+/******************************************************************************
+ * Analysis and Summary Generation
+ ******************************************************************************/
+
+static void GenerateSummary(RegisterTestCase *allTests, int numTests, const char *summaryPath) {
+    FILE *fp = fopen(summaryPath, "w");
+    if (!fp) {
+        LogError("Failed to create summary file: %s", summaryPath);
+        return;
+    }
+
+    time_t now = time(NULL);
+    struct tm *timeinfo = localtime(&now);
+    char timeStr[64];
+    strftime(timeStr, sizeof(timeStr), "%Y-%m-%d %H:%M:%S", timeinfo);
+
+    fprintf(fp, "================================================================================\n");
+    fprintf(fp, "PSB 10000 REGISTER MATRIX TEST RESULTS\n");
+    fprintf(fp, "================================================================================\n");
+    fprintf(fp, "Date: %s\n", timeStr);
+    fprintf(fp, "Total Tests: %d\n", numTests);
+
+    // Count results
+    int passCount = 0, failCount = 0;
+    int cvTests = 0, ccTests = 0, cpTests = 0;
+    int modeSwitchCount = 0;
+
+    for (int i = 0; i < numTests; i++) {
+        if (allTests[i].testResult == 1) passCount++;
+        if (allTests[i].testResult == -1) failCount++;
+        if (allTests[i].modeSwitched) modeSwitchCount++;
+
+        // Count by test type
+        if (strstr(allTests[i].testName, "CV-")) cvTests++;
+        if (strstr(allTests[i].testName, "CC-")) ccTests++;
+        if (strstr(allTests[i].testName, "CP-")) cpTests++;
+    }
+
+    fprintf(fp, "Passed: %d (%.1f%%)\n", passCount, 100.0 * passCount / numTests);
+    fprintf(fp, "Failed: %d (%.1f%%)\n", failCount, 100.0 * failCount / numTests);
+    fprintf(fp, "Mode Switches Detected: %d\n\n", modeSwitchCount);
+
+    fprintf(fp, "Test Breakdown:\n");
+    fprintf(fp, "  CV Mode Tests: %d\n", cvTests);
+    fprintf(fp, "  CC Mode Tests: %d\n", ccTests);
+    fprintf(fp, "  CP Mode Tests: %d\n\n", cpTests);
+
+    fprintf(fp, "================================================================================\n");
+    fprintf(fp, "KEY FINDINGS\n");
+    fprintf(fp, "================================================================================\n\n");
+
+    // Analyze CV tests by power limit
+    fprintf(fp, "1. CV MODE - Power Limit Effects:\n\n");
+    for (int i = 0; i < numTests; i++) {
+        if (strstr(allTests[i].testName, "CV-PowerLimit")) {
+            const char *resultStr = (allTests[i].testResult == 1) ? "PASS" : "FAIL";
+            const char *modeNames[] = {"CV", "CR", "CC", "CP"};
+            fprintf(fp, "   Power Limit %.0fW: %s (Post-enable mode: %s, Current: %.3fA)\n",
+                    allTests[i].reg9004_powerMax,
+                    resultStr,
+                    modeNames[allTests[i].postEnableMode],
+                    allTests[i].avgCurrent);
+        }
+    }
+
+    // Analyze decoy value effects
+    fprintf(fp, "\n2. CV MODE - Decoy Value Effects:\n\n");
+    for (int i = 0; i < numTests; i++) {
+        if (strstr(allTests[i].testName, "CV-Decoy")) {
+            const char *resultStr = (allTests[i].testResult == 1) ? "PASS" : "FAIL";
+            const char *modeNames[] = {"CV", "CR", "CC", "CP"};
+            fprintf(fp, "   Decoy %.0fA/%.0fW: %s (Post-enable mode: %s, Current: %.3fA)\n",
+                    allTests[i].reg499_sinkCurrent,
+                    allTests[i].reg498_sinkPower,
+                    resultStr,
+                    modeNames[allTests[i].postEnableMode],
+                    allTests[i].avgCurrent);
+        }
+    }
+
+    // Analyze secondary setpoint effects
+    fprintf(fp, "\n3. CV MODE - Secondary Setpoint Effects:\n\n");
+    for (int i = 0; i < numTests; i++) {
+        if (strstr(allTests[i].testName, "CV-Secondary")) {
+            const char *resultStr = (allTests[i].testResult == 1) ? "PASS" : "FAIL";
+            const char *modeNames[] = {"CV", "CR", "CC", "CP"};
+            fprintf(fp, "   Secondary %.1fA: %s (Post-enable mode: %s, Current: %.3fA)\n",
+                    allTests[i].reg501_current,
+                    resultStr,
+                    modeNames[allTests[i].postEnableMode],
+                    allTests[i].avgCurrent);
+        }
+    }
+
+    fprintf(fp, "\n================================================================================\n");
+    fprintf(fp, "DETAILED TEST RESULTS\n");
+    fprintf(fp, "================================================================================\n\n");
+
+    for (int i = 0; i < numTests; i++) {
+        RegisterTestCase *test = &allTests[i];
+        const char *resultStr = (test->testResult == 1) ? "PASS" :
+                                (test->testResult == -1) ? "FAIL" : "NOT_RUN";
+        const char *modeNames[] = {"CV", "CR", "CC", "CP"};
+
+        fprintf(fp, "Test %d: %s - %s\n", test->testId, test->testName, resultStr);
+        fprintf(fp, "  Configuration: V=%.2fV, I=%.2fA, P=%.2fW\n",
+                test->reg500_voltage, test->reg501_current, test->reg502_power);
+        fprintf(fp, "  Decoys: %.0fA/%.0fW, Power Limit: %.0fW\n",
+                test->reg499_sinkCurrent, test->reg498_sinkPower, test->reg9004_powerMax);
+        fprintf(fp, "  Mode: %s -> %s%s\n",
+                modeNames[test->preEnableMode],
+                modeNames[test->postEnableMode],
+                test->modeSwitched ? " (SWITCHED!)" : "");
+        fprintf(fp, "  Results: Avg I=%.3fA, Peak I=%.3fA, Avg P=%.2fW\n",
+                test->avgCurrent, test->peakCurrent, test->avgPower);
+        fprintf(fp, "  Notes: %s\n\n", test->notes);
+    }
+
+    fprintf(fp, "================================================================================\n");
+    fprintf(fp, "See CSV file for complete data suitable for analysis/graphing\n");
+    fprintf(fp, "================================================================================\n");
+
+    fclose(fp);
+    LogMessage("Summary file generated: %s", summaryPath);
+}
+
+/******************************************************************************
+ * Main Register Matrix Test Function
+ ******************************************************************************/
+
+int Test_RegisterMatrix(char *errorMsg, int errorMsgSize) {
+    int result;
+    char timestamp[64];
+    char csvPath[512];
+    char summaryPath[512];
+    FILE *csvFile = NULL;
+
+    // Generate timestamp for filenames
+    time_t now = time(NULL);
+    struct tm *timeinfo = localtime(&now);
+    strftime(timestamp, sizeof(timestamp), "%Y%m%d_%H%M%S", timeinfo);
+
+    snprintf(csvPath, sizeof(csvPath),
+             "C:\\Users\\nrasm\\Documents\\battery_tester\\psb_register_matrix_%s.csv",
+             timestamp);
+    snprintf(summaryPath, sizeof(summaryPath),
+             "C:\\Users\\nrasm\\Documents\\battery_tester\\psb_register_summary_%s.txt",
+             timestamp);
+
+    LogMessage("========================================");
+    LogMessage("PSB REGISTER MATRIX TEST");
+    LogMessage("========================================");
+    LogMessage("This will run ~40 test cases (~20 minutes)");
+    LogMessage("CSV output: %s", csvPath);
+    LogMessage("Summary output: %s", summaryPath);
+    LogMessage("========================================");
+
+    // Generate all test cases
+    RegisterTestCase *cvTests = NULL, *ccTests = NULL, *cpTests = NULL;
+    int numCVTests = 0, numCCTests = 0, numCPTests = 0;
+
+    LogMessage("Generating test matrix...");
+
+    result = GenerateCVModeTests(&cvTests, &numCVTests);
+    if (result != SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Failed to generate CV tests");
+        return result;
+    }
+    LogMessage("  Generated %d CV mode tests", numCVTests);
+
+    result = GenerateCCModeTests(&ccTests, &numCCTests);
+    if (result != SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Failed to generate CC tests");
+        free(cvTests);
+        return result;
+    }
+    LogMessage("  Generated %d CC mode tests", numCCTests);
+
+    result = GenerateCPModeTests(&cpTests, &numCPTests);
+    if (result != SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Failed to generate CP tests");
+        free(cvTests);
+        free(ccTests);
+        return result;
+    }
+    LogMessage("  Generated %d CP mode tests", numCPTests);
+
+    int totalTests = numCVTests + numCCTests + numCPTests;
+    LogMessage("Total test cases: %d", totalTests);
+
+    // Combine all tests into single array
+    RegisterTestCase *allTests = (RegisterTestCase*)malloc(sizeof(RegisterTestCase) * totalTests);
+    if (!allTests) {
+        snprintf(errorMsg, errorMsgSize, "Failed to allocate test array");
+        free(cvTests);
+        free(ccTests);
+        free(cpTests);
+        return ERR_OUT_OF_MEMORY;
+    }
+
+    int idx = 0;
+    memcpy(&allTests[idx], cvTests, sizeof(RegisterTestCase) * numCVTests);
+    idx += numCVTests;
+    memcpy(&allTests[idx], ccTests, sizeof(RegisterTestCase) * numCCTests);
+    idx += numCCTests;
+    memcpy(&allTests[idx], cpTests, sizeof(RegisterTestCase) * numCPTests);
+
+    free(cvTests);
+    free(ccTests);
+    free(cpTests);
+
+    // Renumber test IDs
+    for (int i = 0; i < totalTests; i++) {
+        allTests[i].testId = i + 1;
+    }
+
+    // Open CSV file
+    csvFile = fopen(csvPath, "w");
+    if (!csvFile) {
+        snprintf(errorMsg, errorMsgSize, "Failed to create CSV file: %s", csvPath);
+        free(allTests);
+        return ERR_FILE_OPEN;
+    }
+
+    WriteCSVHeader(csvFile);
+
+    // Run all tests
+    LogMessage("Starting test execution...");
+    time_t startTime = time(NULL);
+
+    for (int i = 0; i < totalTests; i++) {
+        LogMessage("\n========================================");
+        LogMessage("Running test %d / %d (%.1f%% complete)",
+                   i + 1, totalTests, 100.0 * (i + 1) / totalTests);
+        LogMessage("========================================");
+
+        char testError[256];
+        result = RunSingleRegisterTest(&allTests[i], testError, sizeof(testError));
+
+        if (result != SUCCESS) {
+            LogError("Test %d failed with error: %s", i + 1, testError);
+            snprintf(allTests[i].notes, sizeof(allTests[i].notes),
+                     "ERROR: %s", testError);
+            allTests[i].testResult = -1;
+        }
+
+        // Write result to CSV
+        WriteCSVRow(csvFile, &allTests[i]);
+        fflush(csvFile);  // Ensure data is written immediately
+
+        // Brief delay between tests
+        Delay(TEST_DELAY_BETWEEN_TESTS);
+    }
+
+    time_t endTime = time(NULL);
+    double elapsedMinutes = difftime(endTime, startTime) / 60.0;
+
+    fclose(csvFile);
+
+    // Generate summary
+    LogMessage("\nGenerating summary report...");
+    GenerateSummary(allTests, totalTests, summaryPath);
+
+    // Count results
+    int passCount = 0, failCount = 0;
+    for (int i = 0; i < totalTests; i++) {
+        if (allTests[i].testResult == 1) passCount++;
+        if (allTests[i].testResult == -1) failCount++;
+    }
+
+    LogMessage("\n========================================");
+    LogMessage("REGISTER MATRIX TEST COMPLETE");
+    LogMessage("========================================");
+    LogMessage("Total Tests: %d", totalTests);
+    LogMessage("Passed: %d (%.1f%%)", passCount, 100.0 * passCount / totalTests);
+    LogMessage("Failed: %d (%.1f%%)", failCount, 100.0 * failCount / totalTests);
+    LogMessage("Execution Time: %.1f minutes", elapsedMinutes);
+    LogMessage("CSV File: %s", csvPath);
+    LogMessage("Summary File: %s", summaryPath);
+    LogMessage("========================================");
+
+    free(allTests);
+
+    snprintf(errorMsg, errorMsgSize,
+             "Test complete: %d passed, %d failed. See %s for details.",
+             passCount, failCount, summaryPath);
+
+    return SUCCESS;
 }

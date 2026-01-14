@@ -136,7 +136,54 @@ int Test_SinkPowerControl(char *errorMsg, int errorMsgSize);
 int Test_SinkCurrentLimits(char *errorMsg, int errorMsgSize);
 int Test_SinkPowerLimit(char *errorMsg, int errorMsgSize);
 
+// Register Matrix Testing (NEW - comprehensive behavioral testing)
+int Test_RegisterMatrix(char *errorMsg, int errorMsgSize);
+
 // Utility functions
 void UpdateTestProgress(TestSuiteContext *context, const char *message);
+
+/******************************************************************************
+ * Register Matrix Test Configuration (Safe values only)
+ ******************************************************************************/
+
+// Safe test values for CC mode
+#define TEST_CC_CURRENT_LOW     0.5    // A (very safe)
+#define TEST_CC_CURRENT_MID     1.0    // A (safe)
+#define TEST_CC_CURRENT_HIGH    3.0    // A (MAX for testing - SAFE LIMIT)
+
+// Safe test values for CP mode
+#define TEST_CP_POWER_LOW       5.0    // W (very safe)
+#define TEST_CP_POWER_MID       10.0   // W (safe)
+#define TEST_CP_POWER_HIGH      20.0   // W (MAX for testing - SAFE LIMIT)
+
+// CV mode test configurations
+#define TEST_CV_VOLTAGE_TARGET  4.2    // V (typical battery charge voltage)
+#define TEST_CV_VOLTAGE_LOW     2.7    // V (typical battery discharge voltage)
+
+// Decoy value test configurations
+#define TEST_DECOY_CURRENT_LOW  5.0    // A
+#define TEST_DECOY_CURRENT_MID  10.0   // A (current working value)
+#define TEST_DECOY_CURRENT_HIGH 20.0   // A
+#define TEST_DECOY_POWER_LOW    50.0   // W
+#define TEST_DECOY_POWER_MID    100.0  // W (current working value)
+#define TEST_DECOY_POWER_HIGH   200.0  // W
+
+// Power limit test configurations (for CP mode threshold testing)
+#define TEST_POWER_LIMIT_VERY_LOW   20.0    // W (known to cause CP mode)
+#define TEST_POWER_LIMIT_LOW        30.0    // W (boundary test)
+#define TEST_POWER_LIMIT_MID        50.0    // W
+#define TEST_POWER_LIMIT_HIGH       100.0   // W
+#define TEST_POWER_LIMIT_VERY_HIGH  200.0   // W
+#define TEST_POWER_LIMIT_SAFE       1224.0  // W (known working value)
+
+// Register matrix test timing
+#define TEST_MATRIX_STABILIZATION_TIME  1.5   // s (wait after output enable)
+#define TEST_MATRIX_MEASUREMENT_TIME    10.0  // s (total measurement period)
+#define TEST_MATRIX_SAMPLE_INTERVAL     1.0   // s (between samples)
+
+// Safety thresholds for auto-abort
+#define TEST_MATRIX_MAX_CURRENT  10.0   // A (emergency abort if exceeded)
+#define TEST_MATRIX_MAX_VOLTAGE  50.0   // V (emergency abort if exceeded)
+#define TEST_MATRIX_MAX_POWER    100.0  // W (emergency abort if exceeded)
 
 #endif // PSB10000_TEST_H
