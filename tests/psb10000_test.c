@@ -2123,15 +2123,21 @@ static int InitializePSBForMatrixTest(char *errorMsg, int errorMsgSize) {
     }
 
     // Set all limits to high safe values (never modified during tests)
-    LogMessage("Setting high limit values (to avoid conflicts with decoys)...");
+    // This ensures current can flow - limits must be high enough
+    LogMessage("Setting all limit registers to safe high values...");
+    LogMessage("  REG 9000/9001 (VOLTAGE): 0.0 - 61.2 V");
+    LogMessage("  REG 9002/9003 (CURRENT): 0.0 - 61.2 A");
     LogMessage("  REG 9004 (POWER_MAX): 1224.0 W");
-    result = PSB_SetPowerLimitQueued(1224.0, DEVICE_PRIORITY_NORMAL);
+    LogMessage("  REG 9005 (SINK_POWER_MAX): 1224.0 W");
+    LogMessage("  REG 9008/9009 (SINK_CURRENT): 0.0 - 61.2 A");
+
+    result = PSB_SetSafeLimitsQueued(DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
-        snprintf(errorMsg, errorMsgSize, "Failed to set REG 9004");
+        snprintf(errorMsg, errorMsgSize, "Failed to set safe limits");
         return result;
     }
 
-    LogMessage("Initialization complete - decoys set, ready for testing");
+    LogMessage("Initialization complete - decoys set, all limits high, ready for testing");
     Delay(TEST_DELAY_SHORT);
 
     return SUCCESS;
@@ -2259,17 +2265,6 @@ static int RunSingleRegisterTest(RegisterTestCase *test, char *errorMsg, int err
     } else {
         LogMessage("Step 3: Using default power limit (1224W)");
     }
-
-    // Step 4: Read pre-enable status (CRITICAL - before output enable)
-    LogMessage("Step 4: Reading pre-enable status...");
-    LogMessage("  REG 9004 (POWER_MAX): %.2f W", test->reg9004_powerMax);
-    result = PSB_SetPowerLimitQueued(test->reg9004_powerMax, DEVICE_PRIORITY_NORMAL);
-    if (result != PSB_SUCCESS) {
-        snprintf(errorMsg, errorMsgSize, "Failed to set REG 9004");
-        return result;
-    }
-
-    Delay(TEST_DELAY_SHORT);
 
     // Step 4: Read pre-enable status (CRITICAL - before output enable)
     LogMessage("Step 4: Reading pre-enable status...");
