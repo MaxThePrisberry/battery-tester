@@ -1,8 +1,19 @@
 /******************************************************************************
  * psb10000_test.c
- * 
+ *
  * PSB 10000 Test Suite with Queue System Integration
  * Implementation file for comprehensive testing of PSB10000 functions
+ *
+ * CRITICAL: PSB Mode Selection Rules
+ * ==================================
+ * The PSB 10000 has non-obvious mode selection behavior. For correct operation:
+ * - Write ONLY the target register for your desired mode (CV/CC/CP)
+ * - DO NOT write multiple setpoint registers in sequence
+ * - Mode is selected at output enable time, not register write time
+ *
+ * See: notes/PSB-MODE-SELECTION-RULES-2026-01-13.txt for complete documentation
+ * This file explains the 40+ commits of debugging that led to understanding
+ * the PSB's mode selection algorithm.
  ******************************************************************************/
 
 #include "BatteryTester.h"
@@ -1857,14 +1868,14 @@ static int GenerateCVModeTests(RegisterTestCase **tests, int *numTests) {
         test->batteryVoltageStart = batteryV;
         test->targetVoltage = targetV;
 
-        // CV configuration: only voltage setpoint
-        // NOTE: Set power setpoint to 20W (not 0W) so if PSB incorrectly switches
-        // to CP mode, it will deliver measurable current for diagnosis
-        test->reg498_sinkPower = TEST_DECOY_POWER_MID;    // 100W decoy
-        test->reg499_sinkCurrent = TEST_DECOY_CURRENT_MID; // 10A decoy
-        test->reg500_voltage = targetV;
-        test->reg501_current = 0.0;
-        test->reg502_power = 20.0;  // 20W for CP mode fallback measurement
+        // CV configuration: ONLY voltage register will be written
+        // Other registers show what they'll be from initialization
+        // NOTE: Per PSB-MODE-SELECTION-RULES, we write ONLY reg500_voltage
+        test->reg498_sinkPower = 100.0;    // Decoy (set at init, not rewritten)
+        test->reg499_sinkCurrent = 10.0;   // Decoy (set at init, not rewritten)
+        test->reg500_voltage = targetV;    // ACTIVE - this is written for CV mode
+        test->reg501_current = 0.0;        // Zero (from init, not rewritten)
+        test->reg502_power = 0.0;          // Zero (from init, not rewritten)
 
         // Limits - vary power limit
         test->reg9000_voltageMax = PSB_SAFE_VOLTAGE_MAX;
@@ -1890,13 +1901,15 @@ static int GenerateCVModeTests(RegisterTestCase **tests, int *numTests) {
         test->batteryVoltageStart = batteryV;
         test->targetVoltage = targetV;
 
-        // CV with variable decoys
-        // NOTE: Set power setpoint to 20W for CP mode fallback measurement
-        test->reg498_sinkPower = decoyPowers[i];   // VARIABLE
-        test->reg499_sinkCurrent = decoyCurrents[i]; // VARIABLE
-        test->reg500_voltage = targetV;
-        test->reg501_current = 0.0;
-        test->reg502_power = 20.0;  // 20W for CP mode fallback measurement
+        // CV with variable decoys - testing if decoy values matter
+        // NOTE: Decoys are set at initialization, but for these tests we'll
+        // reinitialize with different decoy values to test their effect
+        // These tests will require special handling in RunSingleRegisterTest
+        test->reg498_sinkPower = decoyPowers[i];   // Decoy to test (will be rewritten)
+        test->reg499_sinkCurrent = decoyCurrents[i]; // Decoy to test (will be rewritten)
+        test->reg500_voltage = targetV;             // ACTIVE - written for CV mode
+        test->reg501_current = 0.0;                 // Zero (not written)
+        test->reg502_power = 0.0;                   // Zero (not written)
 
         // High safe limits
         test->reg9000_voltageMax = PSB_SAFE_VOLTAGE_MAX;
@@ -1921,13 +1934,14 @@ static int GenerateCVModeTests(RegisterTestCase **tests, int *numTests) {
         test->batteryVoltageStart = batteryV;
         test->targetVoltage = targetV;
 
-        // CV with small secondary setpoint
-        // NOTE: Set power setpoint to 20W for CP mode fallback measurement
-        test->reg498_sinkPower = TEST_DECOY_POWER_MID;
-        test->reg499_sinkCurrent = TEST_DECOY_CURRENT_MID;
-        test->reg500_voltage = targetV;
-        test->reg501_current = secondaryCurrents[i];  // Small secondary
-        test->reg502_power = 20.0;  // 20W for CP mode fallback measurement
+        // CV with small secondary setpoint - testing if secondary setpoints interfere
+        // NOTE: These tests write REG 501 (secondary current) before REG 500 (voltage)
+        // to see if having a non-zero secondary setpoint interferes with CV mode
+        test->reg498_sinkPower = 100.0;              // Decoy (from init)
+        test->reg499_sinkCurrent = 10.0;             // Decoy (from init)
+        test->reg500_voltage = targetV;              // ACTIVE - written last for CV mode
+        test->reg501_current = secondaryCurrents[i]; // Secondary (will be written first)
+        test->reg502_power = 0.0;                    // Zero (not written)
 
         // High safe limits
         test->reg9000_voltageMax = PSB_SAFE_VOLTAGE_MAX;
@@ -1974,13 +1988,13 @@ static int GenerateCCModeTests(RegisterTestCase **tests, int *numTests) {
             test->batteryVoltageStart = batteryV;
             test->targetVoltage = testVoltages[j];
 
-            // CC configuration: only current setpoint
-            // NOTE: Set voltage/power setpoints reasonable for mode fallback
-            test->reg498_sinkPower = TEST_DECOY_POWER_MID;
-            test->reg499_sinkCurrent = TEST_DECOY_CURRENT_MID;
-            test->reg500_voltage = testVoltages[j];   // Set to target voltage
-            test->reg501_current = testCurrents[i];   // ACTIVE SETPOINT
-            test->reg502_power = 20.0;                // 20W for mode fallback
+            // CC configuration: ONLY current register will be written
+            // Other registers show what they'll be from initialization
+            test->reg498_sinkPower = 100.0;           // Decoy (from init, not rewritten)
+            test->reg499_sinkCurrent = 10.0;          // Decoy (from init, not rewritten)
+            test->reg500_voltage = 0.0;               // Zero (from init, not rewritten)
+            test->reg501_current = testCurrents[i];   // ACTIVE - written for CC mode
+            test->reg502_power = 0.0;                 // Zero (from init, not rewritten)
 
             // High safe limits
             test->reg9000_voltageMax = PSB_SAFE_VOLTAGE_MAX;
@@ -2028,14 +2042,13 @@ static int GenerateCPModeTests(RegisterTestCase **tests, int *numTests) {
             test->batteryVoltageStart = batteryV;
             test->targetVoltage = testVoltages[j];
 
-            // CP configuration: only power setpoint
-            // NOTE: Set voltage/current setpoints high so PSB uses power setpoint
-            // If PSB incorrectly switches modes, we'll still get measurable current
-            test->reg498_sinkPower = TEST_DECOY_POWER_MID;
-            test->reg499_sinkCurrent = TEST_DECOY_CURRENT_MID;
-            test->reg500_voltage = testVoltages[j];  // Set to target voltage
-            test->reg501_current = 10.0;             // Set high (10A) for mode fallback
-            test->reg502_power = testPowers[i];      // ACTIVE SETPOINT
+            // CP configuration: ONLY power register will be written
+            // Other registers show what they'll be from initialization
+            test->reg498_sinkPower = 100.0;          // Decoy (from init, not rewritten)
+            test->reg499_sinkCurrent = 10.0;         // Decoy (from init, not rewritten)
+            test->reg500_voltage = 0.0;              // Zero (from init, not rewritten)
+            test->reg501_current = 0.0;              // Zero (from init, not rewritten)
+            test->reg502_power = testPowers[i];      // ACTIVE - written for CP mode
 
             // High safe limits
             test->reg9000_voltageMax = PSB_SAFE_VOLTAGE_MAX;
@@ -2055,7 +2068,84 @@ static int GenerateCPModeTests(RegisterTestCase **tests, int *numTests) {
 }
 
 /******************************************************************************
+ * PSB Initialization for Register Matrix Test
+ *
+ * Sets decoy values and high limits ONCE before all tests
+ * See notes/PSB-MODE-SELECTION-RULES-2026-01-13.txt for explanation
+ ******************************************************************************/
+
+static int InitializePSBForMatrixTest(char *errorMsg, int errorMsgSize) {
+    int result;
+
+    LogMessage("========================================");
+    LogMessage("Initializing PSB with decoy values and high limits");
+    LogMessage("========================================");
+
+    // CRITICAL: Set decoy values for sink mode (prevent unwanted mode selection)
+    // These are written ONCE and never touched again during tests
+    // See PSB-MODE-SELECTION-RULES document for why this is necessary
+    LogMessage("Setting decoy values (to prevent sink mode confusion)...");
+    LogMessage("  REG 498 (SINK_POWER): 100.0 W (decoy)");
+    result = PSB_SetSinkPowerQueued(100.0, DEVICE_PRIORITY_NORMAL);
+    if (result != PSB_SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Failed to set REG 498 decoy");
+        return result;
+    }
+
+    LogMessage("  REG 499 (SINK_CURRENT): 10.0 A (decoy)");
+    result = PSB_SetSinkCurrentQueued(10.0, DEVICE_PRIORITY_NORMAL);
+    if (result != PSB_SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Failed to set REG 499 decoy");
+        return result;
+    }
+
+    // Zero all source setpoints (will be written individually per test)
+    LogMessage("Zeroing source setpoints (will write per-test)...");
+    LogMessage("  REG 500 (VOLTAGE): 0.0 V");
+    result = PSB_SetVoltageQueued(0.0, DEVICE_PRIORITY_NORMAL);
+    if (result != PSB_SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Failed to zero REG 500");
+        return result;
+    }
+
+    LogMessage("  REG 501 (CURRENT): 0.0 A");
+    result = PSB_SetCurrentQueued(0.0, DEVICE_PRIORITY_NORMAL);
+    if (result != PSB_SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Failed to zero REG 501");
+        return result;
+    }
+
+    LogMessage("  REG 502 (POWER): 0.0 W");
+    result = PSB_SetPowerQueued(0.0, DEVICE_PRIORITY_NORMAL);
+    if (result != PSB_SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Failed to zero REG 502");
+        return result;
+    }
+
+    // Set all limits to high safe values (never modified during tests)
+    LogMessage("Setting high limit values (to avoid conflicts with decoys)...");
+    LogMessage("  REG 9004 (POWER_MAX): 1224.0 W");
+    result = PSB_SetPowerLimitQueued(1224.0, DEVICE_PRIORITY_NORMAL);
+    if (result != PSB_SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Failed to set REG 9004");
+        return result;
+    }
+
+    LogMessage("Initialization complete - decoys set, ready for testing");
+    Delay(TEST_DELAY_SHORT);
+
+    return SUCCESS;
+}
+
+/******************************************************************************
  * Single Test Execution
+ *
+ * CRITICAL: Only writes the TARGET register for the desired mode
+ * See notes/PSB-MODE-SELECTION-RULES-2026-01-13.txt for explanation
+ *
+ * CV tests: Write ONLY REG 500 (voltage)
+ * CC tests: Write ONLY REG 501 (current)
+ * CP tests: Write ONLY REG 502 (power)
  ******************************************************************************/
 
 static int RunSingleRegisterTest(RegisterTestCase *test, char *errorMsg, int errorMsgSize) {
@@ -2066,8 +2156,8 @@ static int RunSingleRegisterTest(RegisterTestCase *test, char *errorMsg, int err
     LogMessage("Test %d: %s", test->testId, test->testName);
     LogMessage("========================================");
 
-    // Step 1: Disable output and zero registers
-    LogMessage("Step 1: Disabling output and resetting...");
+    // Step 1: Disable output
+    LogMessage("Step 1: Disabling output...");
     result = PSB_SetOutputEnableQueued(0, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to disable output");
@@ -2075,47 +2165,103 @@ static int RunSingleRegisterTest(RegisterTestCase *test, char *errorMsg, int err
     }
     Delay(TEST_DELAY_SHORT);
 
-    // Step 2: Write setpoint registers
-    LogMessage("Step 2: Configuring setpoint registers...");
-    LogMessage("  REG 498 (SINK_POWER): %.2f W", test->reg498_sinkPower);
-    result = PSB_SetSinkPowerQueued(test->reg498_sinkPower, DEVICE_PRIORITY_NORMAL);
-    if (result != PSB_SUCCESS) {
-        snprintf(errorMsg, errorMsgSize, "Failed to set REG 498");
-        return result;
-    }
+    // Step 2: Write ONLY the target register for this test mode
+    // CRITICAL: Do NOT write other setpoint registers!
+    // See PSB-MODE-SELECTION-RULES-2026-01-13.txt for why this is essential
+    LogMessage("Step 2: Writing target register only (not all registers!)...");
 
-    LogMessage("  REG 499 (SINK_CURRENT): %.2f A", test->reg499_sinkCurrent);
-    result = PSB_SetSinkCurrentQueued(test->reg499_sinkCurrent, DEVICE_PRIORITY_NORMAL);
-    if (result != PSB_SUCCESS) {
-        snprintf(errorMsg, errorMsgSize, "Failed to set REG 499");
-        return result;
-    }
+    // Determine test mode from test name and write ONLY the relevant register
+    if (strncmp(test->testName, "CV-", 3) == 0) {
+        // CV mode test: Write voltage register
+        // Special case: CV-Decoy tests also modify decoy registers to test their effect
+        if (strncmp(test->testName, "CV-Decoy", 8) == 0) {
+            LogMessage("  CV-Decoy test detected - writing decoys then voltage");
+            LogMessage("  REG 498 (SINK_POWER): %.2f W (decoy)", test->reg498_sinkPower);
+            result = PSB_SetSinkPowerQueued(test->reg498_sinkPower, DEVICE_PRIORITY_NORMAL);
+            if (result != PSB_SUCCESS) {
+                snprintf(errorMsg, errorMsgSize, "Failed to set REG 498");
+                return result;
+            }
 
-    LogMessage("  REG 500 (VOLTAGE): %.2f V", test->reg500_voltage);
-    result = PSB_SetVoltageQueued(test->reg500_voltage, DEVICE_PRIORITY_NORMAL);
-    if (result != PSB_SUCCESS) {
-        snprintf(errorMsg, errorMsgSize, "Failed to set REG 500");
-        return result;
-    }
+            LogMessage("  REG 499 (SINK_CURRENT): %.2f A (decoy)", test->reg499_sinkCurrent);
+            result = PSB_SetSinkCurrentQueued(test->reg499_sinkCurrent, DEVICE_PRIORITY_NORMAL);
+            if (result != PSB_SUCCESS) {
+                snprintf(errorMsg, errorMsgSize, "Failed to set REG 499");
+                return result;
+            }
 
-    LogMessage("  REG 501 (CURRENT): %.2f A", test->reg501_current);
-    result = PSB_SetCurrentQueued(test->reg501_current, DEVICE_PRIORITY_NORMAL);
-    if (result != PSB_SUCCESS) {
-        snprintf(errorMsg, errorMsgSize, "Failed to set REG 501");
-        return result;
-    }
+            Delay(TEST_DELAY_SHORT);  // Let decoys settle
+        }
 
-    LogMessage("  REG 502 (POWER): %.2f W", test->reg502_power);
-    result = PSB_SetPowerQueued(test->reg502_power, DEVICE_PRIORITY_NORMAL);
-    if (result != PSB_SUCCESS) {
-        snprintf(errorMsg, errorMsgSize, "Failed to set REG 502");
-        return result;
+        // Special case: CV-Secondary tests write secondary setpoint before voltage
+        if (strncmp(test->testName, "CV-Secondary", 12) == 0 && test->reg501_current > 0.01) {
+            LogMessage("  CV-Secondary test detected - writing secondary current before voltage");
+            LogMessage("  REG 501 (CURRENT): %.2f A (secondary setpoint)", test->reg501_current);
+            result = PSB_SetCurrentQueued(test->reg501_current, DEVICE_PRIORITY_NORMAL);
+            if (result != PSB_SUCCESS) {
+                snprintf(errorMsg, errorMsgSize, "Failed to set REG 501");
+                return result;
+            }
+            Delay(TEST_DELAY_SHORT);  // Brief delay
+        }
+
+        // Write voltage register LAST (this is what should determine CV mode)
+        LogMessage("  REG 500 (VOLTAGE): %.2f V (ACTIVE - written last)", test->reg500_voltage);
+        result = PSB_SetVoltageQueued(test->reg500_voltage, DEVICE_PRIORITY_NORMAL);
+        if (result != PSB_SUCCESS) {
+            snprintf(errorMsg, errorMsgSize, "Failed to set REG 500");
+            return result;
+        }
+        if (strncmp(test->testName, "CV-Secondary", 12) != 0) {
+            LogMessage("  NOT writing REG 501, 502 (preserving zeros)");
+        }
+
+    } else if (strncmp(test->testName, "CC-", 3) == 0) {
+        // CC mode test: Write ONLY current register
+        LogMessage("  CC test detected - writing ONLY REG 501 (current)");
+        LogMessage("  REG 501 (CURRENT): %.2f A", test->reg501_current);
+        result = PSB_SetCurrentQueued(test->reg501_current, DEVICE_PRIORITY_NORMAL);
+        if (result != PSB_SUCCESS) {
+            snprintf(errorMsg, errorMsgSize, "Failed to set REG 501");
+            return result;
+        }
+        LogMessage("  NOT writing REG 498, 499, 500, 502 (preserving decoys/zeros)");
+
+    } else if (strncmp(test->testName, "CP-", 3) == 0) {
+        // CP mode test: Write ONLY power register
+        LogMessage("  CP test detected - writing ONLY REG 502 (power)");
+        LogMessage("  REG 502 (POWER): %.2f W", test->reg502_power);
+        result = PSB_SetPowerQueued(test->reg502_power, DEVICE_PRIORITY_NORMAL);
+        if (result != PSB_SUCCESS) {
+            snprintf(errorMsg, errorMsgSize, "Failed to set REG 502");
+            return result;
+        }
+        LogMessage("  NOT writing REG 498, 499, 500, 501 (preserving decoys/zeros)");
+
+    } else {
+        snprintf(errorMsg, errorMsgSize, "Unknown test type: %s", test->testName);
+        return ERR_INVALID_PARAMETER;
     }
 
     Delay(TEST_DELAY_SHORT);
 
-    // Step 3: Write limit registers
-    LogMessage("Step 3: Configuring limit registers...");
+    // Step 3: Optionally modify limit register (only for power limit tests)
+    // Only modify if different from default 1224W
+    if (fabs(test->reg9004_powerMax - 1224.0) > 0.1) {
+        LogMessage("Step 3: Modifying power limit for this test...");
+        LogMessage("  REG 9004 (POWER_MAX): %.2f W", test->reg9004_powerMax);
+        result = PSB_SetPowerLimitQueued(test->reg9004_powerMax, DEVICE_PRIORITY_NORMAL);
+        if (result != PSB_SUCCESS) {
+            snprintf(errorMsg, errorMsgSize, "Failed to set REG 9004");
+            return result;
+        }
+        Delay(TEST_DELAY_SHORT);
+    } else {
+        LogMessage("Step 3: Using default power limit (1224W)");
+    }
+
+    // Step 4: Read pre-enable status (CRITICAL - before output enable)
+    LogMessage("Step 4: Reading pre-enable status...");
     LogMessage("  REG 9004 (POWER_MAX): %.2f W", test->reg9004_powerMax);
     result = PSB_SetPowerLimitQueued(test->reg9004_powerMax, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
@@ -2557,6 +2703,21 @@ int Test_RegisterMatrix(char *errorMsg, int errorMsgSize) {
     LogMessage("CSV file created successfully");
 
     WriteCSVHeader(csvFile);
+
+    // Initialize PSB with decoy values and high limits (ONCE before all tests)
+    // CRITICAL: This sets up the baseline configuration that all tests rely on
+    // See notes/PSB-MODE-SELECTION-RULES-2026-01-13.txt for explanation
+    LogMessage("\n========================================");
+    LogMessage("INITIALIZING PSB FOR MATRIX TEST");
+    LogMessage("========================================");
+    result = InitializePSBForMatrixTest(errorMsg, errorMsgSize);
+    if (result != SUCCESS) {
+        LogError("Failed to initialize PSB: %s", errorMsg);
+        fclose(csvFile);
+        free(allTests);
+        return result;
+    }
+    LogMessage("PSB initialization complete\n");
 
     // Run all tests
     LogMessage("Starting test execution...");

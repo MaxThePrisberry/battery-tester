@@ -1,0 +1,411 @@
+================================================================================
+PSB 10000 MODE SELECTION RULES - DEFINITIVE GUIDE
+================================================================================
+Date: 2026-01-13
+Discovery: Register Matrix Test Analysis (psb_register_summary_20260113_190652.txt)
+Critical Files: battery_utils.c (lines 123-150), this document
+
+================================================================================
+EXECUTIVE SUMMARY
+================================================================================
+
+The PSB 10000 has a non-obvious mode selection algorithm that evaluates which
+setpoint register to use based on WHICH REGISTERS WERE MOST RECENTLY WRITTEN,
+not based on which values are non-zero.
+
+CRITICAL RULE: For any desired mode (CV/CC/CP), write ONLY the target register.
+               Writing multiple setpoint registers causes mode confusion.
+
+================================================================================
+THE PROBLEM: WHY WRITING MULTIPLE SETPOINTS FAILS
+================================================================================
+
+FAILED APPROACH (what the initial register matrix test did):
+
+    For CV mode test:
+    1. Write REG 498 (sink power) = 100W
+    2. Write REG 499 (sink current) = 10A
+    3. Write REG 500 (voltage) = 4.2V      <- Want this
+    4. Write REG 501 (current) = 0A
+    5. Write REG 502 (power) = 0W          <- PSB sees this was written!
+    6. Enable output
+
+    RESULT: PSB selects CP mode (because REG 502 was written), uses 0W -> 0A
+
+    Expected: CV mode at 4.2V
+    Got:      CP mode at 0W (zero current delivered)
+
+WHY THIS HAPPENS:
+
+The PSB firmware has an "active setpoint detection" algorithm that runs when
+output is enabled. This algorithm appears to prioritize registers based on
+WRITE ORDER / RECENCY, not based on non-zero values.
+
+When you write ALL setpoint registers (498-502), the PSB gets confused about
+which mode you actually want because you've "touched" all of them.
+
+================================================================================
+PSB MODE SELECTION TIMING
+================================================================================
+
+IMPORTANT: Mode is NOT selected when registers are written!
+           Mode IS selected when output is ENABLED!
+
+Sequence of events:
+
+    1. Output OFF: PSB shows "CV" mode (default, meaningless)
+    2. Write setpoint register(s)
+    3. Output OFF: PSB still shows "CV" mode
+    4. Enable output -> PSB EVALUATES which setpoint to use
+    5. Output ON: PSB shows actual mode (CV/CC/CP)
+
+This is visible in CSV data - ALL tests showed:
+    pre_enable_mode: CV (before output enable)
+    post_enable_mode: CP/CC (after output enable)
+
+The pre-enable mode is meaningless - it's just a default placeholder.
+
+================================================================================
+THE SOLUTION: WRITE ONLY THE TARGET REGISTER
+================================================================================
+
+WORKING APPROACH (from battery_utils.c Battery_GoToVoltage):
+
+    INITIALIZATION (once, at startup):
+    - Write REG 498 (sink power) = 100W      (decoy - prevents CP sink mode)
+    - Write REG 499 (sink current) = 10A     (decoy - prevents CC sink mode)
+    - Write REG 500 (voltage) = 0V
+    - Write REG 501 (current) = 0A
+    - Write REG 502 (power) = 0W
+
+    FOR CV MODE OPERATION:
+    - Write ONLY REG 500 (voltage) = 4.2V
+    - DO NOT write REG 498, 499, 501, or 502
+    - Enable output
+
+    RESULT: PSB selects CV mode at 4.2V (correct!)
+
+    The decoy values (10A/100W in 498/499) remain from initialization but are
+    NOT re-written, so PSB doesn't consider them as "active" setpoints.
+
+================================================================================
+REGISTER WRITE RULES FOR EACH MODE
+================================================================================
+
+FOR CV MODE (Constant Voltage):
+    Write:      REG 500 (voltage) = target voltage
+    Don't write: REG 498, 499, 501, 502
+    Decoys:     REG 498/499 stay at initialization values (100W/10A)
+    Limits:     All limits stay at high initialization values (61.2A/1224W)
+
+FOR CC MODE (Constant Current):
+    Write:      REG 501 (current) = target current
+    Don't write: REG 498, 499, 500, 502
+    Decoys:     REG 498/499 stay at initialization values (100W/10A)
+    Limits:     All limits stay at high initialization values
+
+FOR CP MODE (Constant Power):
+    Write:      REG 502 (power) = target power
+    Don't write: REG 498, 499, 500, 501
+    Decoys:     REG 498/499 stay at initialization values (100W/10A)
+    Limits:     All limits stay at high initialization values
+
+SINK MODE (Discharge):
+    Same rules apply, but use:
+    Write:      REG 498 (sink power) for CP sink mode
+    Write:      REG 499 (sink current) for CC sink mode
+    Don't write: Other setpoint registers
+
+================================================================================
+WHY DECOY VALUES ARE NEEDED
+================================================================================
+
+The decoy values in REG 498 (sink power) and REG 499 (sink current) serve
+a critical purpose:
+
+PURPOSE: Prevent PSB from entering SINK mode when we want SOURCE mode
+
+SCENARIO WITHOUT DECOYS:
+    - REG 498 (sink power) = 0W (from initialization)
+    - REG 499 (sink current) = 0A (from initialization)
+    - Write REG 500 (voltage) = 4.2V for charging
+    - Battery voltage = 2.7V
+    - PSB should be SOURCE (charging battery from 2.7V to 4.2V)
+
+    PROBLEM: PSB might see zero sink values and get confused about direction
+
+WITH DECOYS:
+    - REG 498 (sink power) = 100W (decoy)
+    - REG 499 (sink current) = 10A (decoy)
+    - Write REG 500 (voltage) = 4.2V
+    - Battery voltage = 2.7V
+    - PSB clearly understands: "charge to 4.2V, don't use sink mode"
+
+The decoy values are "hints" to the PSB firmware that help it make the right
+decision about SOURCE vs SINK direction.
+
+CRITICAL: Decoy values must be set ONCE during initialization, then NEVER
+          written again. Re-writing them would make PSB think you want those
+          modes active.
+
+================================================================================
+LIMIT REGISTERS vs SETPOINT REGISTERS
+================================================================================
+
+SETPOINT REGISTERS (498-502): Define operating mode
+    REG 498: Sink power setpoint (CP sink mode)
+    REG 499: Sink current setpoint (CC sink mode)
+    REG 500: Voltage setpoint (CV mode)
+    REG 501: Current setpoint (CC source mode)
+    REG 502: Power setpoint (CP source mode)
+
+LIMIT REGISTERS (9000-9009): Constrain operation within a mode
+    REG 9000: Voltage maximum
+    REG 9001: Voltage minimum
+    REG 9002: Current maximum
+    REG 9003: Current minimum
+    REG 9004: Power maximum
+    REG 9005: Sink power maximum
+    REG 9008: Sink current maximum
+    REG 9009: Sink current minimum
+
+INITIALIZATION VALUES:
+    Setpoints: 498=100W, 499=10A, 500=0V, 501=0A, 502=0W
+    Limits:    All set to maximum safe values (61.2A, 1224W)
+
+IMPORTANT: Do NOT modify limit registers during normal operation!
+
+Discovery from ops-log-2026-01-12-10.txt:
+    - PSB firmware enforces: LIMIT >= SETPOINT
+    - Trying to set limit < setpoint causes "Illegal data value" error
+    - Since decoy setpoints are 10A/100W, you cannot set limits below that
+    - Solution: Leave limits at high values (61.2A/1224W) from initialization
+
+In CV mode, current is naturally limited by:
+    1. Voltage difference (target V - battery V)
+    2. Battery internal resistance
+    3. PSB's physical capabilities
+
+You don't need to lower limit registers to constrain current in CV mode - the
+physics naturally limits it.
+
+================================================================================
+REGISTER MATRIX TEST FAILURE ANALYSIS
+================================================================================
+
+TEST RUN: psb_register_summary_20260113_190652.txt
+DATE: 2026-01-13 19:06:52
+BATTERY: Connected at 2.7V
+RESULTS: All 30 tests FAILED with 0.000A current
+
+WHAT HAPPENED:
+
+CV Tests (1-12): reg502_power = 0.00
+    Expected: CV mode at 4.2V, deliver ~1-3A current
+    Got:      CP mode at 0W, deliver 0A (because power setpoint = 0W)
+    Reason:   Test wrote ALL registers including REG 502 = 0W
+              PSB saw REG 502 was written -> selected CP mode -> used 0W
+
+CC Tests (13-21): reg500_voltage = 0.00, reg502_power = 0.00
+    Expected: CC mode at 0.5-3A, charge to target voltage
+    Got:      CC mode selected correctly, but 0A delivered
+    Reason:   Test wrote REG 500 = 0V and REG 502 = 0W
+              PSB correctly selected CC mode but parameters were wrong
+
+CP Tests (22-30): reg500_voltage = 0.00, reg501_current = 0.00
+    Expected: CP mode at 5-20W
+    Got:      CC mode at 0A (wrong mode!)
+    Reason:   Test wrote REG 500 = 0V, REG 501 = 0A, REG 502 = 5-20W
+              PSB confused by multiple zero setpoints, selected CC instead of CP
+
+KEY INSIGHT FROM CSV:
+
+ALL 30 tests showed mode_switched = 1:
+    - pre_enable_mode = CV (before output enable)
+    - post_enable_mode = CP or CC (after output enable)
+
+This proves PSB does mode selection at output enable time, not at register
+write time. The mode shown before output enable is meaningless.
+
+CRITICAL DISCOVERY:
+
+Even CV tests with 1224W power limit switched to CP mode (line 7 in CSV):
+    test_id: 6
+    test_name: CV-PowerLimit-1224W
+    reg9004_p_max: 1224.00
+    pre_enable_mode: CV
+    post_enable_mode: CP
+
+This PROVES the bug is not about power limits! The issue is writing multiple
+setpoint registers, not the limit values.
+
+================================================================================
+CORRECT TEST METHODOLOGY
+================================================================================
+
+FAILED APPROACH (initial test):
+    For each test:
+    1. Disable output
+    2. Write ALL setpoint registers (498-502) <- WRONG!
+    3. Write limit registers
+    4. Enable output
+    5. Measure current
+
+    Result: PSB confused, selected wrong modes
+
+CORRECT APPROACH (rewritten test):
+    ONCE before all tests:
+    1. Initialize PSB with decoy values (498=100W, 499=10A)
+    2. Set all limits to high values (61.2A, 1224W)
+
+    For each CV test:
+    1. Disable output
+    2. Write ONLY REG 500 (voltage) = target <- Only this!
+    3. Optionally modify REG 9004 (power limit) if testing limit effects
+    4. Enable output
+    5. Measure current
+
+    For each CC test:
+    1. Disable output
+    2. Write ONLY REG 501 (current) = target <- Only this!
+    3. Enable output
+    4. Measure current
+
+    For each CP test:
+    1. Disable output
+    2. Write ONLY REG 502 (power) = target <- Only this!
+    3. Enable output
+    4. Measure current
+
+This matches the working pattern from battery_utils.c and avoids confusing
+the PSB's mode selection algorithm.
+
+================================================================================
+CODE EXAMPLES
+================================================================================
+
+CORRECT CV MODE SETUP:
+
+    // Initialization (once)
+    PSB_SetSinkPowerQueued(100.0, DEVICE_PRIORITY_NORMAL);    // REG 498 decoy
+    PSB_SetSinkCurrentQueued(10.0, DEVICE_PRIORITY_NORMAL);   // REG 499 decoy
+    PSB_SetVoltageQueued(0.0, DEVICE_PRIORITY_NORMAL);        // REG 500
+    PSB_SetCurrentQueued(0.0, DEVICE_PRIORITY_NORMAL);        // REG 501
+    PSB_SetPowerQueued(0.0, DEVICE_PRIORITY_NORMAL);          // REG 502
+
+    // For CV operation - ONLY write voltage
+    PSB_SetVoltageQueued(4.2, DEVICE_PRIORITY_NORMAL);        // REG 500 only!
+    // DO NOT write REG 498, 499, 501, 502
+    PSB_SetOutputEnableQueued(1, DEVICE_PRIORITY_NORMAL);
+
+CORRECT CC MODE SETUP:
+
+    // Initialization already done (decoys in place)
+
+    // For CC operation - ONLY write current
+    PSB_SetCurrentQueued(1.5, DEVICE_PRIORITY_NORMAL);        // REG 501 only!
+    // DO NOT write REG 498, 499, 500, 502
+    PSB_SetOutputEnableQueued(1, DEVICE_PRIORITY_NORMAL);
+
+CORRECT CP MODE SETUP:
+
+    // Initialization already done (decoys in place)
+
+    // For CP operation - ONLY write power
+    PSB_SetPowerQueued(15.0, DEVICE_PRIORITY_NORMAL);         // REG 502 only!
+    // DO NOT write REG 498, 499, 500, 501
+    PSB_SetOutputEnableQueued(1, DEVICE_PRIORITY_NORMAL);
+
+================================================================================
+IMPLICATIONS FOR ALL PSB CODE
+================================================================================
+
+1. INITIALIZATION (psb10000_dll.c or main startup):
+   - Set decoy values ONCE: REG 498 = 100W, REG 499 = 10A
+   - Set all limits to high values: 61.2A, 1224W
+   - Set all other setpoints to 0
+
+2. MODE CHANGES (battery_utils.c, exp_*.c, etc.):
+   - To change to CV mode: Write ONLY REG 500
+   - To change to CC mode: Write ONLY REG 501
+   - To change to CP mode: Write ONLY REG 502
+   - NEVER write multiple setpoint registers in sequence
+
+3. LIMIT MODIFICATIONS:
+   - Avoid modifying limit registers during operation
+   - If you must modify limits, ensure LIMIT >= SETPOINT (PSB enforces this)
+   - Prefer using high limits and letting physics/mode constrain operation
+
+4. TESTING:
+   - Use the corrected register matrix test methodology
+   - Write only the target register for each test
+   - Verify mode before AND after output enable
+
+5. DOCUMENTATION:
+   - Reference this file in any PSB-related code
+   - Add comments explaining "write only target register" rule
+   - Link to this file from common.h or battery_utils.h
+
+================================================================================
+REFERENCES
+================================================================================
+
+1. Discovery Documents:
+   - notes/ops-log-2026-01-12-05.txt (mode switching discovery)
+   - notes/ops-log-2026-01-12-10.txt (limit/setpoint conflict discovery)
+   - notes/DIRECTION-DEPENDENT-SINK-2026-01-13.txt (decoy value purpose)
+   - notes/DECOY-VALUES-RESTORED-2026-01-13.txt (minimalist approach failure)
+
+2. Test Results:
+   - psb_register_summary_20260113_190652.txt (first matrix test - all failed)
+   - psb_register_matrix_20260113_190652.csv (detailed failure data)
+
+3. Working Code Examples:
+   - battery_utils.c lines 123-150 (Battery_GoToVoltage implementation)
+   - battery_utils.c lines 127-142 (decoy value explanation)
+
+4. PSB Documentation:
+   - PSB10000_Programming_guide/ (manufacturer documentation)
+   - psb10000/psb10000_dll.h (register definitions)
+
+================================================================================
+COMMIT HISTORY
+================================================================================
+
+This understanding evolved through 40+ debugging commits:
+
+- Initial approach: Tried various power limits (20W, 30W, 1224W)
+- Discovery: Power limits weren't the issue
+- Discovery: Writing multiple setpoints causes confusion
+- Discovery: Mode selection happens at output enable, not register write
+- Discovery: Limit registers must be >= setpoint registers
+- Discovery: Only write target register for desired mode
+- Implementation: Battery_GoToVoltage() uses this pattern successfully
+- Validation: Register matrix test confirms the pattern
+
+================================================================================
+FUTURE WORK
+================================================================================
+
+1. Test the corrected register matrix test with battery connected
+2. Collect empirical data on mode selection with correct methodology
+3. Verify decoy value necessity (can we use 0A/0W instead of 10A/100W?)
+4. Document any additional edge cases discovered
+5. Update all PSB code to follow these rules consistently
+
+================================================================================
+CONCLUSION
+================================================================================
+
+The PSB 10000 mode selection algorithm is NON-INTUITIVE and NOT DOCUMENTED
+by the manufacturer. Through systematic testing, we discovered:
+
+**THE GOLDEN RULE: Write only the target register for your desired mode**
+
+This single rule solves all the mode confusion issues that plagued the first
+40+ commits of PSB debugging.
+
+For any future PSB work, always reference this document and follow the
+established patterns in battery_utils.c.
+
+================================================================================
