@@ -26,7 +26,11 @@
 #define CDC_MAX_DURATION_H             10.0     // 10 hour timeout
 
 // Power limit to avoid CP mode (Watts)
-#define CDC_POWER_LIMIT_W              20.0     // 20W limit prevents CP mode
+// CRITICAL: Must use HIGH power limit (1224W) to prevent CP mode!
+// Discovery from Phase 3 debugging: LOW power limits (20W/30W) CAUSE CP mode
+// PSB firmware interprets "voltage setpoint + low power limit" as CP mode
+// Solution: Use PSB_SAFE_POWER_MAX (1224W) like Battery_GoToVoltage()
+#define CDC_POWER_LIMIT_W              PSB_SAFE_POWER_MAX  // 1224W - HIGH to prevent CP mode
 
 /******************************************************************************
  * Type Definitions

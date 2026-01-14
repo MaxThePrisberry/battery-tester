@@ -444,8 +444,11 @@ static int RunOperation(CDCExperimentContext *ctx) {
 
     LogMessage("Current limits set - Source: %.2fA, Sink: %.2fA", chargeCurrent, dischargeCurrent);
 
-    // Set power LIMITS (not setpoints) to avoid triggering CP mode
-    // Use limit registers (REG 9004/9005), not setpoint registers (REG 502/498)
+    // Set power LIMITS to HIGH values (1224W) to avoid triggering CP mode
+    // CRITICAL: Use limit registers (REG 9004/9005), not setpoint registers (REG 502/498)
+    // CRITICAL: Must be HIGH (1224W) - low values (20W/30W) cause CP mode!
+    // Discovery: PSB interprets "voltage + low power limit" as CP mode
+    LogMessage("Setting power limits to %.1fW (HIGH to prevent CP mode)", CDC_POWER_LIMIT_W);
     result = PSB_SetPowerLimitQueued(CDC_POWER_LIMIT_W, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         LogWarning("Failed to set power limit: %s", PSB_GetErrorString(result));
