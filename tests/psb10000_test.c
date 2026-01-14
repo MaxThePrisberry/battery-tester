@@ -2060,7 +2060,7 @@ static int RunSingleRegisterTest(RegisterTestCase *test, char *errorMsg, int err
 
     // Step 1: Disable output and zero registers
     LogMessage("Step 1: Disabling output and resetting...");
-    result = PSB_SetOutputQueued(0, DEVICE_PRIORITY_NORMAL);
+    result = PSB_SetOutputEnableQueued(0, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to disable output");
         return result;
@@ -2138,7 +2138,7 @@ static int RunSingleRegisterTest(RegisterTestCase *test, char *errorMsg, int err
 
     // Step 5: Enable output (CRITICAL MOMENT - mode may change!)
     LogMessage("Step 5: Enabling output...");
-    result = PSB_SetOutputQueued(1, DEVICE_PRIORITY_NORMAL);
+    result = PSB_SetOutputEnableQueued(1, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to enable output");
         return result;
@@ -2205,7 +2205,7 @@ static int RunSingleRegisterTest(RegisterTestCase *test, char *errorMsg, int err
                 fabs(status.voltage) > TEST_MATRIX_MAX_VOLTAGE ||
                 fabs(status.power) > TEST_MATRIX_MAX_POWER) {
                 LogError("SAFETY ABORT: Exceeded safety thresholds!");
-                PSB_SetOutputQueued(0, DEVICE_PRIORITY_NORMAL);
+                PSB_SetOutputEnableQueued(0, DEVICE_PRIORITY_NORMAL);
                 snprintf(errorMsg, errorMsgSize, "Safety abort: I=%.2fA, V=%.2fV, P=%.2fW",
                          status.current, status.voltage, status.power);
                 return ERR_SAFETY_ABORT;
@@ -2233,7 +2233,7 @@ static int RunSingleRegisterTest(RegisterTestCase *test, char *errorMsg, int err
 
     // Step 8: Disable output
     LogMessage("Step 8: Disabling output...");
-    result = PSB_SetOutputQueued(0, DEVICE_PRIORITY_NORMAL);
+    result = PSB_SetOutputEnableQueued(0, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to disable output");
         return result;
@@ -2275,7 +2275,6 @@ static int WriteCSVHeader(FILE *fp) {
 static int WriteCSVRow(FILE *fp, RegisterTestCase *test) {
     const char *modeNames[] = {"CV", "CR", "CC", "CP"};
     const char *dirNames[] = {"SOURCE", "SINK"};
-    const char *resultNames[] = {"NOT_RUN", "PASS", "", "FAIL"};  // index: 0, 1, skip 2, -1+3=2
 
     fprintf(fp, "%d,%s,%.3f,%.3f,",
             test->testId, test->testName,

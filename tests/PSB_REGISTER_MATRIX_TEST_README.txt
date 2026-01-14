@@ -53,12 +53,16 @@ METHOD 1: Call from code
     }
     ```
 
-METHOD 2: Command-line interface (if you add BIO cmd_prompt support)
+METHOD 2: Command-line interface (cmd_prompt)
 
-    From cmd_prompt:
+    From cmd_prompt textbox in the UI:
     ```
-    PSB REGTEST
+    PSB RTEST
     ```
+
+    The test will run in the background (~20 minutes).
+    Progress will be logged to ops-log files.
+    Results will be shown in cmd_prompt when complete.
 
 METHOD 3: Dedicated UI button (recommended)
 

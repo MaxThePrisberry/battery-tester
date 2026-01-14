@@ -13,6 +13,8 @@
 #include "teensy_queue.h"
 #include "dtb4848_queue.h"
 #include "biologic_abstract.h"
+#include "psb10000_queue.h"
+#include "tests/psb10000_test.h"
 
 /******************************************************************************
  * Static Functions
@@ -27,6 +29,7 @@ static int DTBCommandManager(CommandContext *ctx);
 static int ControlsCommandManager(CommandContext *ctx);
 static int DAQCommandManager(CommandContext *ctx);
 static int BioLogicCommandManager(CommandContext *ctx);
+static int PSBCommandManager(CommandContext *ctx);
 
 /******************************************************************************
  * UI panel CVICALLBACKS
@@ -178,21 +181,25 @@ static int DeviceSelect(CommandContext *ctx) {
 		case ('T' << 16 | 'N' << 8 | 'Y'):
 			TeensyCommandManager(ctx);
 			break;
-		
+
 		case ('D' << 16 | 'T' << 8 | 'B'):
 			DTBCommandManager(ctx);
 			break;
-			
+
 		case ('C' << 16 | 'T' << 8 | 'L'):
 			ControlsCommandManager(ctx);
 			break;
-			
+
 		case ('D' << 16 | 'A' << 8 | 'Q'):
 			DAQCommandManager(ctx);
 			break;
 
 		case ('B' << 16 | 'I' << 8 | 'O'):
 			BioLogicCommandManager(ctx);
+			break;
+
+		case ('P' << 16 | 'S' << 8 | 'B'):
+			PSBCommandManager(ctx);
 			break;
 
 		default:
@@ -504,6 +511,152 @@ static int BioLogicCommandManager(CommandContext *ctx) {
 
 	// Invalid command
 	snprintf(message, sizeof(message), "Invalid BIO command: %s (Use: BIO HELP)", ctx->command);
+	LogPromptTextbox(CMD_ERROR, message);
+	return 0;
+}
+
+/******************************************************************************
+ * PSB Register Matrix Test Worker Thread
+ ******************************************************************************/
+
+typedef struct {
+	int success;
+	char message[512];
+} PSBRegTestResult;
+
+static int PSBRegTestWorkerThread(void *functionData) {
+	char errorMsg[512];
+	int result;
+
+	LogMessage("========================================");
+	LogMessage("Starting PSB Register Matrix Test (cmd_prompt)");
+	LogMessage("========================================");
+
+	// Run the test
+	result = Test_RegisterMatrix(errorMsg, sizeof(errorMsg));
+
+	// Post result to UI thread
+	PSBRegTestResult *resultData = (PSBRegTestResult*)malloc(sizeof(PSBRegTestResult));
+	if (resultData) {
+		resultData->success = (result == SUCCESS);
+		strncpy(resultData->message, errorMsg, sizeof(resultData->message) - 1);
+		resultData->message[sizeof(resultData->message) - 1] = '\0';
+
+		// Show result in cmd_prompt
+		if (resultData->success) {
+			LogPromptTextbox(CMD_OUTPUT, "PSB Register Matrix Test COMPLETE");
+			LogPromptTextbox(CMD_OUTPUT, resultData->message);
+		} else {
+			LogPromptTextbox(CMD_ERROR, "PSB Register Matrix Test FAILED");
+			LogPromptTextbox(CMD_ERROR, resultData->message);
+		}
+
+		free(resultData);
+	}
+
+	// Release busy flag
+	CmtGetLock(g_busyLock);
+	g_systemBusy = 0;
+	CmtReleaseLock(g_busyLock);
+
+	return 0;
+}
+
+static int PSBCommandManager(CommandContext *ctx) {
+	char message[1024];
+
+	// Skip leading space (device prefix "PSB" already stripped by DeviceSelect)
+	if (ctx->command[0] == ' ') {
+		char *command = my_strdup(&ctx->command[1]);
+		free(ctx->command);
+		ctx->command = command;
+	}
+
+	// PSB RTEST - Run register matrix test
+	if (strcmp(ctx->command, "RTEST") == 0) {
+		// Check if system is busy
+		CmtGetLock(g_busyLock);
+		if (g_systemBusy) {
+			CmtReleaseLock(g_busyLock);
+			LogPromptTextbox(CMD_ERROR, "System is busy - cannot start register matrix test");
+			return 0;
+		}
+		CmtReleaseLock(g_busyLock);
+
+		// Check PSB connection
+		PSB_Handle *psbHandle = PSB_QueueGetHandle(g_psbQueueMgr);
+		if (!psbHandle || !psbHandle->isConnected) {
+			LogPromptTextbox(CMD_ERROR, "PSB not connected - cannot run register matrix test");
+			return 0;
+		}
+
+		LogPromptTextbox(CMD_OUTPUT, "========================================");
+		LogPromptTextbox(CMD_OUTPUT, "PSB REGISTER MATRIX TEST");
+		LogPromptTextbox(CMD_OUTPUT, "========================================");
+		LogPromptTextbox(CMD_OUTPUT, "Duration: ~20 minutes");
+		LogPromptTextbox(CMD_OUTPUT, "Total Tests: ~40");
+		LogPromptTextbox(CMD_OUTPUT, "");
+		LogPromptTextbox(CMD_OUTPUT, "SAFETY FEATURES:");
+		LogPromptTextbox(CMD_OUTPUT, "- CC mode limited to MAX 3A (safe)");
+		LogPromptTextbox(CMD_OUTPUT, "- CP mode limited to MAX 20W (safe)");
+		LogPromptTextbox(CMD_OUTPUT, "- Emergency abort if current > 10A or power > 100W");
+		LogPromptTextbox(CMD_OUTPUT, "");
+		LogPromptTextbox(CMD_OUTPUT, "Starting test in background thread...");
+
+		// Set system busy
+		CmtGetLock(g_busyLock);
+		g_systemBusy = 1;
+		CmtReleaseLock(g_busyLock);
+
+		// Launch test in background thread
+		CmtScheduleThreadPoolFunction(DEFAULT_THREAD_POOL_HANDLE,
+		                              PSBRegTestWorkerThread,
+		                              NULL, NULL);
+
+		LogPromptTextbox(CMD_OUTPUT, "Test launched - check ops-log for progress");
+		return 0;
+	}
+
+	// PSB TEST - Quick connection test
+	if (strcmp(ctx->command, "TEST") == 0) {
+		PSB_Handle *psbHandle = PSB_QueueGetHandle(g_psbQueueMgr);
+		if (!psbHandle || !psbHandle->isConnected) {
+			LogPromptTextbox(CMD_ERROR, "PSB not connected");
+			return 0;
+		}
+
+		// Read status to verify communication
+		PSB_Status status;
+		int error = PSB_GetStatusQueued(&status, DEVICE_PRIORITY_HIGH);
+
+		if (error == SUCCESS) {
+			snprintf(message, sizeof(message),
+			        "Connection test: OK (Mode: %d, Direction: %d, Output: %s)",
+			        status.mode, status.direction, status.outputEnabled ? "ON" : "OFF");
+			LogPromptTextbox(CMD_OUTPUT, message);
+		} else {
+			snprintf(message, sizeof(message), "Connection test failed: %s", GetErrorString(error));
+			LogPromptTextbox(CMD_ERROR, message);
+		}
+
+		return 0;
+	}
+
+	// PSB HELP - Show help
+	if (strcmp(ctx->command, "HELP") == 0) {
+		LogPromptTextbox(CMD_OUTPUT, "PSB 10000 Commands:");
+		LogPromptTextbox(CMD_OUTPUT, "  PSB TEST  - Test PSB connection and communication");
+		LogPromptTextbox(CMD_OUTPUT, "  PSB RTEST - Run register matrix test (~20 min, ~40 tests)");
+		LogPromptTextbox(CMD_OUTPUT, "  PSB HELP  - Show this help");
+		LogPromptTextbox(CMD_OUTPUT, "");
+		LogPromptTextbox(CMD_OUTPUT, "RTEST output files:");
+		LogPromptTextbox(CMD_OUTPUT, "  - psb_register_matrix_YYYYMMDD_HHMMSS.csv");
+		LogPromptTextbox(CMD_OUTPUT, "  - psb_register_summary_YYYYMMDD_HHMMSS.txt");
+		return 0;
+	}
+
+	// Invalid command
+	snprintf(message, sizeof(message), "Invalid PSB command: %s (Use: PSB HELP)", ctx->command);
 	LogPromptTextbox(CMD_ERROR, message);
 	return 0;
 }

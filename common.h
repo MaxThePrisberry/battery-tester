@@ -116,6 +116,12 @@
 #define ERR_THREAD_POOL         (ERR_BASE_THREAD - 2)
 #define ERR_THREAD_SYNC         (ERR_BASE_THREAD - 3)
 
+// Test errors (-4000 to -4999)
+#define ERR_SAFETY_ABORT        (ERR_BASE_TEST - 1)
+
+// File errors (-6000 to -6999)
+#define ERR_FILE_OPEN           (ERR_BASE_FILE - 1)
+
 //==============================================================================
 // Common Type Definitions
 //==============================================================================
