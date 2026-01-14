@@ -1,0 +1,9 @@
+Build Status (BatteryTester.prj - Debug)
+ psb10000_test.c - 3 errors, 1 warning
+  2063, 1    error: implicit declaration of function 'PSB_SetOutputQueued' is invalid in C99. Make sure that you include the function prototype. 
+      2063, 1    note: did you mean 'PSB_SetCurrentQueued'?
+  "psb10000_queue.h"(175,1)    note: 'PSB_SetCurrentQueued' declared here
+  2211, 1    error: use of undeclared identifier 'ERR_SAFETY_ABORT'
+  2278, 1    warning: unused variable 'resultNames' 
+  2538, 1    error: use of undeclared identifier 'ERR_FILE_OPEN'
+Build failed.
