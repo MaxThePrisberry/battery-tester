@@ -2068,6 +2068,93 @@ static int GenerateCPModeTests(RegisterTestCase **tests, int *numTests) {
 }
 
 /******************************************************************************
+ * Generate Combined CC-CV Mode Tests
+ *
+ * These tests set ALL THREE registers to non-zero values:
+ *   REG 502 = power limit (max power)
+ *   REG 500 = voltage limit (max voltage)
+ *   REG 501 = current setpoint (target current)
+ *
+ * This is the classic CC-CV charging configuration:
+ *   1. Charge at constant current (REG 501)
+ *   2. Until voltage reaches limit (REG 500)
+ *   3. Never exceed power limit (REG 502)
+ ******************************************************************************/
+static int GenerateCombinedModeTests(RegisterTestCase **tests, int *numTests) {
+    int count = 0;
+    RegisterTestCase *testArray = (RegisterTestCase*)malloc(sizeof(RegisterTestCase) * 10);
+    if (!testArray) return ERR_OUT_OF_MEMORY;
+
+    memset(testArray, 0, sizeof(RegisterTestCase) * 10);
+
+    double batteryV = 2.7;
+
+    // Test combinations: varying current with fixed voltage and power limits
+    // These represent realistic CC-CV charging scenarios
+    double testCurrents[] = {0.5, 1.0, 2.0};    // A
+    double testVoltages[] = {4.2};               // V (typical Li-ion max)
+    double testPowers[] = {20.0};                // W (our safe power limit)
+
+    for (int i = 0; i < 3; i++) {
+        RegisterTestCase *test = &testArray[count++];
+        test->testId = count;
+        snprintf(test->testName, sizeof(test->testName),
+                 "CCCV-%.1fA-%.1fV-%.0fW", testCurrents[i], testVoltages[0], testPowers[0]);
+
+        test->batteryVoltageStart = batteryV;
+        test->targetVoltage = testVoltages[0];
+
+        // COMBINED configuration: ALL THREE registers non-zero
+        test->reg498_sinkPower = PSB_SINK_POWER_LIMIT;    // Sink power limit
+        test->reg499_sinkCurrent = PSB_SINK_CURRENT_DECOY; // Sink current
+        test->reg500_voltage = testVoltages[0];            // Voltage limit
+        test->reg501_current = testCurrents[i];            // Current setpoint
+        test->reg502_power = testPowers[0];                // Power limit
+
+        // High safe limits
+        test->reg9000_voltageMax = PSB_SAFE_VOLTAGE_MAX;
+        test->reg9001_voltageMin = 0.0;
+        test->reg9002_currentMax = PSB_SAFE_CURRENT_MAX;
+        test->reg9003_currentMin = 0.0;
+        test->reg9004_powerMax = PSB_SAFE_POWER_MAX;
+        test->reg9005_sinkPowerMax = PSB_SAFE_POWER_MAX;
+        test->reg9008_sinkCurrentMax = PSB_SAFE_SINK_CURRENT_MAX;
+        test->reg9009_sinkCurrentMin = 0.0;
+    }
+
+    // Also test with different power limits to see effect
+    double powerLimits[] = {10.0, 15.0};  // Lower power limits
+    for (int i = 0; i < 2; i++) {
+        RegisterTestCase *test = &testArray[count++];
+        test->testId = count;
+        snprintf(test->testName, sizeof(test->testName),
+                 "CCCV-1.0A-4.2V-%.0fW", powerLimits[i]);
+
+        test->batteryVoltageStart = batteryV;
+        test->targetVoltage = 4.2;
+
+        test->reg498_sinkPower = PSB_SINK_POWER_LIMIT;
+        test->reg499_sinkCurrent = PSB_SINK_CURRENT_DECOY;
+        test->reg500_voltage = 4.2;
+        test->reg501_current = 1.0;
+        test->reg502_power = powerLimits[i];  // Variable power limit
+
+        test->reg9000_voltageMax = PSB_SAFE_VOLTAGE_MAX;
+        test->reg9001_voltageMin = 0.0;
+        test->reg9002_currentMax = PSB_SAFE_CURRENT_MAX;
+        test->reg9003_currentMin = 0.0;
+        test->reg9004_powerMax = PSB_SAFE_POWER_MAX;
+        test->reg9005_sinkPowerMax = PSB_SAFE_POWER_MAX;
+        test->reg9008_sinkCurrentMax = PSB_SAFE_SINK_CURRENT_MAX;
+        test->reg9009_sinkCurrentMin = 0.0;
+    }
+
+    *tests = testArray;
+    *numTests = count;
+    return SUCCESS;
+}
+
+/******************************************************************************
  * PSB Initialization for Register Matrix Test
  *
  * Sets decoy values and high limits ONCE before all tests
@@ -2247,6 +2334,35 @@ static int RunSingleRegisterTest(RegisterTestCase *test, char *errorMsg, int err
             return result;
         }
         LogMessage("  NOT writing REG 498, 499, 500, 501 (preserving decoys/zeros)");
+
+    } else if (strncmp(test->testName, "CCCV-", 5) == 0) {
+        // Combined CC-CV test: Write ALL THREE registers (power, voltage, current)
+        // This is the classic CC-CV charging configuration
+        LogMessage("  CCCV test detected - writing ALL THREE registers");
+
+        // Write power limit first (REG 502)
+        LogMessage("  REG 502 (POWER): %.2f W (power limit)", test->reg502_power);
+        result = PSB_SetPowerQueued(test->reg502_power, DEVICE_PRIORITY_NORMAL);
+        if (result != PSB_SUCCESS) {
+            snprintf(errorMsg, errorMsgSize, "Failed to set REG 502");
+            return result;
+        }
+
+        // Write voltage limit second (REG 500)
+        LogMessage("  REG 500 (VOLTAGE): %.2f V (voltage limit)", test->reg500_voltage);
+        result = PSB_SetVoltageQueued(test->reg500_voltage, DEVICE_PRIORITY_NORMAL);
+        if (result != PSB_SUCCESS) {
+            snprintf(errorMsg, errorMsgSize, "Failed to set REG 500");
+            return result;
+        }
+
+        // Write current setpoint last (REG 501) - this should determine CC mode
+        LogMessage("  REG 501 (CURRENT): %.2f A (current setpoint - written last)", test->reg501_current);
+        result = PSB_SetCurrentQueued(test->reg501_current, DEVICE_PRIORITY_NORMAL);
+        if (result != PSB_SUCCESS) {
+            snprintf(errorMsg, errorMsgSize, "Failed to set REG 501");
+            return result;
+        }
 
     } else {
         snprintf(errorMsg, errorMsgSize, "Unknown test type: %s", test->testName);
@@ -2494,7 +2610,7 @@ static void GenerateSummary(RegisterTestCase *allTests, int numTests, const char
 
     // Count results
     int passCount = 0, failCount = 0;
-    int cvTests = 0, ccTests = 0, cpTests = 0;
+    int cccvTests = 0, cvTests = 0, ccTests = 0, cpTests = 0;
     int modeSwitchCount = 0;
 
     for (int i = 0; i < numTests; i++) {
@@ -2503,9 +2619,10 @@ static void GenerateSummary(RegisterTestCase *allTests, int numTests, const char
         if (allTests[i].modeSwitched) modeSwitchCount++;
 
         // Count by test type
-        if (strstr(allTests[i].testName, "CV-")) cvTests++;
-        if (strstr(allTests[i].testName, "CC-")) ccTests++;
-        if (strstr(allTests[i].testName, "CP-")) cpTests++;
+        if (strstr(allTests[i].testName, "CCCV-")) cccvTests++;
+        else if (strstr(allTests[i].testName, "CV-")) cvTests++;
+        else if (strstr(allTests[i].testName, "CC-")) ccTests++;
+        else if (strstr(allTests[i].testName, "CP-")) cpTests++;
     }
 
     fprintf(fp, "Passed: %d (%.1f%%)\n", passCount, 100.0 * passCount / numTests);
@@ -2513,6 +2630,7 @@ static void GenerateSummary(RegisterTestCase *allTests, int numTests, const char
     fprintf(fp, "Mode Switches Detected: %d\n\n", modeSwitchCount);
 
     fprintf(fp, "Test Breakdown:\n");
+    fprintf(fp, "  CCCV Combined Tests: %d (FIRST - all three registers non-zero)\n", cccvTests);
     fprintf(fp, "  CV Mode Tests: %d\n", cvTests);
     fprintf(fp, "  CC Mode Tests: %d\n", ccTests);
     fprintf(fp, "  CP Mode Tests: %d\n\n", cpTests);
@@ -2520,6 +2638,24 @@ static void GenerateSummary(RegisterTestCase *allTests, int numTests, const char
     fprintf(fp, "================================================================================\n");
     fprintf(fp, "KEY FINDINGS\n");
     fprintf(fp, "================================================================================\n\n");
+
+    // Analyze CCCV combined tests FIRST (most important)
+    fprintf(fp, "0. CCCV COMBINED MODE - All Three Registers Non-Zero:\n");
+    fprintf(fp, "   (REG 502=power limit, REG 500=voltage limit, REG 501=current setpoint)\n\n");
+    for (int i = 0; i < numTests; i++) {
+        if (strstr(allTests[i].testName, "CCCV-")) {
+            const char *resultStr = (allTests[i].testResult == 1) ? "PASS" : "FAIL";
+            const char *modeNames[] = {"CV", "CR", "CC", "CP"};
+            fprintf(fp, "   %s: %s (Mode: %s, V=%.2fV, I=%.3fA, P=%.2fW)\n",
+                    allTests[i].testName,
+                    resultStr,
+                    modeNames[allTests[i].postEnableMode],
+                    allTests[i].avgVoltage,
+                    allTests[i].avgCurrent,
+                    allTests[i].avgPower);
+        }
+    }
+    fprintf(fp, "\n");
 
     // Analyze CV tests by power limit
     fprintf(fp, "1. CV MODE - Power Limit Effects:\n\n");
@@ -2629,14 +2765,23 @@ int Test_RegisterMatrix(char *errorMsg, int errorMsgSize) {
     LogMessage("========================================");
 
     // Generate all test cases
-    RegisterTestCase *cvTests = NULL, *ccTests = NULL, *cpTests = NULL;
-    int numCVTests = 0, numCCTests = 0, numCPTests = 0;
+    RegisterTestCase *combinedTests = NULL, *cvTests = NULL, *ccTests = NULL, *cpTests = NULL;
+    int numCombinedTests = 0, numCVTests = 0, numCCTests = 0, numCPTests = 0;
 
     LogMessage("Generating test matrix...");
+
+    // Generate combined CC-CV tests FIRST (most important to test)
+    result = GenerateCombinedModeTests(&combinedTests, &numCombinedTests);
+    if (result != SUCCESS) {
+        snprintf(errorMsg, errorMsgSize, "Failed to generate combined tests");
+        return result;
+    }
+    LogMessage("  Generated %d CCCV combined mode tests (FIRST)", numCombinedTests);
 
     result = GenerateCVModeTests(&cvTests, &numCVTests);
     if (result != SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to generate CV tests");
+        free(combinedTests);
         return result;
     }
     LogMessage("  Generated %d CV mode tests", numCVTests);
@@ -2644,6 +2789,7 @@ int Test_RegisterMatrix(char *errorMsg, int errorMsgSize) {
     result = GenerateCCModeTests(&ccTests, &numCCTests);
     if (result != SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to generate CC tests");
+        free(combinedTests);
         free(cvTests);
         return result;
     }
@@ -2652,19 +2798,21 @@ int Test_RegisterMatrix(char *errorMsg, int errorMsgSize) {
     result = GenerateCPModeTests(&cpTests, &numCPTests);
     if (result != SUCCESS) {
         snprintf(errorMsg, errorMsgSize, "Failed to generate CP tests");
+        free(combinedTests);
         free(cvTests);
         free(ccTests);
         return result;
     }
     LogMessage("  Generated %d CP mode tests", numCPTests);
 
-    int totalTests = numCVTests + numCCTests + numCPTests;
+    int totalTests = numCombinedTests + numCVTests + numCCTests + numCPTests;
     LogMessage("Total test cases: %d", totalTests);
 
-    // Combine all tests into single array
+    // Combine all tests into single array - CCCV tests FIRST
     RegisterTestCase *allTests = (RegisterTestCase*)malloc(sizeof(RegisterTestCase) * totalTests);
     if (!allTests) {
         snprintf(errorMsg, errorMsgSize, "Failed to allocate test array");
+        free(combinedTests);
         free(cvTests);
         free(ccTests);
         free(cpTests);
@@ -2672,12 +2820,16 @@ int Test_RegisterMatrix(char *errorMsg, int errorMsgSize) {
     }
 
     int idx = 0;
+    // Combined tests FIRST
+    memcpy(&allTests[idx], combinedTests, sizeof(RegisterTestCase) * numCombinedTests);
+    idx += numCombinedTests;
     memcpy(&allTests[idx], cvTests, sizeof(RegisterTestCase) * numCVTests);
     idx += numCVTests;
     memcpy(&allTests[idx], ccTests, sizeof(RegisterTestCase) * numCCTests);
     idx += numCCTests;
     memcpy(&allTests[idx], cpTests, sizeof(RegisterTestCase) * numCPTests);
 
+    free(combinedTests);
     free(cvTests);
     free(ccTests);
     free(cpTests);
