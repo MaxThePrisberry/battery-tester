@@ -426,23 +426,26 @@ static int RunOperation(CDCExperimentContext *ctx) {
     GetCtrlVal(g_mainPanelHandle, PANEL_NUM_SET_CHARGE_I, &chargeCurrent);
     GetCtrlVal(g_mainPanelHandle, PANEL_NUM_SET_DISCHARGE_I, &dischargeCurrent);
     
-    // IMPORTANT: Set limits first, then voltage setpoint last to enter voltage-controlled mode
-    // (PSB control mode is determined by which setpoint register is written last)
+    // IMPORTANT: Set LIMIT registers (not setpoint registers) to constrain current
+    // CRITICAL: Do NOT write to REG 501 (SET_CURRENT) or REG 499 (SINK_MODE_CURRENT)
+    // Writing to setpoint registers causes mode selection issues (CC/CP mode)
+    // Discovery from Phase 3 debugging: Only REG 500 (voltage) should be non-zero setpoint
 
-    // Set both source and sink current limits to allow backflow
-    result = PSB_SetCurrentQueued(chargeCurrent, DEVICE_PRIORITY_NORMAL);
+    // Set source current LIMIT (REG 9002) - NOT setpoint (REG 501)
+    result = PSB_SetCurrentLimitsQueued(0.0, chargeCurrent, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         LogError("Failed to set source current limit: %s", PSB_GetErrorString(result));
         return result;
     }
+    LogMessage("Source current LIMIT set to %.2fA (REG 9002, REG 501 remains 0.0A)", chargeCurrent);
 
-    result = PSB_SetSinkCurrentQueued(dischargeCurrent, DEVICE_PRIORITY_NORMAL);
+    // Set sink current LIMIT (REG 9008/9009) - NOT setpoint (REG 499)
+    result = PSB_SetSinkCurrentLimitsQueued(0.0, dischargeCurrent, DEVICE_PRIORITY_NORMAL);
     if (result != PSB_SUCCESS) {
         LogError("Failed to set sink current limit: %s", PSB_GetErrorString(result));
         return result;
     }
-
-    LogMessage("Current limits set - Source: %.2fA, Sink: %.2fA", chargeCurrent, dischargeCurrent);
+    LogMessage("Sink current LIMIT set to %.2fA (REG 9008, REG 499 remains 0.0A)", dischargeCurrent);
 
     // Set power LIMITS to HIGH values (1224W) to avoid triggering CP mode
     // CRITICAL: Use limit registers (REG 9004/9005), not setpoint registers (REG 502/498)
