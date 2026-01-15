@@ -103,18 +103,22 @@ This guide provides step-by-step instructions for adding battery name input fiel
 3. **Add battery name reading**
    - Add this line after other `GetCtrlVal()` calls:
    ```c
+   // IMPORTANT: For string controls, pass the array name directly (it decays to char*)
+   // Do NOT use & operator for string controls
    GetCtrlVal(tabPanelHandle, BASELINE_BATTERYNAME, ctx->params.batteryName);
    ```
 
 4. **Example context** (your code may look like this):
    ```c
    // Read experiment parameters from UI
-   GetCtrlVal(tabPanelHandle, BASELINE_TARGETTEMP, &ctx->params.targetTemperature);
-   GetCtrlVal(tabPanelHandle, BASELINE_EISINTERVAL, &ctx->params.eisInterval);
-   GetCtrlVal(tabPanelHandle, BASELINE_BATTERYNAME, ctx->params.batteryName);  // ADD THIS
-   GetCtrlVal(tabPanelHandle, BASELINE_CURRENTTHRESH, &ctx->params.currentThreshold);
+   GetCtrlVal(tabPanelHandle, BASELINE_TARGETTEMP, &ctx->params.targetTemperature);    // Note: & for double
+   GetCtrlVal(tabPanelHandle, BASELINE_EISINTERVAL, &ctx->params.eisInterval);         // Note: & for double
+   GetCtrlVal(tabPanelHandle, BASELINE_BATTERYNAME, ctx->params.batteryName);          // Note: NO & for string
+   GetCtrlVal(tabPanelHandle, BASELINE_CURRENTTHRESH, &ctx->params.currentThreshold);  // Note: & for double
    // ... more parameters
    ```
+
+   **CRITICAL**: Notice that numeric values use `&variable` but strings use `array` directly without `&`!
 
 ---
 
@@ -129,18 +133,22 @@ This guide provides step-by-step instructions for adding battery name input fiel
 3. **Add battery name reading**
    - Add this line after other `GetCtrlVal()` calls:
    ```c
+   // IMPORTANT: For string controls, pass the array name directly (it decays to char*)
+   // Do NOT use & operator for string controls
    GetCtrlVal(tabPanelHandle, CDC_BATTERYNAME, ctx.params.batteryName);
    ```
 
 4. **Example context** (in both charge and discharge callbacks):
    ```c
    // Read parameters from UI
-   GetCtrlVal(tabPanelHandle, CDC_TARGETVOLTAGE, &ctx.params.targetVoltage);
-   GetCtrlVal(tabPanelHandle, CDC_TARGETCURRENT, &ctx.params.targetCurrent);
-   GetCtrlVal(tabPanelHandle, CDC_BATTERYNAME, ctx.params.batteryName);  // ADD THIS
-   GetCtrlVal(tabPanelHandle, CDC_CURRENTTHRESH, &ctx.params.currentThreshold);
+   GetCtrlVal(tabPanelHandle, CDC_TARGETVOLTAGE, &ctx.params.targetVoltage);    // Note: & for double
+   GetCtrlVal(tabPanelHandle, CDC_TARGETCURRENT, &ctx.params.targetCurrent);    // Note: & for double
+   GetCtrlVal(tabPanelHandle, CDC_BATTERYNAME, ctx.params.batteryName);         // Note: NO & for string
+   GetCtrlVal(tabPanelHandle, CDC_CURRENTTHRESH, &ctx.params.currentThreshold); // Note: & for double
    // ... more parameters
    ```
+
+   **CRITICAL**: Notice that numeric values use `&variable` but strings use `array` directly without `&`!
 
 ---
 
@@ -215,11 +223,17 @@ This guide provides step-by-step instructions for adding battery name input fiel
 - Verify control ID matches exactly (case-sensitive)
 - Check that you're using correct panel handle
 - Use debugger to check `tabPanelHandle` value
+- **IMPORTANT**: For string controls, do NOT use `&` operator:
+  - ❌ WRONG: `GetCtrlVal(panel, CTRL, &ctx->params.batteryName);`
+  - ✅ CORRECT: `GetCtrlVal(panel, CTRL, ctx->params.batteryName);`
 
-### Issue: Battery name not appearing in files
+### Issue: Battery name not appearing in files or only reads one character
 **Solution**:
+- **Check syntax**: String arrays should NOT use `&` operator with `GetCtrlVal()`
+  - ❌ WRONG: `GetCtrlVal(panel, CTRL, &ctx->params.batteryName);` (reads only 1 char!)
+  - ✅ CORRECT: `GetCtrlVal(panel, CTRL, ctx->params.batteryName);` (reads full string)
 - Add breakpoint at `GetCtrlVal()` line
-- Verify `ctx->params.batteryName` is populated
+- Use debugger to inspect `ctx->params.batteryName` contents after reading
 - Check that parameter structure is passed correctly to file writing functions
 
 ### Issue: Folder name still doesn't include battery name
