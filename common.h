@@ -379,8 +379,20 @@ int GetExecutableDirectory(char *path, int pathSize);
  * @param resultPathSize - Size of resultPath buffer
  * @return SUCCESS or error code
  */
-int CreateTimestampedDirectory(const char *baseDir, const char *prefix, 
+int CreateTimestampedDirectory(const char *baseDir, const char *prefix,
                               char *resultPath, int resultPathSize);
+
+/**
+ * Create a timestamped directory with battery name (format: batteryName_prefix_YYYYMMDD_HHMMSS)
+ * @param baseDir - Base directory path
+ * @param batteryName - Battery name to include in directory (can be NULL or empty)
+ * @param prefix - Optional prefix for the timestamp (can be NULL)
+ * @param resultPath - Buffer to receive the created directory path
+ * @param resultPathSize - Size of resultPath buffer
+ * @return SUCCESS or error code
+ */
+int CreateTimestampedDirectoryWithBattery(const char *baseDir, const char *batteryName,
+                                          const char *prefix, char *resultPath, int resultPathSize);
 
 /******************************************************************************
  * UI Helper Functions (implemented in utils.c)

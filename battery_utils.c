@@ -214,7 +214,6 @@ int Battery_GoToVoltage(VoltageTargetParams *params) {
     // Initialize timing and coulomb counting
     double startTime = Timer();
     double lastUpdateTime = startTime;
-    double lastLogTime = startTime;
     double accumulatedCapacity_mAh = 0.0;
     double accumulatedEnergy_Wh = 0.0;
     double lastCurrent = 0.0;
@@ -315,23 +314,6 @@ int Battery_GoToVoltage(VoltageTargetParams *params) {
                 if (params->progressCallback) {
                     params->progressCallback(status.voltage, status.current, accumulatedCapacity_mAh);
                 }
-            }
-
-            // Periodic PSB status logging for mode tracking (every 5 seconds)
-            if ((currentTime - lastLogTime) >= 5.0) {
-                const char *modeStr[] = {"CV", "CR", "CC", "CP"};
-                const char *currentMode = (status.regulationMode >= 0 && status.regulationMode <= 3) ?
-                                          modeStr[status.regulationMode] : "UNKNOWN";
-                LogMessage("[Status] PSB Mode=%s, V=%.3fV, I=%.3fA, P=%.2fW, Cap=%.1fmAh",
-                           currentMode, status.voltage, status.current, status.power,
-                           fabs(accumulatedCapacity_mAh));
-
-                // Warning if not in expected CV mode
-                if (status.regulationMode != 0) {
-                    LogWarning("[Status] PSB not in CV mode! Currently in %s mode", currentMode);
-                }
-
-                lastLogTime = currentTime;
             }
 
             if (!firstReading) {
@@ -472,7 +454,6 @@ int Battery_TransferCapacity(CapacityTransferParams *params) {
     // Initialize timing and coulomb counting
     double startTime = Timer();
     double lastUpdateTime = startTime;
-    double lastLogTime = startTime;
     double accumulatedCapacity_mAh = 0.0;
     double lastCurrent = 0.0;
     double lastTime = 0.0;
@@ -565,24 +546,6 @@ int Battery_TransferCapacity(CapacityTransferParams *params) {
                     percentComplete = CLAMP(percentComplete, 0.0, 100.0);
                     SetCtrlVal(params->panelHandle, params->progressControl, percentComplete);
                 }
-            }
-
-            // Periodic PSB status logging for mode tracking (every 5 seconds)
-            if ((currentTime - lastLogTime) >= 5.0) {
-                const char *modeStr[] = {"CV", "CR", "CC", "CP"};
-                const char *currentMode = (status.regulationMode >= 0 && status.regulationMode <= 3) ?
-                                          modeStr[status.regulationMode] : "UNKNOWN";
-                LogMessage("[Status] PSB Mode=%s, V=%.3fV, I=%.3fA, P=%.2fW, Cap=%.1fmAh",
-                           currentMode, status.voltage, status.current, status.power,
-                           accumulatedCapacity_mAh);
-
-                // For constant current mode, warn if not in CC mode
-                int expectedMode = 2; // CC mode
-                if (status.regulationMode != expectedMode) {
-                    LogWarning("[Status] PSB not in CC mode! Currently in %s mode", currentMode);
-                }
-
-                lastLogTime = currentTime;
             }
 
             // Store for next calculation

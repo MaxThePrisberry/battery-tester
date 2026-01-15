@@ -790,8 +790,8 @@ static int CreateExperimentFileSystem(BaselineExperimentContext *ctx) {
         return ERR_BASE_FILE;
     }
     
-    // Create timestamped experiment directory
-    int result = CreateTimestampedDirectory(dataPath, "baseline", 
+    // Create timestamped experiment directory with battery name
+    int result = CreateTimestampedDirectoryWithBattery(dataPath, ctx->params.batteryName, "baseline",
                                           ctx->experimentDirectory, sizeof(ctx->experimentDirectory));
     if (result != SUCCESS) {
         LogError("Failed to create experiment directory");
@@ -864,6 +864,7 @@ static int SaveExperimentSettings(BaselineExperimentContext *ctx) {
     
     // Experiment Parameters
     WriteINISection(file, "Experiment_Parameters");
+    WriteINIString(file, "Battery_Name", ctx->params.batteryName);
     if (ENABLE_DTB) {
         WriteINIDouble(file, "Target_Temperature_C", ctx->params.targetTemperature, 1);
     } else {
@@ -1537,7 +1538,6 @@ static int RunPhase3_EISCharge(BaselineExperimentContext *ctx) {
     ctx->phaseStartTime = Timer() - ctx->experimentStartTime;
     ctx->lastLogTime = Timer();
     ctx->lastGraphUpdate = Timer();
-    ctx->lastStatusLog = Timer();
     ctx->currentSOC = 0.0;
     ctx->accumulatedCapacity_mAh = 0.0;
     ctx->lastCurrent = 0.0;
@@ -1610,22 +1610,6 @@ static int RunPhase3_EISCharge(BaselineExperimentContext *ctx) {
 			PlotPoint(ctx->mainPanelHandle, ctx->graph1Handle,
                   elapsedTime_min, fabs(status.current), VAL_SOLID_CIRCLE, VAL_RED);
             ctx->lastGraphUpdate = currentTime;
-        }
-
-        // Periodic PSB status logging for mode tracking (every 5 seconds)
-        if ((currentTime - ctx->lastStatusLog) >= 5.0) {
-            const char *modeStr[] = {"CV", "CR", "CC", "CP"};
-            const char *currentMode = (status.regulationMode >= 0 && status.regulationMode <= 3) ?
-                                      modeStr[status.regulationMode] : "UNKNOWN";
-            LogMessage("[Status] PSB Mode=%s, V=%.3fV, I=%.3fA, P=%.2fW, SOC=%.1f%%",
-                       currentMode, status.voltage, status.current, status.power, ctx->currentSOC);
-
-            // Warning if not in expected CV mode
-            if (status.regulationMode != 0) {
-                LogWarning("[Status] PSB not in CV mode! Currently in %s mode", currentMode);
-            }
-
-            ctx->lastStatusLog = currentTime;
         }
 
         // Check if we need to perform EIS measurement
@@ -2850,6 +2834,7 @@ static int WriteComprehensiveResults(BaselineExperimentContext *ctx) {
     
     // Experiment Overview
     WriteINISection(file, "Experiment_Overview");
+    WriteINIString(file, "Battery_Name", ctx->params.batteryName);
     WriteINIValue(file, "Start_Time", "%s", startTimeStr);
     WriteINIValue(file, "End_Time", "%s", endTimeStr);
     WriteINIDouble(file, "Total_Duration_h", (ctx->experimentEndTime - ctx->experimentStartTime) / 3600.0, 2);

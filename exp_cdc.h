@@ -54,6 +54,7 @@ typedef enum {
 
 // Experiment parameters from UI
 typedef struct {
+    char batteryName[64];       // User-defined battery name
     double targetVoltage;       // Target voltage (charge or discharge)
     double targetCurrent;       // Target current (charge or discharge)
     double currentThreshold;    // Current threshold to stop

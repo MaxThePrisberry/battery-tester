@@ -101,6 +101,7 @@ typedef enum {
 
 // Experiment parameters from UI
 typedef struct {
+    char batteryName[64];        // User-defined battery name
     double targetTemperature;    // DTB target temperature (�C)
     double eisInterval;          // SOC percentage between EIS measurements
     double currentThreshold;     // Current threshold for operation completion (A)
@@ -192,7 +193,6 @@ typedef struct {
     double phaseStartTime;           // Current phase start time
     double lastLogTime;              // Last data logging time
     double lastGraphUpdate;          // Last graph update time
-    double lastStatusLog;            // Last PSB status logging time
     double lastTempCheck;            // Last temperature check time
     
     // Temperature management

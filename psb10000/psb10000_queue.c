@@ -130,69 +130,37 @@ static int PSB_AdapterConnect(void *deviceContext, void *connectionParams) {
         ctx->specificSlaveAddress = params->slaveAddress;
 
         // Set remote mode and disable output
-        LogMessageEx(LOG_DEVICE_PSB, "Initializing PSB to known state...");
         PSB_SetRemoteMode(&ctx->handle, 1);
         PSB_SetOutputEnable(&ctx->handle, 0);
 
-        // PSB REGISTER CONFIGURATION:
-        // REG 502 (source power) acts as MAX POWER LIMIT for CV/CC modes.
-        // REG 500 (voltage) controls CV mode target.
-        // REG 501 (current) controls CC mode target.
-        // REG 498/499 are sink mode equivalents.
-        //
-        // CRITICAL: REG 502 = 0W prevents ANY current flow! Must set to reasonable limit.
-
-        LogMessageEx(LOG_DEVICE_PSB, "=== PSB INITIALIZATION: Setting power limit and sink decoys ===");
-
-        // Step 1: Set source power limit (REG 502) - THIS ENABLES CURRENT FLOW
-        LogMessageEx(LOG_DEVICE_PSB, "Step 1: Setting source power limit (REG 502) to %.1f W", PSB_SOURCE_POWER_LIMIT);
-        LogMessageEx(LOG_DEVICE_PSB, "  This is the MAX POWER for CV/CC modes - 0W would block all current!");
-
+        // Initialize power limits and setpoints to safe defaults
         result = PSB_SetPower(&ctx->handle, PSB_SOURCE_POWER_LIMIT);
         if (result != PSB_SUCCESS) {
-            LogWarningEx(LOG_DEVICE_PSB, "Failed to set source power limit (REG 502): %s", PSB_GetErrorString(result));
+            LogWarningEx(LOG_DEVICE_PSB, "Failed to set source power limit: %s", PSB_GetErrorString(result));
         }
-
-        // Step 2: Clear source current setpoint (REG 501)
-        LogMessageEx(LOG_DEVICE_PSB, "Step 2: Clearing source current setpoint (REG 501) to 0A");
 
         result = PSB_SetCurrent(&ctx->handle, 0.0);
         if (result != PSB_SUCCESS) {
-            LogWarningEx(LOG_DEVICE_PSB, "Failed to clear source current (REG 501): %s", PSB_GetErrorString(result));
+            LogWarningEx(LOG_DEVICE_PSB, "Failed to clear source current: %s", PSB_GetErrorString(result));
         }
-
-        // Step 3: Set sink power limit (REG 498) and current decoy (REG 499)
-        LogMessageEx(LOG_DEVICE_PSB, "Step 3: Setting sink power limit and current decoy");
-        LogMessageEx(LOG_DEVICE_PSB, "  Setting REG 498 (sink power limit) to %.1f W", PSB_SINK_POWER_LIMIT);
 
         result = PSB_SetSinkPower(&ctx->handle, PSB_SINK_POWER_LIMIT);
         if (result != PSB_SUCCESS) {
             LogWarningEx(LOG_DEVICE_PSB, "Failed to set sink power limit: %s", PSB_GetErrorString(result));
         }
 
-        LogMessageEx(LOG_DEVICE_PSB, "  Setting REG 499 (sink current) to %.1f A", PSB_SINK_CURRENT_DECOY);
-
         result = PSB_SetSinkCurrent(&ctx->handle, PSB_SINK_CURRENT_DECOY);
         if (result != PSB_SUCCESS) {
             LogWarningEx(LOG_DEVICE_PSB, "Failed to set sink current: %s", PSB_GetErrorString(result));
         }
 
-        // Step 4: Set initial voltage setpoint (REG 500) to 0V
-        LogMessageEx(LOG_DEVICE_PSB, "Step 4: Setting voltage (REG 500) to 0V");
         result = PSB_SetVoltage(&ctx->handle, 0.0);
         if (result != PSB_SUCCESS) {
             LogWarningEx(LOG_DEVICE_PSB, "Failed to set voltage: %s", PSB_GetErrorString(result));
         }
 
-        LogMessageEx(LOG_DEVICE_PSB, "PSB configuration: REG 502=%.0fW (source), REG 498=%.0fW (sink)",
+        LogMessageEx(LOG_DEVICE_PSB, "PSB initialized (power limits: source=%.0fW, sink=%.0fW)",
                     PSB_SOURCE_POWER_LIMIT, PSB_SINK_POWER_LIMIT);
-        LogMessageEx(LOG_DEVICE_PSB, "Setpoints: REG 500=0V, REG 501=0A, REG 499=%.0fA",
-                    PSB_SINK_CURRENT_DECOY);
-
-        // DIAGNOSTIC: Log ALL registers to understand complete PSB state
-        PSB_LogAllRegisters(&ctx->handle, "After initialization (decoy value approach)");
-
-        LogMessageEx(LOG_DEVICE_PSB, "PSB initialization complete - decoy values established");
 
         // Restore result to PSB_SUCCESS if initialization succeeded
         result = PSB_SUCCESS;
@@ -229,25 +197,6 @@ static int PSB_AdapterExecuteCommand(void *deviceContext, int commandType, void 
     PSBDeviceContext *ctx = (PSBDeviceContext*)deviceContext;
     PSBCommandParams *cmdParams = (PSBCommandParams*)params;
     PSBCommandResult *cmdResult = (PSBCommandResult*)result;
-
-    // Diagnostic logging for command execution order
-    const char *cmdName = "UNKNOWN";
-    switch ((PSBCommandType)commandType) {
-        case PSB_CMD_SET_VOLTAGE: cmdName = "SET_VOLTAGE"; break;
-        case PSB_CMD_SET_CURRENT: cmdName = "SET_CURRENT"; break;
-        case PSB_CMD_SET_POWER: cmdName = "SET_POWER"; break;
-        case PSB_CMD_SET_SINK_CURRENT: cmdName = "SET_SINK_CURRENT"; break;
-        case PSB_CMD_SET_SINK_POWER: cmdName = "SET_SINK_POWER"; break;
-        case PSB_CMD_SET_OUTPUT_ENABLE: cmdName = "SET_OUTPUT_ENABLE"; break;
-        case PSB_CMD_GET_STATUS: cmdName = "GET_STATUS"; break;
-        default: break;
-    }
-    if (commandType == PSB_CMD_SET_VOLTAGE || commandType == PSB_CMD_SET_CURRENT ||
-        commandType == PSB_CMD_SET_POWER || commandType == PSB_CMD_SET_SINK_CURRENT ||
-        commandType == PSB_CMD_SET_SINK_POWER) {
-        LogMessageEx(LOG_DEVICE_PSB, ">>> QUEUE: Executing command %s (type %d)",
-                     cmdName, commandType);
-    }
 
     switch ((PSBCommandType)commandType) {
         case PSB_CMD_SET_REMOTE_MODE:
@@ -778,8 +727,6 @@ int PSB_ZeroAllValuesQueued(DevicePriority priority) {
     
     int result;
     int overallResult = PSB_SUCCESS;
-    
-    LogMessageEx(LOG_DEVICE_PSB, "Zeroing all PSB values...");
 
     // Disable output first
     result = PSB_SetOutputEnableQueued(0, priority);
@@ -788,32 +735,18 @@ int PSB_ZeroAllValuesQueued(DevicePriority priority) {
         overallResult = result;
     }
 
-    // RESTORE PSB TO KNOWN SAFE STATE:
-    // REG 502 = 20W (power limit - enables current flow)
-    // REG 501 = 0A (no CC mode)
-    // REG 500 = 0V (voltage setpoint)
-    // REG 498/499 = sink decoys
-
-    LogMessageEx(LOG_DEVICE_PSB, "=== PSB ZERO: Restoring safe configuration ===");
-
-    // Set source power limit (REG 502) - CRITICAL: 0W would block all current!
-    LogMessageEx(LOG_DEVICE_PSB, "Setting source power limit (REG 502) to %.1f W", PSB_SOURCE_POWER_LIMIT);
+    // Restore PSB to safe defaults (power limits, zero setpoints)
     result = PSB_SetPowerQueued(PSB_SOURCE_POWER_LIMIT, priority);
     if (result != PSB_SUCCESS) {
         LogWarningEx(LOG_DEVICE_PSB, "Failed to set source power limit: %s", PSB_GetErrorString(result));
         overallResult = result;
     }
 
-    // Clear source current register (REG 501)
     result = PSB_SetCurrentQueued(0.0, priority);
     if (result != PSB_SUCCESS) {
         LogWarningEx(LOG_DEVICE_PSB, "Failed to clear source current: %s", PSB_GetErrorString(result));
         overallResult = result;
     }
-
-    // Set sink power limit (REG 498) and current (REG 499)
-    LogMessageEx(LOG_DEVICE_PSB, "Setting sink: REG 498=%.0fW, REG 499=%.0fA",
-                PSB_SINK_POWER_LIMIT, PSB_SINK_CURRENT_DECOY);
 
     result = PSB_SetSinkPowerQueued(PSB_SINK_POWER_LIMIT, priority);
     if (result != PSB_SUCCESS) {
@@ -827,20 +760,16 @@ int PSB_ZeroAllValuesQueued(DevicePriority priority) {
         overallResult = result;
     }
 
-    // Set voltage (REG 500) to 0V
     result = PSB_SetVoltageQueued(0.0, priority);
     if (result != PSB_SUCCESS) {
         LogWarningEx(LOG_DEVICE_PSB, "Failed to set voltage to 0V: %s", PSB_GetErrorString(result));
         overallResult = result;
     }
 
-    LogMessageEx(LOG_DEVICE_PSB, "PSB config: REG 502=%.0fW (source), REG 498=%.0fW (sink), REG 500=0V",
-                PSB_SOURCE_POWER_LIMIT, PSB_SINK_POWER_LIMIT);
-    
     if (overallResult == PSB_SUCCESS) {
-        LogMessageEx(LOG_DEVICE_PSB, "All PSB values zeroed and decoy values restored successfully");
+        LogMessageEx(LOG_DEVICE_PSB, "PSB zeroed successfully");
     } else {
-        LogWarningEx(LOG_DEVICE_PSB, "PSB values zeroed with some warnings");
+        LogWarningEx(LOG_DEVICE_PSB, "PSB zeroed with some warnings");
     }
     
     return overallResult;

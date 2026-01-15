@@ -395,6 +395,62 @@ int CreateTimestampedDirectory(const char *baseDir, const char *prefix,
     return CreateDirectoryPath(resultPath);
 }
 
+int CreateTimestampedDirectoryWithBattery(const char *baseDir, const char *batteryName,
+                                          const char *prefix, char *resultPath, int resultPathSize) {
+    if (!baseDir || !resultPath || resultPathSize <= 0) {
+        return ERR_NULL_POINTER;
+    }
+
+    // Get current time
+    time_t now = time(NULL);
+    struct tm *timeinfo = localtime(&now);
+    char timestamp[64];
+
+    // Format: YYYYMMDD_HHMMSS
+    strftime(timestamp, sizeof(timestamp), "%Y%m%d_%H%M%S", timeinfo);
+
+    // Sanitize battery name (replace spaces and special chars with underscores)
+    char sanitizedName[64] = {0};
+    if (batteryName && strlen(batteryName) > 0) {
+        int len = strlen(batteryName);
+        if (len >= sizeof(sanitizedName)) len = sizeof(sanitizedName) - 1;
+
+        for (int i = 0; i < len; i++) {
+            char c = batteryName[i];
+            // Allow alphanumeric, dash, and underscore
+            if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
+                (c >= '0' && c <= '9') || c == '-' || c == '_') {
+                sanitizedName[i] = c;
+            } else {
+                sanitizedName[i] = '_';
+            }
+        }
+        sanitizedName[len] = '\0';
+    }
+
+    // Build full path: batteryName_prefix_timestamp
+    if (sanitizedName[0] != '\0' && prefix && strlen(prefix) > 0) {
+        // Battery name + prefix + timestamp
+        snprintf(resultPath, resultPathSize, "%s%s%s_%s_%s",
+                 baseDir, PATH_SEPARATOR, sanitizedName, prefix, timestamp);
+    } else if (sanitizedName[0] != '\0') {
+        // Battery name + timestamp (no prefix)
+        snprintf(resultPath, resultPathSize, "%s%s%s_%s",
+                 baseDir, PATH_SEPARATOR, sanitizedName, timestamp);
+    } else if (prefix && strlen(prefix) > 0) {
+        // Just prefix + timestamp (no battery name)
+        snprintf(resultPath, resultPathSize, "%s%s%s_%s",
+                 baseDir, PATH_SEPARATOR, prefix, timestamp);
+    } else {
+        // Just timestamp
+        snprintf(resultPath, resultPathSize, "%s%s%s",
+                 baseDir, PATH_SEPARATOR, timestamp);
+    }
+
+    // Create the directory
+    return CreateDirectoryPath(resultPath);
+}
+
 /******************************************************************************
  * Graph Utility Functions
  ******************************************************************************/
