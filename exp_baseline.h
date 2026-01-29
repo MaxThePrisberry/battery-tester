@@ -36,6 +36,10 @@
 #define BASELINE_MAX_EIS_RETRY          2       // Retry failed measurements twice
 #define BASELINE_EIS_RETRY_DELAY        5.0     // Seconds to wait between retries
 
+// Relaxation EIS Series (repeated measurements to capture relaxation dynamics)
+#define BASELINE_RELAXATION_EIS_INTERVAL  120.0   // Seconds between EIS measurements during relaxation
+#define BASELINE_RELAXATION_EIS_DURATION  600.0   // Total relaxation measurement duration (seconds)
+
 // Dynamic SOC Management
 #define BASELINE_SOC_TOLERANCE          0.0     // SOC tolerance for target matching (0 - have to go beyond target)
 #define BASELINE_MAX_DYNAMIC_TARGETS    20      // Maximum additional SOC targets beyond 100%

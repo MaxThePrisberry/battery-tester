@@ -2240,70 +2240,96 @@ static int AddDynamicSOCTarget(BaselineExperimentContext *ctx, double targetSOC)
 
 static int PerformEISMeasurement(BaselineExperimentContext *ctx, double targetSOC) {
     int result;
-    
+
     // Check for cancellation
     if (CheckCancellation(ctx)) {
         return ERR_CANCELLED;
     }
-    
-    // Check measurement capacity
-    if (ctx->eisMeasurementCount >= ctx->eisMeasurementCapacity) {
-        LogError("EIS measurement array full!");
-        return ERR_OPERATION_FAILED;
+
+    // Perform repeated EIS measurements during relaxation to capture impedance dynamics
+    // Measurements every BASELINE_RELAXATION_EIS_INTERVAL seconds for BASELINE_RELAXATION_EIS_DURATION total
+    double relaxationStart = Timer();
+    int measurementNum = 0;
+
+    LogMessage("Starting relaxation EIS series at %.1f%% SOC: measurement every %.0fs for %.0fs",
+               ctx->currentSOC, BASELINE_RELAXATION_EIS_INTERVAL, BASELINE_RELAXATION_EIS_DURATION);
+
+    while (1) {
+        if (CheckCancellation(ctx)) {
+            return ERR_CANCELLED;
+        }
+
+        double relaxationTime = Timer() - relaxationStart;
+
+        // Check measurement capacity
+        if (ctx->eisMeasurementCount >= ctx->eisMeasurementCapacity) {
+            LogError("EIS measurement array full!");
+            return ERR_OPERATION_FAILED;
+        }
+
+        BaselineEISMeasurement *measurement = &ctx->eisMeasurements[ctx->eisMeasurementCount];
+
+        // Initialize measurement
+        memset(measurement, 0, sizeof(BaselineEISMeasurement));
+        measurement->measurementIndex = ctx->eisMeasurementCount;
+        measurement->targetSOC = targetSOC;
+        measurement->actualSOC = ctx->currentSOC;
+        measurement->timestamp = Timer() - ctx->experimentStartTime;
+        measurement->retryCount = 0;
+
+        // Read temperatures during measurement
+        ReadAllTemperatures(ctx, &measurement->tempData, measurement->timestamp);
+
+        // Update UI
+        char statusMsg[MEDIUM_BUFFER_SIZE];
+        snprintf(statusMsg, sizeof(statusMsg),
+                 "EIS at %.1f%% SOC (relaxation %.0fs/%.0fs, #%d)...",
+                 ctx->currentSOC, relaxationTime, BASELINE_RELAXATION_EIS_DURATION, measurementNum + 1);
+        SetCtrlVal(ctx->tabPanelHandle, ctx->statusControl, statusMsg);
+
+        LogMessage("Relaxation EIS #%d at %.1f%% SOC (relaxation time: %.0f s)",
+                   measurementNum + 1, ctx->currentSOC, relaxationTime);
+
+        // Perform measurement with retry capability
+        result = RetryEISMeasurement(ctx, measurement);
+        if (result != SUCCESS) {
+            LogError("EIS measurement failed at %.1f%% SOC after retries", ctx->currentSOC);
+            return result;
+        }
+
+        // Update graphs
+        UpdateOCVGraph(ctx, measurement);
+        UpdateNyquistPlot(ctx, measurement);
+
+        // Save measurement data to file
+        result = SaveEISMeasurementData(ctx, measurement);
+        if (result != SUCCESS) {
+            LogWarning("Failed to save EIS measurement data");
+        }
+
+        ctx->eisMeasurementCount++;
+        measurementNum++;
+
+        LogMessage("Relaxation EIS #%d completed at %.1f%% SOC (OCV: %.3f V, relaxation: %.0f s)",
+                   measurementNum, measurement->actualSOC, measurement->ocvVoltage, relaxationTime);
+
+        // Check if we've reached the total relaxation duration
+        double elapsed = Timer() - relaxationStart;
+        if (elapsed >= BASELINE_RELAXATION_EIS_DURATION) {
+            LogMessage("Relaxation EIS series complete: %d measurements over %.0f seconds",
+                       measurementNum, elapsed);
+            break;
+        }
+
+        // Wait until next measurement interval
+        double nextMeasurementTime = relaxationStart + (measurementNum * BASELINE_RELAXATION_EIS_INTERVAL);
+        while (Timer() < nextMeasurementTime) {
+            if (CheckCancellation(ctx)) return ERR_CANCELLED;
+            ProcessSystemEvents();
+            Delay(1.0);
+        }
     }
-    
-    BaselineEISMeasurement *measurement = &ctx->eisMeasurements[ctx->eisMeasurementCount];
-    
-    // Initialize measurement
-    memset(measurement, 0, sizeof(BaselineEISMeasurement));
-    measurement->measurementIndex = ctx->eisMeasurementCount;
-    measurement->targetSOC = targetSOC;
-    measurement->actualSOC = ctx->currentSOC;
-    measurement->timestamp = Timer() - ctx->experimentStartTime;
-    measurement->retryCount = 0;
-    
-    // Read temperatures during measurement
-    ReadAllTemperatures(ctx, &measurement->tempData, measurement->timestamp);
-    
-    // Update UI
-    char statusMsg[MEDIUM_BUFFER_SIZE];
-    snprintf(statusMsg, sizeof(statusMsg), 
-             "Measuring EIS at %.1f%% SOC...", ctx->currentSOC);
-    SetCtrlVal(ctx->tabPanelHandle, ctx->statusControl, statusMsg);
-    
-    // Battery settling time before EIS measurement
-    LogMessage("Waiting %.0f seconds for battery relaxation before EIS measurement...", BASELINE_SETTLING_TIME);
-    for (int i = 0; i < (int)BASELINE_SETTLING_TIME && !CheckCancellation(ctx); i++) {
-        ProcessSystemEvents();
-        Delay(1.0);
-    }
-    
-    if (CheckCancellation(ctx)) {
-        return ERR_CANCELLED;
-    }
-    
-    // Perform measurement with retry capability
-    result = RetryEISMeasurement(ctx, measurement);
-    if (result != SUCCESS) {
-        LogError("EIS measurement failed at %.1f%% SOC after retries", ctx->currentSOC);
-        return result;
-    }
-    
-    // Update graphs
-    UpdateOCVGraph(ctx, measurement);
-    UpdateNyquistPlot(ctx, measurement);
-    
-    // Save measurement data to file
-    result = SaveEISMeasurementData(ctx, measurement);
-    if (result != SUCCESS) {
-        LogWarning("Failed to save EIS measurement data");
-    }
-    
-    ctx->eisMeasurementCount++;
-    
-    LogMessage("EIS measurement %d completed at %.1f%% SOC (OCV: %.3f V)", 
-               measurement->measurementIndex + 1, measurement->actualSOC, measurement->ocvVoltage);
-    
+
     return SUCCESS;
 }
 
@@ -2531,12 +2557,14 @@ static int SaveEISMeasurementData(BaselineExperimentContext *ctx, BaselineEISMea
     char filename[MAX_PATH_LENGTH];
     FILE *file;
     
-    // Create filename with zero-padded SOC for proper sorting
-    snprintf(filename, sizeof(filename), "%s%s%s%s%s%seis_%03d_soc.txt", 
-             ctx->experimentDirectory, PATH_SEPARATOR, 
-             BASELINE_PHASE3_DIR, PATH_SEPARATOR, 
+    // Create filename with zero-padded SOC and measurement index for proper sorting
+    // Index differentiates multiple relaxation measurements at the same SOC
+    snprintf(filename, sizeof(filename), "%s%s%s%s%s%seis_%03d_soc_%02d.txt",
+             ctx->experimentDirectory, PATH_SEPARATOR,
+             BASELINE_PHASE3_DIR, PATH_SEPARATOR,
              BASELINE_PHASE3_EIS_DIR, PATH_SEPARATOR,
-             (int)(measurement->actualSOC + 0.5));
+             (int)(measurement->actualSOC + 0.5),
+             measurement->measurementIndex);
     
     // Store filename in measurement for reference
     strcpy(measurement->filename, filename);
