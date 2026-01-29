@@ -81,21 +81,24 @@
 #define  BASELINE_STR_BASELINE_STATUS     8       /* control type: string, callback function: (none) */
 #define  BASELINE_CHK_MANUAL_C            9       /* control type: radioButton, callback function: (none) */
 #define  BASELINE_NUM_MANUAL_C            10      /* control type: numeric, callback function: (none) */
+#define  BASELINE_BATTERYNAME             11      /* control type: string, callback function: (none) */
 
      /* tab page panel controls */
 #define  CDC_BTN_DISCHARGE                2       /* control type: command, callback function: CDCDischargeCallback */
 #define  CDC_BTN_CHARGE                   3       /* control type: command, callback function: CDCChargeCallback */
 #define  CDC_NUM_CURRENT_THRESHOLD        4       /* control type: numeric, callback function: (none) */
 #define  CDC_NUM_INTERVAL                 5       /* control type: numeric, callback function: (none) */
+#define  CDC_BATTERYNAME                  6       /* control type: string, callback function: (none) */
 
 
      /* Control Arrays: */
 
 #define  BATTERY_CONSTANTS_ARR            1
-#define  DTB_CONTROL_ARR                  2
-#define  GRAPHS_ARR                       3
-#define  MANUAL_CONTROL_ARR               4
-#define  STATUS_ARR                       5
+#define  CTRLARRAY                        2
+#define  DTB_CONTROL_ARR                  3
+#define  GRAPHS_ARR                       4
+#define  MANUAL_CONTROL_ARR               5
+#define  STATUS_ARR                       6
 
      /* Menu Bars, Menus, and Menu Items: */
 

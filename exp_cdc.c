@@ -175,7 +175,8 @@ static int StartCDCOperation(int panel, int control, CDCOperationMode mode) {
     
     GetCtrlVal(panel, CDC_NUM_CURRENT_THRESHOLD, &g_experimentContext.params.currentThreshold);
     GetCtrlVal(panel, CDC_NUM_INTERVAL, &g_experimentContext.params.logInterval);
-    
+    GetCtrlVal(panel, CDC_BATTERYNAME, g_experimentContext.params.batteryName);
+	
     // Change button text to "Stop"
     SetCtrlAttribute(panel, control, ATTR_LABEL_TEXT, "Stop");
     

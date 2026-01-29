@@ -301,8 +301,9 @@ int CVICALLBACK StartBaselineExperimentCallback(int panel, int control, int even
     GetCtrlVal(g_mainPanelHandle, PANEL_NUM_SET_DISCHARGE_V, &g_experimentContext.params.dischargeVoltage);
     GetCtrlVal(g_mainPanelHandle, PANEL_NUM_SET_CHARGE_I, &g_experimentContext.params.chargeCurrent);
     GetCtrlVal(g_mainPanelHandle, PANEL_NUM_SET_DISCHARGE_I, &g_experimentContext.params.dischargeCurrent);
+    GetCtrlVal(panel, BASELINE_BATTERYNAME, g_experimentContext.params.batteryName);
     
-    // Preliminary validation
+// Preliminary validation
     if (ENABLE_DTB && (g_experimentContext.params.targetTemperature < 5.0 || g_experimentContext.params.targetTemperature > 80.0)) {
         CmtGetLock(g_busyLock);
         g_systemBusy = 0;
@@ -864,7 +865,7 @@ static int SaveExperimentSettings(BaselineExperimentContext *ctx) {
     
     // Experiment Parameters
     WriteINISection(file, "Experiment_Parameters");
-    WriteINIString(file, "Battery_Name", ctx->params.batteryName);
+    WriteINIValue(file, "Battery_Name","%s", ctx->params.batteryName);
     if (ENABLE_DTB) {
         WriteINIDouble(file, "Target_Temperature_C", ctx->params.targetTemperature, 1);
     } else {
@@ -2862,7 +2863,7 @@ static int WriteComprehensiveResults(BaselineExperimentContext *ctx) {
     
     // Experiment Overview
     WriteINISection(file, "Experiment_Overview");
-    WriteINIString(file, "Battery_Name", ctx->params.batteryName);
+    WriteINIValue(file, "Battery_Name","%s", ctx->params.batteryName);
     WriteINIValue(file, "Start_Time", "%s", startTimeStr);
     WriteINIValue(file, "End_Time", "%s", endTimeStr);
     WriteINIDouble(file, "Total_Duration_h", (ctx->experimentEndTime - ctx->experimentStartTime) / 3600.0, 2);

@@ -24,7 +24,7 @@
  ******************************************************************************/
 
 // Battery Settling Time
-#define BASELINE_SETTLING_TIME          60.0    // Seconds to wait for battery relaxation after operations
+#define BASELINE_SETTLING_TIME          300.0    // Seconds to wait for battery relaxation after operations
 
 // Temperature Control Constants (when ENABLE_DTB is 1)
 #define BASELINE_TEMP_TOLERANCE         2.0     // �C tolerance for temperature target
