@@ -1,0 +1,295 @@
+
+=== Battery Tester Log Started: 2026-01-29 11:42:34 ===
+Log file location: c:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\BatteryTester.log
+2026-01-29 11:42:34 [INFO] Initializing cDAQ module...
+2026-01-29 11:42:34 [INFO] Initializing cDAQ thermocouple slots 2 and 3...
+2026-01-29 11:42:35 [INFO] cDAQ slot 2 initialized with 16 thermocouples
+2026-01-29 11:42:36 [INFO] cDAQ slot 3 initialized with 16 thermocouples
+2026-01-29 11:42:36 [INFO] cDAQ module initialized successfully
+2026-01-29 11:42:36 [INFO] cDAQ module initialized successfully
+2026-01-29 11:42:36 [INFO] Initializing PSB queue manager on COM3...
+2026-01-29 11:42:36 [INFO] Attempting to connect to PSB 10000...
+2026-01-29 11:42:36 [INFO] [PSB] Connecting to PSB on COM3...
+2026-01-29 11:42:36 [INFO] [PSB] Initializing on COM3, slave 1, 9600 baud
+2026-01-29 11:42:36 [INFO] [PSB] Successfully initialized
+2026-01-29 11:42:36 [INFO] [PSB] Setting remote mode: ON
+2026-01-29 11:42:36 [INFO] [PSB] Setting output: OFF
+2026-01-29 11:42:37 [INFO] [PSB] Setting power: 20.00W
+2026-01-29 11:42:37 [INFO] [PSB] Setting current: 0.00A
+2026-01-29 11:42:37 [INFO] [PSB] Setting sink power: 20.00W
+2026-01-29 11:42:37 [INFO] [PSB] Setting sink current: 10.00A
+2026-01-29 11:42:37 [INFO] [PSB] Setting voltage: 0.00V
+2026-01-29 11:42:37 [INFO] [PSB] PSB initialized (power limits: source=20W, sink=20W)
+2026-01-29 11:42:37 [INFO] Successfully connected to PSB 10000
+2026-01-29 11:42:37 [INFO] PSB 10000 queue manager initialized
+2026-01-29 11:42:37 [INFO] PSB queue manager initialized and connected on COM3
+2026-01-29 11:42:37 [INFO] [PSB] PSB 10000 queue processing thread started
+2026-01-29 11:42:37 [INFO] Initializing PSB to safe state...
+2026-01-29 11:42:37 [INFO] [PSB] Setting PSB safe limits...
+2026-01-29 11:42:38 [INFO] [PSB] PSB safe limits set successfully
+2026-01-29 11:42:38 [INFO] [PSB] Setting output: OFF
+2026-01-29 11:42:39 [INFO] [PSB] Setting power: 20.00W
+2026-01-29 11:42:39 [INFO] [PSB] Setting current: 0.00A
+2026-01-29 11:42:40 [INFO] [PSB] Setting sink power: 20.00W
+2026-01-29 11:42:40 [INFO] [PSB] Setting sink current: 10.00A
+2026-01-29 11:42:40 [INFO] [PSB] Setting voltage: 0.00V
+2026-01-29 11:42:40 [INFO] [PSB] PSB zeroed successfully
+2026-01-29 11:42:40 [INFO] PSB initialization complete
+2026-01-29 11:42:40 [INFO] Initializing BioLogic abstraction layer...
+2026-01-29 11:42:40 [INFO]   Mode: EC-Lab OLE COM
+2026-01-29 11:42:40 [INFO] [BIO] Initializing BioLogic abstraction layer
+2026-01-29 11:42:40 [INFO] [BIO]   Mode: EC-Lab OLE COM
+2026-01-29 11:42:40 [INFO] [BIO] Initializing EC-Lab OLE COM mode
+2026-01-29 11:42:40 [INFO] [BIO]   Settings dir: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_settings
+2026-01-29 11:42:40 [INFO] [BIO]   Data dir: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data
+2026-01-29 11:42:40 [INFO] [BIO] Initializing EC-Lab backend
+2026-01-29 11:42:40 [INFO] [BIO]   Settings dir: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_settings
+2026-01-29 11:42:40 [INFO] [BIO]   Data dir: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data
+2026-01-29 11:42:40 [INFO] [BIO]   Device: 0, Channel: 0
+2026-01-29 11:42:40 [INFO] [BIO] ========================================
+2026-01-29 11:42:40 [INFO] [BIO] Initializing EC-Lab OLE COM connection
+2026-01-29 11:42:40 [INFO] [BIO] ========================================
+2026-01-29 11:42:40 [INFO] [BIO] Working directory: C:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\eclab_data
+2026-01-29 11:42:40 [INFO] [BIO] Step 1: Initializing COM (MTA mode)...
+2026-01-29 11:42:40 [INFO] [BIO] COM initialized successfully (MTA mode)
+2026-01-29 11:42:40 [INFO] [BIO] Step 2: Resolving ProgID 'EClabCOM.EClabExe'...
+2026-01-29 11:42:40 [INFO] [BIO] ProgID resolved successfully. EC-Lab is registered.
+2026-01-29 11:42:40 [INFO] [BIO] Step 3: Checking if EC-Lab is running...
+2026-01-29 11:42:40 [INFO] [BIO] EC-Lab process detected - proceeding with COM connection
+2026-01-29 11:42:40 [INFO] [BIO] Step 4: Creating EC-Lab COM instance...
+2026-01-29 11:42:40 [INFO] [BIO] NOTE: This will connect to the running EC-Lab application.
+2026-01-29 11:42:40 [INFO] [BIO] NOTE: Using custom IEClabExe interface (NOT IDispatch)
+2026-01-29 11:42:40 [INFO] [BIO] Requesting IEClabExe interface...
+2026-01-29 11:42:40 [INFO] [BIO] EC-Lab COM instance created successfully!
+2026-01-29 11:42:40 [INFO] [BIO] ========================================
+2026-01-29 11:42:40 [INFO] [BIO] EC-Lab OLE COM connection initialized
+2026-01-29 11:42:40 [INFO] [BIO] ========================================
+2026-01-29 11:42:40 [INFO] [BIO] Connecting to EC-Lab device 0
+2026-01-29 11:42:41 [INFO] [BIO] Connected to EC-Lab device 0 successfully
+2026-01-29 11:42:41 [INFO] [BIO] Running connection diagnostic (5 tests over ~5 seconds)...
+2026-01-29 11:42:41 [INFO] [BIO]   [Test 1 @ 0.0s] Connection: OK
+2026-01-29 11:42:42 [INFO] [BIO]   [Test 2 @ 1.0s] Connection: OK
+2026-01-29 11:42:43 [INFO] [BIO]   [Test 3 @ 2.0s] Connection: OK
+2026-01-29 11:42:44 [INFO] [BIO]   [Test 4 @ 3.0s] Connection: OK
+2026-01-29 11:42:45 [INFO] [BIO]   [Test 5 @ 4.0s] Connection: OK
+2026-01-29 11:42:45 [INFO] [BIO] Connection diagnostic complete: 5/5 tests passed
+2026-01-29 11:42:45 [INFO] [BIO] EC-Lab backend initialized successfully
+2026-01-29 11:42:45 [INFO] [BIO] BioLogic abstraction layer initialized successfully
+2026-01-29 11:42:45 [INFO] BioLogic abstraction layer initialized successfully
+2026-01-29 11:42:45 [INFO] Initializing DTB queue manager on COM5 with 2 devices...
+2026-01-29 11:42:45 [INFO] [DTB] DTB_QueueInit: Will initialize slave address 2
+2026-01-29 11:42:45 [INFO] [DTB] DTB_QueueInit: Will initialize slave address 3
+2026-01-29 11:42:45 [INFO] Attempting to connect to DTB 4848...
+2026-01-29 11:42:45 [INFO] [DTB] Connecting to DTB slave 2 on COM5...
+2026-01-29 11:42:45 [INFO] [DTB] Initializing on COM5, slave 2, 9600 baud
+2026-01-29 11:42:45 [INFO] [DTB] Successfully initialized
+2026-01-29 11:42:45 [INFO] [DTB] Successfully connected to DTB slave 2
+2026-01-29 11:42:45 [INFO] [DTB] Connecting to DTB slave 3 on COM5...
+2026-01-29 11:42:45 [INFO] [DTB] Initializing on COM5, slave 3, 9600 baud
+2026-01-29 11:42:46 [INFO] [DTB] Successfully initialized
+2026-01-29 11:42:46 [INFO] [DTB] Successfully connected to DTB slave 3
+2026-01-29 11:42:46 [INFO] [DTB] Connected to 2 of 2 DTB devices
+2026-01-29 11:42:46 [INFO] Successfully connected to DTB 4848
+2026-01-29 11:42:46 [INFO] DTB 4848 queue manager initialized
+2026-01-29 11:42:46 [INFO] DTB 4848 queue processing thread started
+2026-01-29 11:42:46 [INFO] [DTB] DTB_QueueInit: Successfully created queue manager for 2 devices
+2026-01-29 11:42:46 [INFO] DTB queue manager initialized and connected on COM5
+2026-01-29 11:42:46 [INFO] Enabling DTB write access for all devices...
+2026-01-29 11:42:46 [INFO] [DTB] Enabling write access for all 2 DTB devices...
+2026-01-29 11:42:46 [INFO] [DTB] Enabling write access...
+2026-01-29 11:42:46 [INFO] [DTB] Write access enabled
+2026-01-29 11:42:46 [INFO] [DTB] Enabling write access...
+2026-01-29 11:42:46 [INFO] [DTB] Write access enabled
+2026-01-29 11:42:46 [INFO] [DTB] Successfully enabled write access for all DTB devices
+2026-01-29 11:42:46 [INFO] DTB write access enabled successfully for all devices
+2026-01-29 11:42:46 [INFO] Configuring all DTB4848 devices for K-type thermocouple with PID control...
+2026-01-29 11:42:47 [INFO] [DTB] Write access status: ENABLED
+2026-01-29 11:42:47 [INFO] DTB slave 2 write access currently: ENABLED
+2026-01-29 11:42:47 [INFO] [DTB] Configuring DTB4848...
+2026-01-29 11:42:47 [INFO] [DTB] Setting sensor type: 0
+2026-01-29 11:42:47 [INFO] [DTB] Setting heating/cooling mode: 0
+2026-01-29 11:42:47 [INFO] [DTB] Setting control method: 0
+2026-01-29 11:42:47 [INFO] [DTB] Setting PID mode: 4 (AUTO)
+2026-01-29 11:42:48 [INFO] [DTB] Configuration complete
+2026-01-29 11:42:48 [INFO] DTB4848 slave 2 configured successfully
+2026-01-29 11:42:48 [INFO] [DTB] Write access status: ENABLED
+2026-01-29 11:42:48 [INFO] DTB slave 3 write access currently: ENABLED
+2026-01-29 11:42:48 [INFO] [DTB] Configuring DTB4848...
+2026-01-29 11:42:48 [INFO] [DTB] Setting sensor type: 0
+2026-01-29 11:42:48 [INFO] [DTB] Setting heating/cooling mode: 0
+2026-01-29 11:42:49 [INFO] [DTB] Setting control method: 0
+2026-01-29 11:42:49 [INFO] [DTB] Setting PID mode: 4 (AUTO)
+2026-01-29 11:42:49 [INFO] [DTB] Configuration complete
+2026-01-29 11:42:49 [INFO] DTB4848 slave 3 configured successfully
+2026-01-29 11:42:49 [INFO] DTB initialization complete
+2026-01-29 11:42:49 [INFO] Initializing Teensy queue manager on COM6...
+2026-01-29 11:42:49 [INFO] Attempting to connect to Teensy...
+2026-01-29 11:42:49 [INFO] [TNY] Connecting to Teensy on COM6...
+2026-01-29 11:42:49 [INFO] [TNY] Initializing Teensy on COM6 at 9600 baud
+2026-01-29 11:42:49 [INFO] [TNY] Successfully connected to Teensy on COM6
+2026-01-29 11:42:49 [INFO] Successfully connected to Teensy
+2026-01-29 11:42:49 [INFO] Teensy queue manager initialized
+2026-01-29 11:42:49 [INFO] Teensy queue manager initialized and connected on COM6
+2026-01-29 11:42:49 [INFO] [TNY] Teensy queue processing thread started
+2026-01-29 11:42:49 [INFO] [TNY] Initializing 2 pins (2 low, 0 high)
+2026-01-29 11:42:49 [INFO] Committed transaction 1 with 2 commands to normal priority queue
+2026-01-29 11:42:49 [INFO] [TNY] Pin initialization transaction committed
+2026-01-29 11:42:49 [INFO] [TNY] Starting transaction 1 with 2 commands
+2026-01-29 11:42:49 [INFO] Status module state: UNINITIALIZED -> INITIALIZING
+2026-01-29 11:42:49 [INFO] Device states initialized (DTB devices: 2)
+2026-01-29 11:42:49 [INFO] Status monitoring module initialized
+2026-01-29 11:42:49 [INFO] Controls module initialized with 2 DTB devices
+2026-01-29 11:42:49 [INFO] Starting device status monitoring...
+2026-01-29 11:42:49 [INFO] Status module state: INITIALIZING -> RUNNING
+2026-01-29 11:42:49 [INFO] Status timer thread started
+2026-01-29 11:42:49 [INFO] Status monitoring started successfully
+2026-01-29 11:42:49 [INFO] Starting controls module - syncing with device states...
+2026-01-29 11:42:49 [INFO] [TNY] Completed transaction 1
+2026-01-29 11:42:49 [INFO] PSB remote mode: ON
+2026-01-29 11:42:52 [INFO] Controls module started
+2026-01-29 11:44:46 [INFO] BASELINE: Checking BioLogic connection...
+2026-01-29 11:44:46 [INFO] [BIO] BASELINE: BIO_IsAbstractInitialized = 1
+2026-01-29 11:44:46 [INFO] [BIO] BASELINE: BioLogic mode = EC-Lab OLE COM (1)
+2026-01-29 11:44:46 [INFO] BASELINE: Testing BioLogic connection...
+2026-01-29 11:44:46 [INFO] [BIO] BASELINE: BIO_Abstract_TestConnection returned 0 (SUCCESS=0)
+2026-01-29 11:44:46 [INFO] [BIO] BASELINE: BIO_Abstract_GetDeviceID returned 0
+2026-01-29 11:44:46 [INFO] [BIO] BASELINE: BioLogic connection verified successfully (ID=0)
+2026-01-29 11:44:46 [INFO] All required devices verified and initialized successfully
+2026-01-29 11:44:46 [INFO] === Starting Baseline Battery Experiment ===
+2026-01-29 11:44:48 [INFO] Created experiment file system: c:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\data\BT25_test_relax_baseline_20260129_114448
+2026-01-29 11:44:48 [INFO] Experiment settings saved to: c:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\data\BT25_test_relax_baseline_20260129_114448\experiment_settings.ini
+2026-01-29 11:44:48 [INFO] Initializing relay states...
+2026-01-29 11:44:49 [INFO] EIS target SOC points initialized:
+2026-01-29 11:44:49 [INFO]   0.0%
+2026-01-29 11:44:49 [INFO]   10.0%
+2026-01-29 11:44:49 [INFO]   20.0%
+2026-01-29 11:44:49 [INFO]   30.0%
+2026-01-29 11:44:49 [INFO]   40.0%
+2026-01-29 11:44:49 [INFO]   50.0%
+2026-01-29 11:44:49 [INFO]   60.0%
+2026-01-29 11:44:49 [INFO]   70.0%
+2026-01-29 11:44:49 [INFO]   80.0%
+2026-01-29 11:44:49 [INFO]   90.0%
+2026-01-29 11:44:49 [INFO]   100.0%
+2026-01-29 11:44:49 [INFO] === PHASE 1: Initial Discharge and Temperature Setup ===
+2026-01-29 11:44:49 [INFO] Setting up temperature control - target: 30.0  C
+2026-01-29 11:44:49 [INFO] [DTB] Setting setpoint to 30.0 C for all 2 DTB devices...
+2026-01-29 11:44:49 [INFO] [DTB] Setting setpoint: 30.0 C
+2026-01-29 11:44:49 [INFO] [DTB] Setting setpoint: 30.0 C
+2026-01-29 11:44:49 [INFO] [DTB] Successfully set setpoint for all DTB devices
+2026-01-29 11:44:49 [INFO] [DTB] Setting run/stop to RUN for all 2 DTB devices...
+2026-01-29 11:44:49 [INFO] [DTB] Setting Run/Stop: RUN
+2026-01-29 11:44:50 [INFO] [DTB] Setting Run/Stop: RUN
+2026-01-29 11:44:50 [INFO] [DTB] Successfully set run/stop for all DTB devices
+2026-01-29 11:44:50 [INFO] DTB temperature controller started
+2026-01-29 11:44:50 [INFO] Switching to PSB...
+2026-01-29 11:44:50 [INFO] [PSB] Setting output: OFF
+2026-01-29 11:44:51 [INFO] Successfully switched to PSB
+2026-01-29 11:44:51 [INFO] Discharging battery to 3.00 V
+2026-01-29 11:44:51 [INFO] Battery voltage: 3.566 V, Target: 3.000 V - Will DISCHARGE
+2026-01-29 11:44:51 [INFO] Configuring PSB with current=5.000A, voltage=3.000V
+2026-01-29 11:44:51 [INFO] [PSB] Setting current: 5.00A
+2026-01-29 11:44:52 [INFO] [PSB] Setting sink current: 5.00A
+2026-01-29 11:44:52 [INFO] [PSB] Setting voltage: 3.00V
+2026-01-29 11:44:52 [INFO] DIAGNOSTIC: After setting voltage to 3.000V:
+2026-01-29 11:44:52 [INFO]   PSB Mode: CV (SOURCE mode)
+2026-01-29 11:44:52 [INFO]   Device State (raw): 0x00004803
+2026-01-29 11:44:52 [INFO]   Control Location: 3
+2026-01-29 11:44:52 [INFO]   Remote Mode: ON
+2026-01-29 11:44:52 [INFO] [PSB] Setting output: ON
+2026-01-29 11:44:53 [INFO] Waiting for output to stabilize...
+2026-01-29 11:44:55 [INFO] ==========================================================
+2026-01-29 11:44:55 [INFO] CRITICAL DIAGNOSTIC: After output enable + stabilization:
+2026-01-29 11:44:55 [INFO] ==========================================================
+2026-01-29 11:44:55 [INFO]   PSB Mode: CC (SINK mode)
+2026-01-29 11:44:55 [INFO]   Voltage: 3.209 V (target: 3.000 V)
+2026-01-29 11:44:55 [INFO]   Current: 4.999 A
+2026-01-29 11:44:55 [INFO]   Power: 16.11 W
+2026-01-29 11:44:55 [INFO]   Device State (raw): 0x00005C83
+2026-01-29 11:44:55 [INFO]   Output Enabled: YES
+2026-01-29 11:44:55 [INFO] ==========================================================
+2026-01-29 11:44:55 [ERROR] MODE SWITCHING DETECTED AFTER OUTPUT ENABLE!
+2026-01-29 11:44:55 [ERROR]   Expected: CV mode, Actual: CC SINK mode
+2026-01-29 11:44:55 [ERROR]   This is the root cause of the discharge failure!
+2026-01-29 11:44:55 [INFO] Discharging...
+2026-01-29 12:07:52 [INFO] Target voltage reached (2.996 V) and current below threshold (0.243 A < 0.250 A)
+2026-01-29 12:07:52 [INFO] [PSB] Setting output: OFF
+2026-01-29 12:07:52 [INFO] Discharge complete: 1154.50 mAh, 3.48 Wh in 22.9 minutes
+2026-01-29 12:07:52 [INFO] Phase 1 discharge completed: 1154.50 mAh in 22.9 minutes
+2026-01-29 12:07:52 [INFO] Waiting 300 seconds for battery relaxation...
+2026-01-29 12:11:45 [INFO] User requested to stop baseline experiment
+2026-01-29 12:11:45 [INFO] Cleaning up baseline experiment...
+2026-01-29 12:11:45 [INFO] Safely disconnecting all devices...
+2026-01-29 12:11:45 [INFO] [PSB] Setting output: OFF
+2026-01-29 12:11:45 [INFO] [DTB] Setting run/stop to STOP for all 2 DTB devices...
+2026-01-29 12:11:46 [INFO] [DTB] Setting Run/Stop: STOP
+2026-01-29 12:11:47 [INFO] [DTB] Setting Run/Stop: STOP
+2026-01-29 12:11:47 [INFO] [DTB] Successfully set run/stop for all DTB devices
+2026-01-29 12:11:47 [INFO] Device disconnect completed
+2026-01-29 12:11:47 [INFO] Baseline experiment cleanup completed
+2026-01-29 14:55:55 [INFO] ========================================
+2026-01-29 14:55:55 [INFO] Shutting down Battery Tester application
+2026-01-29 14:55:55 [INFO] ========================================
+2026-01-29 14:55:55 [INFO] [TNY] Setting 2 pins
+2026-01-29 14:55:55 [INFO] Stopping status monitoring...
+2026-01-29 14:55:55 [INFO] Stopping device status monitoring...
+2026-01-29 14:55:55 [INFO] Status module state: RUNNING -> STOPPING
+2026-01-29 14:55:56 [INFO] Status timer thread stopped
+2026-01-29 14:55:56 [INFO] Status module state: STOPPING -> STOPPED
+2026-01-29 14:55:56 [INFO] Status monitoring stopped
+2026-01-29 14:55:56 [INFO] Cleaning up cDAQ module...
+2026-01-29 14:55:56 [INFO] Cleaning up cDAQ module...
+2026-01-29 14:55:57 [INFO] Cleaned up cDAQ slot 2 task
+2026-01-29 14:55:58 [INFO] Cleaned up cDAQ slot 3 task
+2026-01-29 14:55:58 [INFO] cDAQ module cleaned up
+2026-01-29 14:55:58 [INFO] Shutting down PSB queue manager...
+2026-01-29 14:55:58 [INFO] [PSB] Shutting down PSB 10000 queue manager...
+2026-01-29 14:55:58 [INFO] [PSB] Waiting for processing thread to complete...
+2026-01-29 14:55:58 [INFO] [PSB] All queues empty, processing thread exiting
+2026-01-29 14:55:58 [INFO] [PSB] PSB 10000 queue processing thread stopped
+2026-01-29 14:55:58 [INFO] [PSB] Setting output: OFF
+2026-01-29 14:55:59 [INFO] [PSB] Setting remote mode: OFF
+2026-01-29 14:55:59 [INFO] [PSB] Closing connection on COM3
+2026-01-29 14:55:59 [INFO] [PSB] Disconnected from PSB 10000
+2026-01-29 14:55:59 [INFO] Device queue manager shut down
+2026-01-29 14:55:59 [INFO] Shutting down BioLogic abstraction layer...
+2026-01-29 14:55:59 [INFO] [BIO] Shutting down BioLogic abstraction layer
+2026-01-29 14:55:59 [INFO] [BIO] Shutting down EC-Lab backend
+2026-01-29 14:55:59 [INFO] [BIO] Shutting down EC-Lab OLE COM connection
+2026-01-29 14:55:59 [INFO] [BIO] Disconnecting from EC-Lab device 0
+2026-01-29 14:55:59 [INFO] [BIO] Disconnected from EC-Lab device
+2026-01-29 14:55:59 [INFO] [BIO] EC-Lab OLE COM connection shutdown complete
+2026-01-29 14:55:59 [INFO] [BIO] EC-Lab backend shutdown complete
+2026-01-29 14:55:59 [INFO] [BIO] BioLogic abstraction layer shutdown complete
+2026-01-29 14:55:59 [INFO] Shutting down DTB queue manager...
+2026-01-29 14:55:59 [INFO] [DTB] Shutting down DTB 4848 queue manager...
+2026-01-29 14:55:59 [INFO] [DTB] Waiting for processing thread to complete...
+2026-01-29 14:55:59 [INFO] [DTB] All queues empty, processing thread exiting
+2026-01-29 14:55:59 [INFO] [DTB] DTB 4848 queue processing thread stopped
+2026-01-29 14:55:59 [INFO] [DTB] Stopping DTB slave 2...
+2026-01-29 14:55:59 [INFO] [DTB] Setting Run/Stop: STOP
+2026-01-29 14:55:59 [INFO] [DTB] Stopping DTB slave 3...
+2026-01-29 14:55:59 [INFO] [DTB] Setting Run/Stop: STOP
+2026-01-29 14:55:59 [INFO] [DTB] Closing COM5
+2026-01-29 14:55:59 [INFO] [DTB] Disconnected all DTB devices from COM5
+2026-01-29 14:55:59 [INFO] [DTB] Disconnected from DTB 4848
+2026-01-29 14:55:59 [INFO] Device queue manager shut down
+2026-01-29 14:55:59 [INFO] Shutting down Teensy queue manager...
+2026-01-29 14:55:59 [INFO] [TNY] Shutting down Teensy queue manager...
+2026-01-29 14:55:59 [INFO] [TNY] Waiting for processing thread to complete...
+2026-01-29 14:55:59 [INFO] [TNY] All queues empty, processing thread exiting
+2026-01-29 14:55:59 [INFO] [TNY] Teensy queue processing thread stopped
+2026-01-29 14:56:00 [INFO] [TNY] Closing connection on COM6
+2026-01-29 14:56:00 [INFO] [TNY] Disconnected from Teensy
+2026-01-29 14:56:00 [INFO] Device queue manager shut down
+2026-01-29 14:56:00 [INFO] Cleaning up CDC experiment module...
+2026-01-29 14:56:00 [INFO] Cleaning up Baseline experiment module...
+2026-01-29 14:56:00 [INFO] Cleaning up controls module...
+2026-01-29 14:56:00 [INFO] Controls module cleaned up
+2026-01-29 14:56:00 [INFO] Cleaning up status monitoring...
+2026-01-29 14:56:00 [INFO] Status module state: STOPPED -> UNINITIALIZED
+2026-01-29 14:56:00 [INFO] Status module cleaned up
+2026-01-29 14:56:00 [INFO] Shutting down thread pool...
+2026-01-29 14:56:00 [INFO] Cleanup complete. Exiting application.
+2026-01-29 14:56:00 [INFO] ========================================
+=== Battery Tester Log Ended: 2026-01-29 14:56:00 ===
