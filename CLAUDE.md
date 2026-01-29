@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-This is a battery testing system built in **LabWindows/CVI 2020 (C99)** for automated battery characterization. It integrates 5 hardware devices (PSB 10000 Power Supply, Bio-Logic SP-150e Potentiostat, DTB4848 Temperature Controllers, Teensy Microcontroller, cDAQ-9178) through a sophisticated thread-safe command queue architecture.
+This is a battery testing system built in **LabWindows/CVI 2020 (C99)** for automated battery characterization. It integrates 5 hardware devices (PSB 10000 Power Supply, Bio-Logic SP-150e Potentiostat, DTB4848 Temperature Controllers, Teensy Microcontroller, cDAQ-9178) through a thread-safe command queue architecture.
 
 ## Build System
 
@@ -42,8 +42,24 @@ Each hardware device follows the same integration pattern:
 | PSB 10000 | Bidirectional power supply (charge/discharge) | Modbus RTU (COM3) | `psb10000/` |
 | Bio-Logic SP-150e | Electrochemical impedance spectroscopy (EIS) | USB (Bio-Logic API) | `biologic/` |
 | DTB4848 | PID temperature controllers | Modbus ASCII (COM5) | `dtb4848/` |
-| Teensy | Digital I/O control | Serial (COM6) | `teensy/` |
+| Teensy | Digital I/O and relay switching | Serial (COM6) | `teensy/` |
 | cDAQ-9178 | Thermocouple monitoring | NIDAQmx | `cdaq_utils.h/c` |
+
+### Relay Switching (Teensy)
+
+The Teensy controls relays that connect/disconnect the PSB and Bio-Logic from the battery. Only one device can be connected at a time. Pin definitions are in `common.h`:
+
+```c
+#define TNY_PSB_PIN          0   // Teensy pin for PSB relay
+#define TNY_BIOLOGIC_PIN     1   // Teensy pin for BioLogic relay
+#define TNY_SWITCH_DELAY_MS  100 // Delay after relay switching
+```
+
+Switching functions in `exp_baseline.c`:
+- **`SwitchToPSB()`**: Disconnect Bio-Logic relay → delay → connect PSB relay → enable PSB output
+- **`SwitchToBioLogic()`**: Disable PSB output → disconnect PSB relay → delay → connect Bio-Logic relay
+
+The sequence always disconnects the current device before connecting the next, with delays for safe settling.
 
 ### Configuration
 
@@ -51,11 +67,6 @@ Device parameters are in `common.h`:
 - COM port assignments: `PSB_COM_PORT`, `DTB_COM_PORT`, `TNY_COM_PORT`
 - Device enable flags: `ENABLE_PSB`, `ENABLE_BIOLOGIC`, `ENABLE_DTB`, `ENABLE_TNY`, `ENABLE_CDAQ`
 - Safety limits: `PSB_SAFE_VOLTAGE_MAX`, `PSB_SAFE_CURRENT_MAX`
-
-### Experiment Modules
-
-- **CDC Experiment** (`exp_cdc.h/c`): Charge/Discharge Control with real-time monitoring
-- **Baseline Experiment** (`exp_baseline.h/c`): Long-term monitoring with periodic EIS measurements
 
 ### Threading Model
 
@@ -65,6 +76,33 @@ Device parameters are in `common.h`:
 - **Status Monitor Thread**: Continuous 1Hz device status checking
 
 **Critical**: Never call device DLL functions directly from UI callbacks. Always use queue managers.
+
+## Experiment Modules
+
+### CDC Experiment (`exp_cdc.h/c`)
+
+Charge/Discharge Control with real-time monitoring. Simple single-operation experiment: charges or discharges to a target voltage using `Battery_GoToVoltage()`.
+
+### Baseline Experiment (`exp_baseline.h/c`)
+
+Comprehensive 4-phase battery characterization experiment:
+
+**Phase 1 - Discharge & Temperature** (`RunPhase1_DischargeAndTemp`):
+Discharges battery to `dischargeVoltage` to establish 0% SOC baseline. If DTB enabled, waits for target temperature and stabilization. Measures initial discharge capacity.
+
+**Phase 2 - Capacity Test** (`RunPhase2_CapacityExperiment`):
+Full charge/discharge cycle to measure battery capacity. Charges to `chargeVoltage`, then discharges back to `dischargeVoltage`. The measured capacities (`measuredChargeCapacity_mAh`, `measuredDischargeCapacity_mAh`) are used by later phases for SOC calculation.
+
+**Phase 3 - EIS During Charge** (`RunPhase3_EISCharge`):
+Charges battery with periodic EIS measurements at SOC intervals defined by `eisInterval`. At each SOC target: disables PSB → switches relay to Bio-Logic → performs relaxation EIS series (multiple GEIS measurements over relaxation period to capture impedance dynamics) → switches relay back to PSB → resumes charging. Configuration constants in `exp_baseline.h`:
+- `BASELINE_RELAXATION_EIS_INTERVAL`: seconds between EIS measurements during relaxation
+- `BASELINE_RELAXATION_EIS_DURATION`: total relaxation measurement window
+- Dynamic SOC targets are added if battery capacity was underestimated
+
+**Phase 4 - Discharge to 50%** (`RunPhase4_Discharge50Percent`):
+Discharges to exactly 50% of Phase 1's measured discharge capacity using `Battery_TransferCapacity()` for precise coulomb-counted capacity control.
+
+**Data flow**: Phase 1 → `measuredDischargeCapacity_mAh` → Phase 4 uses it. Phase 2 → capacity estimates → Phase 3 uses for SOC tracking.
 
 ## Common Development Tasks
 
@@ -105,19 +143,6 @@ DeviceQueue_CommitTransaction(g_psbQueueMgr, txn, callback, userData);
 **Never update UI directly from background threads**. Use `PostDeferredCall()`:
 
 ```c
-typedef struct {
-    int panel;
-    int control;
-    double value;
-} UIUpdateData;
-
-void UpdateUICallback(void *callbackData) {
-    UIUpdateData *data = (UIUpdateData*)callbackData;
-    SetCtrlVal(data->panel, data->control, data->value);
-    free(data);
-}
-
-// In background thread:
 UIUpdateData *data = malloc(sizeof(UIUpdateData));
 data->panel = panel; data->control = control; data->value = newValue;
 PostDeferredCall(UpdateUICallback, data);
@@ -128,8 +153,6 @@ PostDeferredCall(UpdateUICallback, data);
 Thread-safe logging with device-specific prefixes:
 
 ```c
-#include "logging.h"
-
 LogMessageEx(LOG_DEVICE_PSB, "Setting voltage to %.2f V", voltage);
 LogErrorEx(LOG_DEVICE_BIO, "Failed to load technique: %s", errorMsg);
 LogWarning("Temperature elevated: %.1f°C", temp);
@@ -195,13 +218,12 @@ Control mode is set in `common.h`:
 **Switching modes:**
 1. Change `BIOLOGIC_CONTROL_MODE` in `common.h`
 2. Rebuild project (mode is compile-time)
-3. No code changes needed - abstraction layer handles everything!
+3. No code changes needed - abstraction layer handles everything
 
 ### Modes Explained
 
 **Direct DLL Mode (0)** - Production/Automation
 - Direct hardware control via ECLib64.dll
-- Maximum performance
 - No GUI dependency
 - Use for: Production experiments, automated testing
 
@@ -215,22 +237,15 @@ Control mode is set in `common.h`:
 
 All Bio-Logic functionality routes through the abstraction layer (`biologic/biologic_abstract.h/c`):
 
-**Unified API** - Same functions work in both modes:
 ```c
 BIO_Abstract_RunOCV(...)   // Auto-routes to DLL or EC-Lab
 BIO_Abstract_RunGEIS(...)  // Based on BIOLOGIC_CONTROL_MODE
 BIO_Abstract_RunPEIS(...)
 ```
 
-**Mode detection:**
-```c
-BIO_ControlMode mode = BIO_GetCurrentMode();  // Returns current mode
-const char* name = BIO_GetModeName(mode);     // "Direct DLL" or "EC-Lab OLE COM"
-```
-
 ### BIO Command-Line Interface
 
-Quick testing and verification via command prompt:
+Quick testing and verification via the application's command prompt:
 
 ```
 BIO MODE   - Show current control mode (DLL/EC-Lab)
@@ -241,17 +256,12 @@ BIO GEIS   - Run quick GEIS test (10kHz-0.1Hz, 500mA)
 BIO HELP   - Show command help
 ```
 
-Commands work in **both DLL and EC-Lab modes** - no changes needed!
-
 ### EC-Lab Setup (One-Time)
 
 **Requirements for EC-Lab mode:**
 1. EC-Lab registered as COM server (admin: `EClab.exe /regserver`)
-2. Directories created:
-   - `eclab_settings/` - .mps template files
-   - `eclab_data/` - .mpr output files
-3. .mps template files created (in EC-Lab GUI or copied)
-4. EC-Lab running before launching application
+2. Directories created: `eclab_settings/` (.mps templates), `eclab_data/` (.mpr output)
+3. EC-Lab running before launching application
 
 **Configuration in common.h:**
 ```c
@@ -263,8 +273,6 @@ Commands work in **both DLL and EC-Lab modes** - no changes needed!
 
 ### Bio-Logic Techniques Supported
 
-The Bio-Logic SP-150e supports multiple electrochemical techniques:
-
 - **OCV**: Open Circuit Voltage monitoring
 - **PEIS**: Potentiostatic EIS (voltage-controlled impedance)
 - **GEIS**: Galvanostatic EIS (current-controlled impedance)
@@ -273,21 +281,7 @@ The Bio-Logic SP-150e supports multiple electrochemical techniques:
 Default GEIS parameters in `common.h`:
 - Frequency range: 10 kHz to 0.1 Hz (logarithmic, 31 points)
 - Amplitude: 500 mA
-- 5 decades × 6 points/decade + 1 final point
-
-### Dual-Mode Benefits
-
-**Development workflow:**
-1. Develop in DLL mode (fast, direct)
-2. Debug in EC-Lab mode (visual validation)
-3. Cross-validate results between modes
-4. Deploy in DLL mode (production)
-
-**Key advantages:**
-- Parameter flexibility (.mps files in EC-Lab mode)
-- Visual debugging (watch measurements in EC-Lab GUI)
-- Cross-mode validation (compare DLL vs EC-Lab results)
-- Zero experiment code changes (abstraction layer handles routing)
+- 5 decades x 6 points/decade + 1 final point
 
 ## Important Files Reference
 
@@ -308,4 +302,4 @@ Device test suites are in `tests/`:
 - `biologic_test.h/c`: Bio-Logic technique validation
 - `device_queue_test.h/c`: Queue system stress testing
 
-Run tests via UI: Tests menu → Device Test Suite
+Run tests via UI: Tests menu -> Device Test Suite

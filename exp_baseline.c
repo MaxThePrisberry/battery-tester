@@ -2247,6 +2247,13 @@ static int PerformEISMeasurement(BaselineExperimentContext *ctx, double targetSO
         return ERR_CANCELLED;
     }
 
+    // Switch to BioLogic once before starting the measurement series
+    result = SwitchToBioLogic(ctx);
+    if (result != SUCCESS) {
+        LogError("Failed to switch to BioLogic for EIS series");
+        return result;
+    }
+
     // Perform repeated EIS measurements during relaxation to capture impedance dynamics
     // Measurements every BASELINE_RELAXATION_EIS_INTERVAL seconds for BASELINE_RELAXATION_EIS_DURATION total
     double relaxationStart = Timer();
@@ -2341,19 +2348,18 @@ static int RetryEISMeasurement(BaselineExperimentContext *ctx, BaselineEISMeasur
         if (CheckCancellation(ctx)) {
             return ERR_CANCELLED;
         }
-        
-        // Switch to BioLogic
-        result = SwitchToBioLogic(ctx);
-        if (result != SUCCESS) {
-            LogError("Failed to switch to BioLogic for EIS measurement");
-            return result;
-        }
-        
-        // Wait for settling after relay switch
+
+        // On retries, re-switch to BioLogic in case relay state is uncertain
         if (measurement->retryCount > 0) {
-            LogMessage("EIS measurement retry %d after %.1f second delay", 
+            LogMessage("EIS measurement retry %d after %.1f second delay",
                       measurement->retryCount, BASELINE_EIS_RETRY_DELAY);
             Delay(BASELINE_EIS_RETRY_DELAY);
+
+            result = SwitchToBioLogic(ctx);
+            if (result != SUCCESS) {
+                LogError("Failed to switch to BioLogic for EIS retry");
+                return result;
+            }
         }
         
         // Run OCV measurement
