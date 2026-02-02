@@ -1672,8 +1672,9 @@ static int RunPhase3_EISCharge(BaselineExperimentContext *ctx) {
             ctx->lastTime = 0.0;
         }
         
-        // Check for charge completion with debouncing
-        if (fabs(status.current) < ctx->params.currentThreshold) {
+        // Check for charge completion: voltage must be near target AND current below threshold
+        if (status.voltage >= (ctx->params.chargeVoltage - 0.05) &&
+            fabs(status.current) < ctx->params.currentThreshold) {
             lowCurrentReadings++;
             if (lowCurrentReadings >= MIN_LOW_CURRENT_READINGS) {
                 LogMessage("Phase 3 charging completed - current below threshold for %d consecutive readings", 
@@ -2210,7 +2211,9 @@ static int InitializeEISTargets(BaselineExperimentContext *ctx) {
     ctx->targetSOCs[ctx->numTargetSOCs - 1] = 100.0;  // Always include 100%
     
     // Allocate measurements array
-    ctx->eisMeasurementCapacity = ctx->targetSOCCapacity;
+    // Each SOC target gets multiple measurements during relaxation EIS series
+    int measurementsPerSOC = (int)(BASELINE_RELAXATION_EIS_DURATION / BASELINE_RELAXATION_EIS_INTERVAL) + 2;
+    ctx->eisMeasurementCapacity = ctx->targetSOCCapacity * measurementsPerSOC;
     ctx->eisMeasurements = (BaselineEISMeasurement*)calloc(ctx->eisMeasurementCapacity, sizeof(BaselineEISMeasurement));
     if (!ctx->eisMeasurements) {
         return ERR_OUT_OF_MEMORY;
