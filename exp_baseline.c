@@ -2118,8 +2118,15 @@ static int SwitchToPSB(BaselineExperimentContext *ctx) {
 	}
     
     Delay(TNY_SWITCH_DELAY_MS / 1000.0);
-    
-    LogMessage("Successfully switched to PSB");
+
+    // Enable PSB output after relay is connected
+    result = PSB_SetOutputEnableQueued(1, DEVICE_PRIORITY_NORMAL);
+    if (result != SUCCESS) {
+        LogError("Failed to enable PSB output: %s", GetErrorString(result));
+        return result;
+    }
+
+    LogMessage("Successfully switched to PSB (output enabled)");
     return SUCCESS;
 }
 
