@@ -74,7 +74,7 @@
      /* tab page panel controls */
 #define  BASELINE_NUM_EIS_INTERVAL        2       /* control type: numeric, callback function: (none) */
 #define  BASELINE_NUM_CURRENT_THRESHOLD   3       /* control type: numeric, callback function: (none) */
-#define  BASELINE_NUM_REST_TIME           4       /* control type: numeric, callback function: (none) */
+#define  BASELINE_NUM_OCV_REST_TIME       4       /* control type: numeric, callback function: (none) */
 #define  BASELINE_NUM_TEMPERATURE         5       /* control type: numeric, callback function: (none) */
 #define  BASELINE_NUM_INTERVAL            6       /* control type: numeric, callback function: (none) */
 #define  BASELINE_BTN_BASELINE            7       /* control type: command, callback function: StartBaselineExperimentCallback */
@@ -98,9 +98,9 @@
 #define  OCV_BATTERYNAME                  3       /* control type: string, callback function: (none) */
 #define  OCV_NUM_REST_TIME                4       /* control type: numeric, callback function: (none) */
 #define  OCV_NUM_INTERVAL                 5       /* control type: numeric, callback function: (none) */
-#define  OCV_BTN_BASELINE                 6       /* control type: command, callback function: StartBaselineExperimentCallback */
+#define  OCV_BTN_START                    6       /* control type: command, callback function: StartOCVExperimentCallback */
 #define  OCV_NUM_OUTPUT                   7       /* control type: numeric, callback function: (none) */
-#define  OCV_STR_BASELINE_STATUS          8       /* control type: string, callback function: (none) */
+#define  OCV_STR_STATUS                   8       /* control type: string, callback function: (none) */
 
 
      /* Control Arrays: */
@@ -130,6 +130,7 @@ int  CVICALLBACK DTB2RunStopCallback(int panel, int control, int event, void *ca
 int  CVICALLBACK PanelCallback(int panel, int event, void *callbackData, int eventData1, int eventData2);
 int  CVICALLBACK RemoteModeToggle(int panel, int control, int event, void *callbackData, int eventData1, int eventData2);
 int  CVICALLBACK StartBaselineExperimentCallback(int panel, int control, int event, void *callbackData, int eventData1, int eventData2);
+int  CVICALLBACK StartOCVExperimentCallback(int panel, int control, int event, void *callbackData, int eventData1, int eventData2);
 int  CVICALLBACK TestBiologicCallback(int panel, int control, int event, void *callbackData, int eventData1, int eventData2);
 int  CVICALLBACK TestDeviceQueueCallback(int panel, int control, int event, void *callbackData, int eventData1, int eventData2);
 int  CVICALLBACK TestPSBCallback(int panel, int control, int event, void *callbackData, int eventData1, int eventData2);
