@@ -90,6 +90,11 @@
 #define  CDC_NUM_INTERVAL                 5       /* control type: numeric, callback function: (none) */
 #define  CDC_BATTERYNAME                  6       /* control type: string, callback function: (none) */
 
+     /* tab page panel controls */
+#define  OCV_NUM_TEMPERATURE              2       /* control type: numeric, callback function: (none) */
+#define  OCV_BATTERYNAME                  3       /* control type: string, callback function: (none) */
+#define  OCV_NUM_REST_TIME                4       /* control type: numeric, callback function: (none) */
+
 
      /* Control Arrays: */
 
