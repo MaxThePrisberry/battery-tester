@@ -300,7 +300,11 @@ int CVICALLBACK StartBaselineExperimentCallback(int panel, int control, int even
     GetCtrlVal(panel, BASELINE_NUM_TEMPERATURE, &g_experimentContext.params.targetTemperature);
     GetCtrlVal(panel, BASELINE_NUM_EIS_INTERVAL, &g_experimentContext.params.eisInterval);
     GetCtrlVal(panel, BASELINE_NUM_CURRENT_THRESHOLD, &g_experimentContext.params.currentThreshold);
-    GetCtrlVal(panel, BASELINE_NUM_INTERVAL, &g_experimentContext.params.logInterval);
+    {
+        double tempLogInterval;
+        GetCtrlVal(panel, BASELINE_NUM_INTERVAL, &tempLogInterval);
+        g_experimentContext.params.logInterval = (unsigned int)tempLogInterval;
+    }
     GetCtrlVal(panel, BASELINE_CHK_MANUAL_C, &g_experimentContext.params.useManualCapacity);
     GetCtrlVal(panel, BASELINE_NUM_MANUAL_C, &g_experimentContext.params.manualCapacity_mAh);
     GetCtrlVal(g_mainPanelHandle, PANEL_NUM_SET_CHARGE_V, &g_experimentContext.params.chargeVoltage);
