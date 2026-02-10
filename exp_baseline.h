@@ -18,6 +18,7 @@
 #include "dtb4848_dll.h"
 #include "dtb4848_queue.h"
 #include "cdaq_utils.h"
+#include "exp_ocv.h"
 
 /******************************************************************************
  * Configuration Constants
@@ -51,6 +52,7 @@
 #define BASELINE_SETTINGS_FILE          "experiment_settings.ini"
 #define BASELINE_LOG_FILE               "experiment.log"
 
+#define BASELINE_PHASE0_DIR             "phase_0"
 #define BASELINE_PHASE1_DIR             "phase_1"
 #define BASELINE_PHASE2_DIR             "phase_2" 
 #define BASELINE_PHASE3_DIR             "phase_3"
@@ -97,8 +99,9 @@ typedef enum {
 
 // Experiment phase identifier
 typedef enum {
+    BASELINE_PHASE_0 = 0,  // OCV measurement (optional)
     BASELINE_PHASE_1 = 1,  // Initial discharge + temperature setup
-    BASELINE_PHASE_2,      // Capacity experiment (charge ? discharge)
+    BASELINE_PHASE_2,      // Capacity experiment (charge -> discharge)
     BASELINE_PHASE_3,      // EIS measurements during charge
     BASELINE_PHASE_4       // Discharge to 50%
 } BaselineExperimentPhase;
@@ -116,18 +119,11 @@ typedef struct {
     double dischargeCurrent;     // Maximum discharge current (A)
     int useManualCapacity;       // If 1, skip phases 1&2 and use manual capacity
     double manualCapacity_mAh;   // Manually entered battery capacity (mAh)
+    int runOCVPhase;             // If 1, run Phase 0 OCV measurement before Phase 1
+    double ocvRestTime;          // Rest time before OCV measurement (seconds)
 } BaselineExperimentParams;
 
-// Temperature data point
-typedef struct {
-    double timestamp;                    // Time since experiment start (s)
-    double dtbTemperatures[DTB_NUM_DEVICES]; // All DTB measured temperatures (�C)
-    double dtbAverageTemperature;        // Average DTB temperature (�C)
-    int dtbDeviceCount;                  // Number of DTB devices that responded
-    double tc0Temperature;               // Thermocouple 0 temperature (�C)
-    double tc1Temperature;               // Thermocouple 1 temperature (�C)
-    char status[128];                    // Temperature controller status
-} TemperatureDataPoint;
+// TemperatureDataPoint is now in common.h
 
 // Generic data point for logging
 typedef struct {
@@ -223,6 +219,7 @@ typedef struct {
     int dynamicTargetsAdded;        // Count of targets added beyond initial plan
     
     // Phase results
+    OCVMeasurementResult phase0Result;  // Phase 0: OCV measurement
     BaselinePhaseResults phase1Results;
     BaselinePhaseResults phase2ChargeResults;
     BaselinePhaseResults phase2DischargeResults;

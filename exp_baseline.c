@@ -51,6 +51,7 @@ static void UpdateOutputDisplay(BaselineExperimentContext *ctx, const char *labe
 static void Phase1ProgressCallback(double voltage_V, double current_A, double mAhTransferred);
 
 // Phase implementation functions
+static int RunPhase0_OCV(BaselineExperimentContext *ctx);
 static int RunPhase1_DischargeAndTemp(BaselineExperimentContext *ctx);
 static int RunPhase2_CapacityExperiment(BaselineExperimentContext *ctx);
 static int RunPhase3_EISCharge(BaselineExperimentContext *ctx);
@@ -302,7 +303,19 @@ int CVICALLBACK StartBaselineExperimentCallback(int panel, int control, int even
     GetCtrlVal(g_mainPanelHandle, PANEL_NUM_SET_CHARGE_I, &g_experimentContext.params.chargeCurrent);
     GetCtrlVal(g_mainPanelHandle, PANEL_NUM_SET_DISCHARGE_I, &g_experimentContext.params.dischargeCurrent);
     GetCtrlVal(panel, BASELINE_BATTERYNAME, g_experimentContext.params.batteryName);
-    
+
+    // Phase 0 OCV parameters
+    // TODO: Replace these placeholder constants with actual UIR constants
+    // once BASELINE_CHK_OCV_PHASE and BASELINE_NUM_OCV_REST_TIME are added
+    // to the baseline tab in the LabWindows/CVI UIR editor.
+#ifdef BASELINE_CHK_OCV_PHASE
+    GetCtrlVal(panel, BASELINE_CHK_OCV_PHASE, &g_experimentContext.params.runOCVPhase);
+    GetCtrlVal(panel, BASELINE_NUM_OCV_REST_TIME, &g_experimentContext.params.ocvRestTime);
+#else
+    g_experimentContext.params.runOCVPhase = 0;
+    g_experimentContext.params.ocvRestTime = OCV_REST_DEFAULT_TIME;
+#endif
+
 // Preliminary validation
     if (ENABLE_DTB && (g_experimentContext.params.targetTemperature < 5.0 || g_experimentContext.params.targetTemperature > 80.0)) {
         CmtGetLock(g_busyLock);
@@ -519,7 +532,22 @@ static int BaselineExperimentThread(void *functionData) {
         ctx->state = BASELINE_STATE_ERROR;
         goto cleanup;
     }
-    
+
+    // PHASE 0: OCV Measurement (optional)
+    if (ctx->params.runOCVPhase) {
+        LogMessage("=== PHASE 0: OCV Measurement ===");
+        ctx->currentPhase = BASELINE_PHASE_0;
+        SetCtrlVal(ctx->tabPanelHandle, ctx->statusControl, "Phase 0: Measuring OCV...");
+
+        result = RunPhase0_OCV(ctx);
+        if (result != SUCCESS || CheckCancellation(ctx)) {
+            if (!CheckCancellation(ctx)) {
+                ctx->state = BASELINE_STATE_ERROR;
+            }
+            goto cleanup;
+        }
+    }
+
     // PHASE 1: Initial Discharge and Temperature Setup
     // ALWAYS RUN - needed to establish 0% SOC baseline for Phase 3
     LogMessage("=== PHASE 1: Initial Discharge%s ===", ENABLE_DTB ? " and Temperature Setup" : "");
@@ -812,6 +840,7 @@ static int CreateExperimentFileSystem(BaselineExperimentContext *ctx) {
     // Create phase subdirectories
     char phaseDir[MAX_PATH_LENGTH];
     const char *phaseDirs[] = {
+        BASELINE_PHASE0_DIR,
         BASELINE_PHASE1_DIR,
         BASELINE_PHASE2_DIR,
         BASELINE_PHASE3_DIR,
@@ -959,6 +988,43 @@ static int SaveExperimentSettings(BaselineExperimentContext *ctx) {
 /******************************************************************************
  * Phase Implementation Functions
  ******************************************************************************/
+
+static int RunPhase0_OCV(BaselineExperimentContext *ctx) {
+    LogMessage("Phase 0: Running OCV measurement before discharge");
+
+    // Build OCV params from baseline params
+    OCVExperimentParams ocvParams;
+    memset(&ocvParams, 0, sizeof(ocvParams));
+    strncpy(ocvParams.batteryName, ctx->params.batteryName, sizeof(ocvParams.batteryName) - 1);
+    ocvParams.targetTemperature = ctx->params.targetTemperature;
+    ocvParams.tempTolerance = BASELINE_TEMP_TOLERANCE;
+    ocvParams.restTime = ctx->params.ocvRestTime;
+    ocvParams.enableTempControl = ENABLE_DTB;
+    ocvParams.logInterval = ctx->params.logInterval;
+
+    memset(&ctx->phase0Result, 0, sizeof(ctx->phase0Result));
+
+    int result = OCV_RunExperiment(&ocvParams,
+                                   ctx->experimentDirectory,
+                                   ctx->statusControl,
+                                   ctx->tabPanelHandle,
+                                   &ctx->cancelRequested,
+                                   &ctx->phase0Result);
+
+    if (result == SUCCESS) {
+        LogMessage("Phase 0 complete: OCV = %.4f V", ctx->phase0Result.finalOCV_V);
+
+        // Switch back to PSB for Phase 1
+        result = SwitchToPSB(ctx);
+        if (result != SUCCESS) {
+            LogError("Phase 0: Failed to switch back to PSB after OCV measurement");
+        }
+    } else {
+        LogError("Phase 0: OCV measurement failed with error %d", result);
+    }
+
+    return result;
+}
 
 static int RunPhase1_DischargeAndTemp(BaselineExperimentContext *ctx) {
     int result;
@@ -2893,6 +2959,20 @@ static int WriteComprehensiveResults(BaselineExperimentContext *ctx) {
     WriteINIValue(file, "CDAQ_Enabled", "%s", ENABLE_CDAQ ? "Yes" : "No");
     fprintf(file, "\n");
     
+    // Phase 0 Results (OCV)
+    if (ctx->params.runOCVPhase) {
+        WriteINISection(file, "Phase0_OCV_Measurement");
+        WriteINIDouble(file, "Final_OCV_V", ctx->phase0Result.finalOCV_V, 4);
+        WriteINIDouble(file, "Average_OCV_V", ctx->phase0Result.averageOCV_V, 4);
+        WriteINIDouble(file, "Min_OCV_V", ctx->phase0Result.minOCV_V, 4);
+        WriteINIDouble(file, "Max_OCV_V", ctx->phase0Result.maxOCV_V, 4);
+        WriteINIDouble(file, "Measurement_Duration_s", ctx->phase0Result.measurementDuration_s, 1);
+        WriteINIValue(file, "Num_Data_Points", "%d", ctx->phase0Result.numDataPoints);
+        WriteINIDouble(file, "Temperature_C", ctx->phase0Result.tempAtMeasurement, 1);
+        WriteINIDouble(file, "Rest_Time_s", ctx->params.ocvRestTime, 0);
+        fprintf(file, "\n");
+    }
+
     // Phase 1 Results
     WriteINISection(file, "Phase1_Initial_Discharge");
     WriteINIDouble(file, "Initial_Discharge_Capacity_mAh", ctx->phase1Results.capacity_mAh, 2);
@@ -3020,6 +3100,9 @@ static void CleanupExperiment(BaselineExperimentContext *ctx) {
         free(ctx->targetSOCs);
         ctx->targetSOCs = NULL;
     }
-    
+
+    // Free Phase 0 OCV result data
+    OCV_FreeResult(&ctx->phase0Result);
+
     LogMessage("Baseline experiment cleanup completed");
 }

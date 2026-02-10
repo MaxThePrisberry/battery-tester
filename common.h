@@ -184,6 +184,17 @@ typedef struct {
     char lastErrorMsg[MAX_ERROR_MSG_LENGTH];
 } DeviceInfo;
 
+// Temperature data point (used by multiple experiment modules)
+typedef struct {
+    double timestamp;                        // Time since experiment start (s)
+    double dtbTemperatures[DTB_NUM_DEVICES]; // All DTB measured temperatures (C)
+    double dtbAverageTemperature;            // Average DTB temperature (C)
+    int dtbDeviceCount;                      // Number of DTB devices that responded
+    double tc0Temperature;                   // Thermocouple 0 temperature (C)
+    double tc1Temperature;                   // Thermocouple 1 temperature (C)
+    char status[128];                        // Temperature controller status
+} TemperatureDataPoint;
+
 //==============================================================================
 // Global Variables (declare as extern, define in one .c file)
 //==============================================================================

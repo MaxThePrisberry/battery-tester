@@ -15,6 +15,7 @@
 #include "cdaq_utils.h"
 #include "exp_baseline.h"
 #include "exp_cdc.h"
+#include "exp_ocv.h"
 #include "logging.h"
 #include "status.h"
 #include "controls.h"
@@ -295,17 +296,27 @@ int CVICALLBACK PanelCallback(int panel, int event, void *callbackData,
 			if (CDCExperiment_IsRunning()) {
 			    LogMessage("Aborting running CDC test...");
 			    CDCExperiment_Abort();
-			    
+
 			    // Give it a moment to clean up properly
 			    ProcessSystemEvents();
 			    Delay(0.5);
 			}
-			
+
 			// Check if Baseline test is running and abort it
 			if (BaselineExperiment_IsRunning()) {
 			    LogMessage("Aborting running Baseline test...");
 			    BaselineExperiment_Abort();
-			    
+
+			    // Give it a moment to clean up properly
+			    ProcessSystemEvents();
+			    Delay(0.5);
+			}
+
+			// Check if OCV test is running and abort it
+			if (OCVExperiment_IsRunning()) {
+			    LogMessage("Aborting running OCV test...");
+			    OCVExperiment_Abort();
+
 			    // Give it a moment to clean up properly
 			    ProcessSystemEvents();
 			    Delay(0.5);
@@ -373,10 +384,14 @@ int CVICALLBACK PanelCallback(int panel, int event, void *callbackData,
 			// Clean up CDC test module
 			LogMessage("Cleaning up CDC experiment module...");
 			CDCExperiment_Cleanup();
-			
+
 			// Clean up Baseline test module
 			LogMessage("Cleaning up Baseline experiment module...");
 			BaselineExperiment_Cleanup();
+
+			// Clean up OCV test module
+			LogMessage("Cleaning up OCV experiment module...");
+			OCVExperiment_Cleanup();
             
 			LogMessage("Cleaning up controls module...");
 			Controls_Cleanup();
