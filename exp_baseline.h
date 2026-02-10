@@ -57,6 +57,7 @@
 #define BASELINE_PHASE2_DIR             "phase_2" 
 #define BASELINE_PHASE3_DIR             "phase_3"
 #define BASELINE_PHASE4_DIR             "phase_4"
+#define BASELINE_PHASE5_DIR             "phase_5"
 
 #define BASELINE_PHASE1_DISCHARGE_FILE  "discharge_data.csv"
 #define BASELINE_PHASE2_CHARGE_FILE     "charge_data.csv"
@@ -92,6 +93,7 @@ typedef enum {
     BASELINE_STATE_PHASE3_CHARGING,
     BASELINE_STATE_PHASE3_EIS_MEASUREMENT,
     BASELINE_STATE_PHASE4_DISCHARGE,
+    BASELINE_STATE_PHASE5_OCV,
     BASELINE_STATE_COMPLETED,
     BASELINE_STATE_ERROR,
     BASELINE_STATE_CANCELLED
@@ -103,7 +105,8 @@ typedef enum {
     BASELINE_PHASE_1 = 1,  // Initial discharge + temperature setup
     BASELINE_PHASE_2,      // Capacity experiment (charge -> discharge)
     BASELINE_PHASE_3,      // EIS measurements during charge
-    BASELINE_PHASE_4       // Discharge to 50%
+    BASELINE_PHASE_4,      // Discharge to 50%
+    BASELINE_PHASE_5       // Post-experiment OCV measurement (optional)
 } BaselineExperimentPhase;
 
 // Experiment parameters from UI
@@ -120,6 +123,7 @@ typedef struct {
     int useManualCapacity;       // If 1, skip phases 1&2 and use manual capacity
     double manualCapacity_mAh;   // Manually entered battery capacity (mAh)
     int runOCVPhase;             // If 1, run Phase 0 OCV measurement before Phase 1
+    int runOCVPost;              // If 1, run Phase 5 OCV measurement after Phase 4
     double ocvRestTime;          // Rest time before OCV measurement (seconds)
 } BaselineExperimentParams;
 
@@ -220,6 +224,7 @@ typedef struct {
     
     // Phase results
     OCVMeasurementResult phase0Result;  // Phase 0: OCV measurement
+    OCVMeasurementResult phase5Result;  // Phase 5: Post-experiment OCV measurement
     BaselinePhaseResults phase1Results;
     BaselinePhaseResults phase2ChargeResults;
     BaselinePhaseResults phase2DischargeResults;

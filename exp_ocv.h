@@ -24,7 +24,7 @@
  ******************************************************************************/
 
 // Rest period defaults
-#define OCV_REST_DEFAULT_TIME        300.0   // 5 min default rest (seconds)
+#define OCV_REST_DEFAULT_TIME        5.0     // 5 min default rest (minutes, for UI default)
 
 // Temperature control constants
 #define OCV_TEMP_TOLERANCE           2.0     // C tolerance for temperature target
@@ -74,7 +74,6 @@ typedef struct {
     double targetTemperature;    // DTB target temperature (C)
     double tempTolerance;        // Temperature tolerance (C)
     double restTime;             // Rest time before measurement (seconds)
-    int enableTempControl;       // Enable DTB temperature control
     unsigned int logInterval;    // Temperature logging interval during rest (seconds)
 } OCVExperimentParams;
 
@@ -155,8 +154,31 @@ int OCVExperiment_Abort(void);
 void OCVExperiment_Cleanup(void);
 
 /**
- * Run a full OCV experiment (for baseline Phase 0 integration).
+ * Run a full OCV experiment in a specified subdirectory with custom phase name.
  * Called from within an existing experiment thread - does NOT create its own thread.
+ *
+ * @param params - Experiment parameters
+ * @param experimentDir - Base experiment directory (phaseSubDir will be created under this)
+ * @param phaseSubDir - Subdirectory name (e.g., "phase_0", "phase_5")
+ * @param phaseName - Display name for log/status messages (e.g., "Phase 0", "Phase 5")
+ * @param statusControl - Tab panel status control for updates (0 to skip)
+ * @param tabPanelHandle - Tab panel handle (0 to skip UI updates)
+ * @param cancelFlag - Pointer to volatile cancel flag
+ * @param result - Output: measurement result (caller must call OCV_FreeResult)
+ * @return SUCCESS or error code
+ */
+int OCV_RunExperimentInDir(const OCVExperimentParams *params,
+                           const char *experimentDir,
+                           const char *phaseSubDir,
+                           const char *phaseName,
+                           int statusControl,
+                           int tabPanelHandle,
+                           volatile int *cancelFlag,
+                           OCVMeasurementResult *result);
+
+/**
+ * Run a full OCV experiment (for baseline Phase 0 integration).
+ * Convenience wrapper that calls OCV_RunExperimentInDir with "phase_0"/"Phase 0".
  *
  * @param params - Experiment parameters
  * @param experimentDir - Base experiment directory (phase_0 subdir will be created)

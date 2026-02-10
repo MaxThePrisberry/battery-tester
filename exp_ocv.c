@@ -27,7 +27,6 @@ static CmtThreadFunctionID g_ocvThreadId = 0;
 #define OCV_BATTERYNAME       0
 #define OCV_NUM_TEMPERATURE   0
 #define OCV_NUM_REST_TIME     0
-#define OCV_CHK_TEMP_CONTROL  0
 #define OCV_NUM_INTERVAL      0
 #define OCV_BTN_START         0
 #define OCV_STR_STATUS        0
@@ -39,7 +38,6 @@ static const int g_ocvControls[] = {
     OCV_BATTERYNAME,
     OCV_NUM_TEMPERATURE,
     OCV_NUM_REST_TIME,
-    OCV_CHK_TEMP_CONTROL,
     OCV_NUM_INTERVAL,
     OCV_BTN_START,
     OCV_STR_STATUS,
@@ -123,7 +121,7 @@ int CVICALLBACK StartOCVExperimentCallback(int panel, int control, int event,
     GetCtrlVal(panel, OCV_BATTERYNAME, g_ocvContext.params.batteryName);
     GetCtrlVal(panel, OCV_NUM_TEMPERATURE, &g_ocvContext.params.targetTemperature);
     GetCtrlVal(panel, OCV_NUM_REST_TIME, &g_ocvContext.params.restTime);
-    GetCtrlVal(panel, OCV_CHK_TEMP_CONTROL, &g_ocvContext.params.enableTempControl);
+    g_ocvContext.params.restTime *= 60.0;  // UI is in minutes, internal is seconds
     GetCtrlVal(panel, OCV_NUM_INTERVAL, &g_ocvContext.params.logInterval);
     g_ocvContext.params.tempTolerance = OCV_TEMP_TOLERANCE;
 
@@ -198,43 +196,47 @@ void OCV_FreeResult(OCVMeasurementResult *result) {
  * Public API for Baseline Integration
  ******************************************************************************/
 
-int OCV_RunExperiment(const OCVExperimentParams *params,
-                      const char *experimentDir,
-                      int statusControl,
-                      int tabPanelHandle,
-                      volatile int *cancelFlag,
-                      OCVMeasurementResult *result) {
+int OCV_RunExperimentInDir(const OCVExperimentParams *params,
+                           const char *experimentDir,
+                           const char *phaseSubDir,
+                           const char *phaseName,
+                           int statusControl,
+                           int tabPanelHandle,
+                           volatile int *cancelFlag,
+                           OCVMeasurementResult *result) {
     int err = SUCCESS;
 
-    if (!params || !experimentDir || !result) {
+    if (!params || !experimentDir || !phaseSubDir || !phaseName || !result) {
         return ERR_NULL_POINTER;
     }
 
     memset(result, 0, sizeof(OCVMeasurementResult));
 
-    LogMessage("=== OCV Experiment (Phase 0) ===");
+    LogMessage("=== OCV Experiment (%s) ===", phaseName);
 
-    // Create phase_0 subdirectory
+    // Create phase subdirectory
     char phaseDir[MAX_PATH_LENGTH];
-    snprintf(phaseDir, sizeof(phaseDir), "%s%sphase_0", experimentDir, PATH_SEPARATOR);
+    snprintf(phaseDir, sizeof(phaseDir), "%s%s%s", experimentDir, PATH_SEPARATOR, phaseSubDir);
     err = CreateDirectoryPath(phaseDir);
     if (err != SUCCESS) {
-        LogError("Failed to create Phase 0 directory: %s", phaseDir);
+        LogError("Failed to create %s directory: %s", phaseName, phaseDir);
         return err;
     }
 
     // Switch to Bio-Logic
     if (statusControl && tabPanelHandle) {
-        SetCtrlVal(tabPanelHandle, statusControl, "Phase 0: Switching to Bio-Logic...");
+        char statusMsg[MEDIUM_BUFFER_SIZE];
+        snprintf(statusMsg, sizeof(statusMsg), "%s: Switching to Bio-Logic...", phaseName);
+        SetCtrlVal(tabPanelHandle, statusControl, statusMsg);
     }
     err = SwitchToBioLogic();
     if (err != SUCCESS) {
-        LogError("Phase 0: Failed to switch to Bio-Logic");
+        LogError("%s: Failed to switch to Bio-Logic", phaseName);
         return err;
     }
 
     // Temperature control (if enabled)
-    if (params->enableTempControl && ENABLE_DTB) {
+    if (ENABLE_DTB) {
         // Set up a temporary context for temperature functions
         OCVExperimentContext tempCtx = {0};
         tempCtx.params = *params;
@@ -246,7 +248,9 @@ int OCV_RunExperiment(const OCVExperimentParams *params,
         }
 
         if (statusControl && tabPanelHandle) {
-            SetCtrlVal(tabPanelHandle, statusControl, "Phase 0: Setting up temperature control...");
+            char statusMsg[MEDIUM_BUFFER_SIZE];
+            snprintf(statusMsg, sizeof(statusMsg), "%s: Setting up temperature control...", phaseName);
+            SetCtrlVal(tabPanelHandle, statusControl, statusMsg);
         }
         err = SetupTemperatureControl(&tempCtx);
         if (err != SUCCESS) return err;
@@ -254,7 +258,9 @@ int OCV_RunExperiment(const OCVExperimentParams *params,
         if (cancelFlag && *cancelFlag) return ERR_CANCELLED;
 
         if (statusControl && tabPanelHandle) {
-            SetCtrlVal(tabPanelHandle, statusControl, "Phase 0: Waiting for target temperature...");
+            char statusMsg[MEDIUM_BUFFER_SIZE];
+            snprintf(statusMsg, sizeof(statusMsg), "%s: Waiting for target temperature...", phaseName);
+            SetCtrlVal(tabPanelHandle, statusControl, statusMsg);
         }
         err = WaitForTargetTemperature(&tempCtx);
         if (err != SUCCESS) return err;
@@ -262,7 +268,9 @@ int OCV_RunExperiment(const OCVExperimentParams *params,
         if (cancelFlag && *cancelFlag) return ERR_CANCELLED;
 
         if (statusControl && tabPanelHandle) {
-            SetCtrlVal(tabPanelHandle, statusControl, "Phase 0: Stabilizing temperature...");
+            char statusMsg[MEDIUM_BUFFER_SIZE];
+            snprintf(statusMsg, sizeof(statusMsg), "%s: Stabilizing temperature...", phaseName);
+            SetCtrlVal(tabPanelHandle, statusControl, statusMsg);
         }
         err = StabilizeTemperature(&tempCtx);
         if (err != SUCCESS) return err;
@@ -272,10 +280,10 @@ int OCV_RunExperiment(const OCVExperimentParams *params,
 
     // Rest period
     if (params->restTime > 0) {
-        LogMessage("Phase 0: Resting for %.0f seconds...", params->restTime);
+        LogMessage("%s: Resting for %.0f seconds...", phaseName, params->restTime);
         if (statusControl && tabPanelHandle) {
             char statusMsg[MEDIUM_BUFFER_SIZE];
-            snprintf(statusMsg, sizeof(statusMsg), "Phase 0: Resting (%.0f s)...", params->restTime);
+            snprintf(statusMsg, sizeof(statusMsg), "%s: Resting (%.0f s)...", phaseName, params->restTime);
             SetCtrlVal(tabPanelHandle, statusControl, statusMsg);
         }
 
@@ -316,14 +324,16 @@ int OCV_RunExperiment(const OCVExperimentParams *params,
         }
 
         if (restLog) fclose(restLog);
-        LogMessage("Phase 0: Rest period completed");
+        LogMessage("%s: Rest period completed", phaseName);
     }
 
     if (cancelFlag && *cancelFlag) return ERR_CANCELLED;
 
     // Run OCV measurement
     if (statusControl && tabPanelHandle) {
-        SetCtrlVal(tabPanelHandle, statusControl, "Phase 0: Measuring OCV...");
+        char statusMsg[MEDIUM_BUFFER_SIZE];
+        snprintf(statusMsg, sizeof(statusMsg), "%s: Measuring OCV...", phaseName);
+        SetCtrlVal(tabPanelHandle, statusControl, statusMsg);
     }
 
     // Use a mutable cancel flag if the caller's is NULL
@@ -332,7 +342,7 @@ int OCV_RunExperiment(const OCVExperimentParams *params,
 
     err = RunOCVMeasurement(NULL, result, useCancel);
     if (err != SUCCESS) {
-        LogError("Phase 0: OCV measurement failed");
+        LogError("%s: OCV measurement failed", phaseName);
         return err;
     }
 
@@ -352,8 +362,18 @@ int OCV_RunExperiment(const OCVExperimentParams *params,
         fclose(resultsFile);
     }
 
-    LogMessage("Phase 0: OCV = %.4f V (avg: %.4f V)", result->finalOCV_V, result->averageOCV_V);
+    LogMessage("%s: OCV = %.4f V (avg: %.4f V)", phaseName, result->finalOCV_V, result->averageOCV_V);
     return SUCCESS;
+}
+
+int OCV_RunExperiment(const OCVExperimentParams *params,
+                      const char *experimentDir,
+                      int statusControl,
+                      int tabPanelHandle,
+                      volatile int *cancelFlag,
+                      OCVMeasurementResult *result) {
+    return OCV_RunExperimentInDir(params, experimentDir, "phase_0", "Phase 0",
+                                  statusControl, tabPanelHandle, cancelFlag, result);
 }
 
 int OCV_QuickMeasurement(volatile int *cancelFlag, OCVMeasurementResult *result) {
@@ -451,7 +471,7 @@ static int OCVExperimentThread(void *functionData) {
     }
 
     // Temperature control (if enabled)
-    if (ctx->params.enableTempControl && ENABLE_DTB) {
+    if (ENABLE_DTB) {
         ctx->state = OCV_STATE_TEMP_WAIT;
         SetCtrlVal(ctx->tabPanelHandle, ctx->statusControl, "Setting up temperature control...");
         result = SetupTemperatureControl(ctx);
@@ -1004,7 +1024,7 @@ static int SaveExperimentSettings(OCVExperimentContext *ctx) {
     WriteINIDouble(file, "Target_Temperature_C", ctx->params.targetTemperature, 1);
     WriteINIDouble(file, "Temperature_Tolerance_C", ctx->params.tempTolerance, 1);
     WriteINIDouble(file, "Rest_Time_s", ctx->params.restTime, 0);
-    WriteINIValue(file, "Temperature_Control_Enabled", "%d", ctx->params.enableTempControl);
+    WriteINIValue(file, "Temperature_Control_Enabled", "%d", ENABLE_DTB);
     WriteINIValue(file, "Log_Interval_s", "%u", ctx->params.logInterval);
 
     time_t now = time(NULL);
@@ -1066,7 +1086,7 @@ static void CleanupExperiment(OCVExperimentContext *ctx) {
     DisconnectBioLogic();
 
     // Stop DTB if we started it
-    if (ctx->params.enableTempControl && ENABLE_DTB) {
+    if (ENABLE_DTB) {
         DTB_SetRunStopAllQueued(0, DEVICE_PRIORITY_NORMAL);
     }
 
