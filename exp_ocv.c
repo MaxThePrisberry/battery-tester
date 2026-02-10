@@ -122,11 +122,7 @@ int CVICALLBACK StartOCVExperimentCallback(int panel, int control, int event,
     GetCtrlVal(panel, OCV_NUM_TEMPERATURE, &g_ocvContext.params.targetTemperature);
     GetCtrlVal(panel, OCV_NUM_REST_TIME, &g_ocvContext.params.restTime);
     g_ocvContext.params.restTime *= 60.0;  // UI is in minutes, internal is seconds
-    {
-        double tempLogInterval;
-        GetCtrlVal(panel, OCV_NUM_INTERVAL, &tempLogInterval);
-        g_ocvContext.params.logInterval = (unsigned int)tempLogInterval;
-    }
+    GetCtrlVal(panel, OCV_NUM_INTERVAL, &g_ocvContext.params.logInterval);
     g_ocvContext.params.tempTolerance = OCV_TEMP_TOLERANCE;
 
     // Change button text to "Stop"

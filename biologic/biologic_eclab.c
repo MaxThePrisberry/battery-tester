@@ -89,9 +89,9 @@ static int MonitorMeasurement(int timeout_ms,
         // Log status periodically
         if (pollCount % 10 == 0) {  // Every 5 seconds
             LogMessageEx(LOG_DEVICE_BIO,
-                        "Status: %d, Technique: %d, Time: %.1f s, Points: %d",
+                        "Status: %d, Technique: %d, Time: %.1f s, Ewe: %.4f V, I: %.4f A",
                         status.status, status.techniqueCode, status.time,
-                        status.totalPointIndex);
+                        status.ewe, status.current);
         }
         pollCount++;
 
@@ -112,8 +112,8 @@ static int MonitorMeasurement(int timeout_ms,
         // Check if measurement is complete
         // Only accept STOP after we've seen RUN to avoid detecting initial state
         if (status.status == ECLAB_STATUS_STOP && measurementStarted) {
-            LogMessageEx(LOG_DEVICE_BIO, "Measurement completed (%.1f s, %d points)",
-                        status.time, status.totalPointIndex);
+            LogMessageEx(LOG_DEVICE_BIO, "Measurement completed (%.1f s, Ewe: %.4f V)",
+                        status.time, status.ewe);
             if (finalStatus) {
                 *finalStatus = status;
             }
