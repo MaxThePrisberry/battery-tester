@@ -2570,7 +2570,8 @@ static int RunOCVMeasurement(BaselineExperimentContext *ctx, BaselineEISMeasurem
                                 OCV_E_RANGE,
                                 &measurement->ocvData,
                                 OCV_TIMEOUT_MS,
-                                NULL, NULL, &(ctx->cancelRequested));
+                                NULL, NULL, &(ctx->cancelRequested),
+                                NULL);
     
     if (result != SUCCESS) {
         LogError("OCV measurement failed: %s", BIO_GetErrorString(result));

@@ -931,7 +931,8 @@ static int RunOCVMeasurement(OCVExperimentContext *ctx, OCVMeasurementResult *re
                                   OCV_E_RANGE,
                                   &result->rawOCVData,
                                   OCV_EXP_TIMEOUT_MS,
-                                  NULL, NULL, cancelFlag);
+                                  NULL, NULL, cancelFlag,
+                                  ECLAB_OCV_EXPERIMENT_TEMPLATE);
 
     if (err != SUCCESS) {
         LogError("OCV measurement failed: %s", BIO_GetErrorString(err));

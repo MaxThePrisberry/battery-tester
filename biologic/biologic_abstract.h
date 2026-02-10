@@ -140,6 +140,7 @@ int BIO_GetAbstractConfig(BIO_Config *config);
  * @param progressCallback Optional progress callback
  * @param userData         User data for callback
  * @param cancelled        Cancellation flag (optional)
+ * @param eclabTemplate    EC-Lab .mps template filename override (NULL for default)
  * @return SUCCESS or error code
  */
 int BIO_Abstract_RunOCV(uint8_t channel,
@@ -152,7 +153,8 @@ int BIO_Abstract_RunOCV(uint8_t channel,
                        int timeout_ms,
                        BioTechniqueProgressCallback progressCallback,
                        void *userData,
-                       volatile int *cancelled);
+                       volatile int *cancelled,
+                       const char *eclabTemplate);
 
 /**
  * Run PEIS measurement (unified)

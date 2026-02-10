@@ -540,6 +540,7 @@ void DimExperimentControls(int mainPanel, int tabPanel, int dim, int *controls, 
 // These files must exist in ECLAB_SETTINGS_DIR
 // Create them in EC-Lab: Configure technique → File → Save Settings
 #define ECLAB_OCV_TEMPLATE              "ocv_default.mps"
+#define ECLAB_OCV_EXPERIMENT_TEMPLATE   "ocv_experiment.mps"
 #define ECLAB_PEIS_TEMPLATE             "peis_default.mps"
 #define ECLAB_GEIS_TEMPLATE             "geis_default.mps"
 

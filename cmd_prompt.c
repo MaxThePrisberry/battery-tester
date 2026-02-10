@@ -402,7 +402,8 @@ static int BioLogicCommandManager(CommandContext *ctx) {
 		                           60000,      // 60 second timeout
 		                           NULL,       // no progress callback
 		                           NULL,       // no user data
-		                           NULL);      // no cancel flag
+		                           NULL,       // no cancel flag
+		                           NULL);      // default EC-Lab template
 
 		if (error != SUCCESS) {
 			snprintf(message, sizeof(message), "OCV failed: %s", GetErrorString(error));

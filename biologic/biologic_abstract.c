@@ -157,7 +157,8 @@ int BIO_Abstract_RunOCV(uint8_t channel,
                        int timeout_ms,
                        BioTechniqueProgressCallback progressCallback,
                        void *userData,
-                       volatile int *cancelled) {
+                       volatile int *cancelled,
+                       const char *eclabTemplate) {
     if (!g_abstractInitialized) return ERR_NOT_INITIALIZED;
 
     LogDebugEx(LOG_DEVICE_BIO, "Running OCV via %s",
@@ -182,17 +183,26 @@ int BIO_Abstract_RunOCV(uint8_t channel,
                 cancelled
             );
 
-        case BIO_MODE_ECLAB_OLECOM:
-            // In EC-Lab mode, parameters are ignored (come from .mps file)
+        case BIO_MODE_ECLAB_OLECOM: {
+            // In EC-Lab mode, DLL parameters are ignored (come from .mps file)
+            // If eclabTemplate is provided, build full path; otherwise use default
+            char *mpsPath = NULL;
+            char mpsFullPath[MAX_PATH];
+            if (eclabTemplate) {
+                snprintf(mpsFullPath, sizeof(mpsFullPath), "%s\\%s",
+                         g_abstractConfig.eclab.settingsDir, eclabTemplate);
+                mpsPath = mpsFullPath;
+            }
             return BIO_ECLAB_RunOCV(
-                NULL,  // Use template from config
-                NULL,  // Auto-generate output filename
+                mpsPath,  // NULL for default template, or full path for override
+                NULL,     // Auto-generate output filename
                 result,
                 timeout_ms,
                 progressCallback,
                 userData,
                 cancelled
             );
+        }
 
         default:
             return ERR_INVALID_STATE;
