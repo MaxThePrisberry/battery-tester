@@ -74,14 +74,17 @@
      /* tab page panel controls */
 #define  BASELINE_NUM_EIS_INTERVAL        2       /* control type: numeric, callback function: (none) */
 #define  BASELINE_NUM_CURRENT_THRESHOLD   3       /* control type: numeric, callback function: (none) */
-#define  BASELINE_NUM_TEMPERATURE         4       /* control type: numeric, callback function: (none) */
-#define  BASELINE_NUM_INTERVAL            5       /* control type: numeric, callback function: (none) */
-#define  BASELINE_BTN_BASELINE            6       /* control type: command, callback function: StartBaselineExperimentCallback */
-#define  BASELINE_NUM_OUTPUT              7       /* control type: numeric, callback function: (none) */
-#define  BASELINE_STR_BASELINE_STATUS     8       /* control type: string, callback function: (none) */
-#define  BASELINE_CHK_MANUAL_C            9       /* control type: radioButton, callback function: (none) */
-#define  BASELINE_NUM_MANUAL_C            10      /* control type: numeric, callback function: (none) */
-#define  BASELINE_BATTERYNAME             11      /* control type: string, callback function: (none) */
+#define  BASELINE_NUM_REST_TIME           4       /* control type: numeric, callback function: (none) */
+#define  BASELINE_NUM_TEMPERATURE         5       /* control type: numeric, callback function: (none) */
+#define  BASELINE_NUM_INTERVAL            6       /* control type: numeric, callback function: (none) */
+#define  BASELINE_BTN_BASELINE            7       /* control type: command, callback function: StartBaselineExperimentCallback */
+#define  BASELINE_NUM_OUTPUT              8       /* control type: numeric, callback function: (none) */
+#define  BASELINE_STR_BASELINE_STATUS     9       /* control type: string, callback function: (none) */
+#define  BASELINE_CHK_OCV_POST            10      /* control type: radioButton, callback function: (none) */
+#define  BASELINE_CHK_OCV_PHASE           11      /* control type: radioButton, callback function: (none) */
+#define  BASELINE_CHK_MANUAL_C            12      /* control type: radioButton, callback function: (none) */
+#define  BASELINE_NUM_MANUAL_C            13      /* control type: numeric, callback function: (none) */
+#define  BASELINE_BATTERYNAME             14      /* control type: string, callback function: (none) */
 
      /* tab page panel controls */
 #define  CDC_BTN_DISCHARGE                2       /* control type: command, callback function: CDCDischargeCallback */
@@ -94,6 +97,10 @@
 #define  OCV_NUM_TEMPERATURE              2       /* control type: numeric, callback function: (none) */
 #define  OCV_BATTERYNAME                  3       /* control type: string, callback function: (none) */
 #define  OCV_NUM_REST_TIME                4       /* control type: numeric, callback function: (none) */
+#define  OCV_NUM_INTERVAL                 5       /* control type: numeric, callback function: (none) */
+#define  OCV_BTN_BASELINE                 6       /* control type: command, callback function: StartBaselineExperimentCallback */
+#define  OCV_NUM_OUTPUT                   7       /* control type: numeric, callback function: (none) */
+#define  OCV_STR_BASELINE_STATUS          8       /* control type: string, callback function: (none) */
 
 
      /* Control Arrays: */
