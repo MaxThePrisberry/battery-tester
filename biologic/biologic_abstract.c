@@ -405,6 +405,23 @@ int BIO_Abstract_TestConnection(void) {
     }
 }
 
+int BIO_Abstract_SetDataDir(const char *dataDir) {
+    if (!dataDir) return ERR_NULL_POINTER;
+    if (!g_abstractInitialized) return ERR_NOT_INITIALIZED;
+
+    switch (g_abstractConfig.mode) {
+        case BIO_MODE_ECLAB_OLECOM:
+            return BIO_ECLAB_SetDataDir(dataDir);
+
+        case BIO_MODE_DIRECT_DLL:
+            // No-op for DLL mode - data is returned in memory
+            return SUCCESS;
+
+        default:
+            return ERR_INVALID_STATE;
+    }
+}
+
 const char* BIO_GetModeName(BIO_ControlMode mode) {
     switch (mode) {
         case BIO_MODE_DIRECT_DLL: return "Direct DLL";

@@ -279,6 +279,18 @@ int BIO_Abstract_Connect(void);
 int BIO_Abstract_TestConnection(void);
 
 /**
+ * Set data directory for EC-Lab .mpr output files
+ *
+ * In EC-Lab mode, redirects .mpr file output to the specified directory.
+ * In Direct DLL mode, this is a no-op (returns SUCCESS).
+ * Use this so experiment modules can save .mpr files alongside other data.
+ *
+ * @param dataDir Directory path for .mpr files
+ * @return SUCCESS or error code
+ */
+int BIO_Abstract_SetDataDir(const char *dataDir);
+
+/**
  * Get mode name as string
  *
  * @param mode Control mode

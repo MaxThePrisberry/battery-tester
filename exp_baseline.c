@@ -1886,7 +1886,7 @@ static int RunPhase3_EISCharge(BaselineExperimentContext *ctx) {
         fprintf(ocvFile, "SOC_Percent,OCV_V,Timestamp_s,Temperature_C\n");
         for (int i = 0; i < ctx->eisMeasurementCount; i++) {
             BaselineEISMeasurement *m = &ctx->eisMeasurements[i];
-            fprintf(ocvFile, "%.2f,%.4f,%.1f,%.2f\n", 
+            fprintf(ocvFile, "%.2f,%.8f,%.1f,%.2f\n",
                     m->actualSOC, m->ocvVoltage, m->timestamp, m->tempData.dtbAverageTemperature);
         }
         fclose(ocvFile);
@@ -2406,6 +2406,15 @@ static int PerformEISMeasurement(BaselineExperimentContext *ctx, double targetSO
         return result;
     }
 
+    // Direct EC-Lab .mpr output to the EIS measurements directory
+    {
+        char eisDir[MAX_PATH_LENGTH];
+        snprintf(eisDir, sizeof(eisDir), "%s%s%s%s%s",
+                 ctx->experimentDirectory, PATH_SEPARATOR,
+                 BASELINE_PHASE3_DIR, PATH_SEPARATOR, BASELINE_PHASE3_EIS_DIR);
+        BIO_Abstract_SetDataDir(eisDir);
+    }
+
     // Perform repeated EIS measurements during relaxation to capture impedance dynamics
     // Measurements every BASELINE_RELAXATION_EIS_INTERVAL seconds for BASELINE_RELAXATION_EIS_DURATION total
     double relaxationStart = Timer();
@@ -2470,7 +2479,7 @@ static int PerformEISMeasurement(BaselineExperimentContext *ctx, double targetSO
         ctx->eisMeasurementCount++;
         measurementNum++;
 
-        LogMessage("Relaxation EIS #%d completed at %.1f%% SOC (OCV: %.3f V, relaxation: %.0f s)",
+        LogMessage("Relaxation EIS #%d completed at %.1f%% SOC (OCV: %.8f V, relaxation: %.0f s)",
                    measurementNum, measurement->actualSOC, measurement->ocvVoltage, relaxationTime);
 
         // Check if we've reached the total relaxation duration
@@ -2591,7 +2600,7 @@ static int RunOCVMeasurement(BaselineExperimentContext *ctx, BaselineEISMeasurem
         if (convData->numPoints > 0 && convData->numVariables >= 2 && convData->data[1] != NULL) {
             int lastPoint = convData->numPoints - 1;
             measurement->ocvVoltage = convData->data[1][lastPoint];
-            LogDebug("OCV measurement complete: %.3f V", measurement->ocvVoltage);
+            LogDebug("OCV measurement complete: %.8f V", measurement->ocvVoltage);
         } else {
             LogWarning("OCV data incomplete - using 0.0 V");
         }
@@ -2746,7 +2755,7 @@ static int SaveEISMeasurementData(BaselineExperimentContext *ctx, BaselineEISMea
     WriteINIDouble(file, "Elapsed_Time_s", measurement->timestamp, 1);
     WriteINIDouble(file, "Target_SOC_Percent", measurement->targetSOC, 1);
     WriteINIDouble(file, "Actual_SOC_Percent", measurement->actualSOC, 1);
-    WriteINIDouble(file, "OCV_Voltage_V", measurement->ocvVoltage, 4);
+    WriteINIDouble(file, "OCV_Voltage_V", measurement->ocvVoltage, 8);
     WriteINIDouble(file, "DTB_Temperature_C", measurement->tempData.dtbAverageTemperature, 1);
     WriteINIDouble(file, "TC0_Temperature_C", measurement->tempData.tc0Temperature, 1);
     WriteINIDouble(file, "TC1_Temperature_C", measurement->tempData.tc1Temperature, 1);
@@ -3087,7 +3096,7 @@ static int WriteComprehensiveResults(BaselineExperimentContext *ctx) {
         
         fprintf(file, "OCV_Values=");
         for (int i = 0; i < ctx->eisMeasurementCount; i++) {
-            fprintf(file, "%.3f", ctx->eisMeasurements[i].ocvVoltage);
+            fprintf(file, "%.8f", ctx->eisMeasurements[i].ocvVoltage);
             if (i < ctx->eisMeasurementCount - 1) fprintf(file, ",");
         }
         fprintf(file, "\n");
@@ -3105,10 +3114,10 @@ static int WriteComprehensiveResults(BaselineExperimentContext *ctx) {
     // Phase 5 Results (Post-Experiment OCV)
     if (ctx->params.runOCVPost) {
         WriteINISection(file, "Phase5_Post_OCV_Measurement");
-        WriteINIDouble(file, "Final_OCV_V", ctx->phase5Result.finalOCV_V, 4);
-        WriteINIDouble(file, "Average_OCV_V", ctx->phase5Result.averageOCV_V, 4);
-        WriteINIDouble(file, "Min_OCV_V", ctx->phase5Result.minOCV_V, 4);
-        WriteINIDouble(file, "Max_OCV_V", ctx->phase5Result.maxOCV_V, 4);
+        WriteINIDouble(file, "Final_OCV_V", ctx->phase5Result.finalOCV_V, 8);
+        WriteINIDouble(file, "Average_OCV_V", ctx->phase5Result.averageOCV_V, 8);
+        WriteINIDouble(file, "Min_OCV_V", ctx->phase5Result.minOCV_V, 8);
+        WriteINIDouble(file, "Max_OCV_V", ctx->phase5Result.maxOCV_V, 8);
         WriteINIDouble(file, "Measurement_Duration_s", ctx->phase5Result.measurementDuration_s, 1);
         WriteINIValue(file, "Num_Data_Points", "%d", ctx->phase5Result.numDataPoints);
         WriteINIDouble(file, "Temperature_C", ctx->phase5Result.tempAtMeasurement, 1);
@@ -3123,9 +3132,9 @@ static int WriteComprehensiveResults(BaselineExperimentContext *ctx) {
     WriteINIDouble(file, "Initial_Residual_Capacity_mAh", ctx->phase1Results.capacity_mAh, 1);
     
     if (ctx->eisMeasurementCount >= 2) {
-        WriteINIDouble(file, "OCV_Range_V", 
-                      ctx->eisMeasurements[ctx->eisMeasurementCount-1].ocvVoltage - 
-                      ctx->eisMeasurements[0].ocvVoltage, 3);
+        WriteINIDouble(file, "OCV_Range_V",
+                      ctx->eisMeasurements[ctx->eisMeasurementCount-1].ocvVoltage -
+                      ctx->eisMeasurements[0].ocvVoltage, 8);
     }
     
     // Files and Data References

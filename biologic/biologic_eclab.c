@@ -269,6 +269,28 @@ int BIO_ECLAB_GetConfig(ECLAB_Config *config) {
     return SUCCESS;
 }
 
+int BIO_ECLAB_SetDataDir(const char *dataDir) {
+    if (!dataDir) return ERR_NULL_POINTER;
+    if (!g_initialized) return ERR_NOT_INITIALIZED;
+
+    strncpy(g_config.dataDir, dataDir, MAX_PATH - 1);
+    g_config.dataDir[MAX_PATH - 1] = '\0';
+
+    // Create directory if it doesn't exist
+    if (GetFileAttributesA(g_config.dataDir) == INVALID_FILE_ATTRIBUTES) {
+        if (!CreateDirectoryA(g_config.dataDir, NULL)) {
+            DWORD err = GetLastError();
+            if (err != ERROR_ALREADY_EXISTS) {
+                LogErrorEx(LOG_DEVICE_BIO, "Failed to create data directory: %s", g_config.dataDir);
+                return ERR_OPERATION_FAILED;
+            }
+        }
+    }
+
+    LogMessageEx(LOG_DEVICE_BIO, "EC-Lab data directory set to: %s", g_config.dataDir);
+    return SUCCESS;
+}
+
 /******************************************************************************
  * Technique Functions
  ******************************************************************************/

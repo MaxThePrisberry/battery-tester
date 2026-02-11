@@ -336,6 +336,9 @@ int OCV_RunExperimentInDir(const OCVExperimentParams *params,
         SetCtrlVal(tabPanelHandle, statusControl, statusMsg);
     }
 
+    // Direct EC-Lab .mpr output to the phase directory
+    BIO_Abstract_SetDataDir(phaseDir);
+
     // Use a mutable cancel flag if the caller's is NULL
     volatile int localCancel = 0;
     volatile int *useCancel = cancelFlag ? cancelFlag : &localCancel;
@@ -352,17 +355,17 @@ int OCV_RunExperimentInDir(const OCVExperimentParams *params,
     FILE *resultsFile = fopen(resultsPath, "w");
     if (resultsFile) {
         WriteINISection(resultsFile, "OCV_Results");
-        WriteINIDouble(resultsFile, "Final_OCV_V", result->finalOCV_V, 4);
-        WriteINIDouble(resultsFile, "Average_OCV_V", result->averageOCV_V, 4);
-        WriteINIDouble(resultsFile, "Min_OCV_V", result->minOCV_V, 4);
-        WriteINIDouble(resultsFile, "Max_OCV_V", result->maxOCV_V, 4);
+        WriteINIDouble(resultsFile, "Final_OCV_V", result->finalOCV_V, 8);
+        WriteINIDouble(resultsFile, "Average_OCV_V", result->averageOCV_V, 8);
+        WriteINIDouble(resultsFile, "Min_OCV_V", result->minOCV_V, 8);
+        WriteINIDouble(resultsFile, "Max_OCV_V", result->maxOCV_V, 8);
         WriteINIDouble(resultsFile, "Measurement_Duration_s", result->measurementDuration_s, 1);
         WriteINIValue(resultsFile, "Num_Data_Points", "%d", result->numDataPoints);
         WriteINIDouble(resultsFile, "Temperature_At_Measurement_C", result->tempAtMeasurement, 1);
         fclose(resultsFile);
     }
 
-    LogMessage("%s: OCV = %.4f V (avg: %.4f V)", phaseName, result->finalOCV_V, result->averageOCV_V);
+    LogMessage("%s: OCV = %.8f V (avg: %.8f V)", phaseName, result->finalOCV_V, result->averageOCV_V);
     return SUCCESS;
 }
 
@@ -407,7 +410,7 @@ int OCV_QuickMeasurement(volatile int *cancelFlag, OCVMeasurementResult *result)
         return err;
     }
 
-    LogMessage("Quick OCV: %.4f V", result->finalOCV_V);
+    LogMessage("Quick OCV: %.8f V", result->finalOCV_V);
     return SUCCESS;
 }
 
@@ -509,6 +512,10 @@ static int OCVExperimentThread(void *functionData) {
     // OCV measurement
     ctx->state = OCV_STATE_MEASURING;
     SetCtrlVal(ctx->tabPanelHandle, ctx->statusControl, "Measuring OCV...");
+
+    // Direct EC-Lab .mpr output to the experiment directory
+    BIO_Abstract_SetDataDir(ctx->experimentDirectory);
+
     result = RunOCVMeasurement(ctx, &ctx->result, &ctx->cancelRequested);
     if (result != SUCCESS || CheckCancellation(ctx)) {
         if (!CheckCancellation(ctx)) ctx->state = OCV_STATE_ERROR;
@@ -522,7 +529,7 @@ static int OCVExperimentThread(void *functionData) {
     SaveOCVResults(ctx);
 
     ctx->state = OCV_STATE_COMPLETED;
-    LogMessage("=== OCV Experiment Completed: %.4f V ===", ctx->result.finalOCV_V);
+    LogMessage("=== OCV Experiment Completed: %.8f V ===", ctx->result.finalOCV_V);
 
 cleanup:
     CleanupExperiment(ctx);
@@ -969,7 +976,7 @@ static int RunOCVMeasurement(OCVExperimentContext *ctx, OCVMeasurementResult *re
                 result->measurementDuration_s = convData->data[0][lastPoint];
             }
 
-            LogMessage("OCV measurement: final=%.4f V, avg=%.4f V, min=%.4f V, max=%.4f V (%d points)",
+            LogMessage("OCV measurement: final=%.8f V, avg=%.8f V, min=%.8f V, max=%.8f V (%d points)",
                        result->finalOCV_V, result->averageOCV_V,
                        result->minOCV_V, result->maxOCV_V, result->numDataPoints);
         } else {
@@ -1049,10 +1056,10 @@ static int SaveOCVResults(OCVExperimentContext *ctx) {
     }
 
     WriteINISection(file, "OCV_Results");
-    WriteINIDouble(file, "Final_OCV_V", ctx->result.finalOCV_V, 4);
-    WriteINIDouble(file, "Average_OCV_V", ctx->result.averageOCV_V, 4);
-    WriteINIDouble(file, "Min_OCV_V", ctx->result.minOCV_V, 4);
-    WriteINIDouble(file, "Max_OCV_V", ctx->result.maxOCV_V, 4);
+    WriteINIDouble(file, "Final_OCV_V", ctx->result.finalOCV_V, 8);
+    WriteINIDouble(file, "Average_OCV_V", ctx->result.averageOCV_V, 8);
+    WriteINIDouble(file, "Min_OCV_V", ctx->result.minOCV_V, 8);
+    WriteINIDouble(file, "Max_OCV_V", ctx->result.maxOCV_V, 8);
     WriteINIDouble(file, "Measurement_Duration_s", ctx->result.measurementDuration_s, 1);
     WriteINIValue(file, "Num_Data_Points", "%d", ctx->result.numDataPoints);
     WriteINIDouble(file, "Temperature_At_Measurement_C", ctx->result.tempAtMeasurement, 1);

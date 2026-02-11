@@ -87,6 +87,18 @@ bool BIO_ECLAB_IsInitialized(void);
  */
 int BIO_ECLAB_GetConfig(ECLAB_Config *config);
 
+/**
+ * Set data directory for .mpr output files
+ *
+ * Allows changing the output directory at runtime so that experiment
+ * modules can direct .mpr files into their own data folders.
+ * The directory will be created if it does not exist.
+ *
+ * @param dataDir New directory path for .mpr files
+ * @return SUCCESS or error code
+ */
+int BIO_ECLAB_SetDataDir(const char *dataDir);
+
 /******************************************************************************
  * Technique Functions
  *
