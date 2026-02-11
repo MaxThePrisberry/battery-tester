@@ -280,10 +280,10 @@ int OCV_RunExperimentInDir(const OCVExperimentParams *params,
 
     // Rest period
     if (params->restTime > 0) {
-        LogMessage("%s: Resting for %.0f seconds...", phaseName, params->restTime);
+        LogMessage("%s: Resting for %d seconds...", phaseName, params->restTime);
         if (statusControl && tabPanelHandle) {
             char statusMsg[MEDIUM_BUFFER_SIZE];
-            snprintf(statusMsg, sizeof(statusMsg), "%s: Resting (%.0f s)...", phaseName, params->restTime);
+            snprintf(statusMsg, sizeof(statusMsg), "%s: Resting (%d s)...", phaseName, params->restTime);
             SetCtrlVal(tabPanelHandle, statusControl, statusMsg);
         }
 
@@ -859,7 +859,7 @@ static int RunRestPeriod(OCVExperimentContext *ctx) {
 
     // Update status
     char statusMsg[MEDIUM_BUFFER_SIZE];
-    snprintf(statusMsg, sizeof(statusMsg), "Resting (%.0f s)...", ctx->params.restTime);
+    snprintf(statusMsg, sizeof(statusMsg), "Resting (%d min)...", ctx->params.restTime);
     SetCtrlVal(ctx->tabPanelHandle, ctx->statusControl, statusMsg);
 
     // Open rest temperature log

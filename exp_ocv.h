@@ -34,7 +34,7 @@
 
 // OCV measurement (duration controlled by Bio-Logic .mps file)
 #define OCV_EXP_SAMPLE_INTERVAL_S    0.1     // 10 Hz sampling
-#define OCV_EXP_TIMEOUT_MS           120000  // 2 min timeout
+#define OCV_EXP_TIMEOUT_MS           360000  // 2 min timeout
 
 // File system
 #define OCV_DATA_DIR                 "data"
@@ -73,7 +73,7 @@ typedef struct {
     char batteryName[64];        // User-defined battery name
     double targetTemperature;    // DTB target temperature (C)
     double tempTolerance;        // Temperature tolerance (C)
-    double restTime;             // Rest time before measurement (seconds)
+    unsigned int restTime;             // Rest time before measurement (seconds)
     unsigned int logInterval;    // Temperature logging interval during rest (seconds)
 } OCVExperimentParams;
 

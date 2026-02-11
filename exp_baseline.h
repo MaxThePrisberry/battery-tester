@@ -124,7 +124,7 @@ typedef struct {
     double manualCapacity_mAh;   // Manually entered battery capacity (mAh)
     int runOCVPhase;             // If 1, run Phase 0 OCV measurement before Phase 1
     int runOCVPost;              // If 1, run Phase 5 OCV measurement after Phase 4
-    double ocvRestTime;          // Rest time before OCV measurement (seconds)
+    unsigned int ocvRestTime;          // Rest time before OCV measurement (s)
 } BaselineExperimentParams;
 
 // TemperatureDataPoint is now in common.h

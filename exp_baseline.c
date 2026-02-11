@@ -301,7 +301,7 @@ int CVICALLBACK StartBaselineExperimentCallback(int panel, int control, int even
     GetCtrlVal(panel, BASELINE_NUM_EIS_INTERVAL, &g_experimentContext.params.eisInterval);
     GetCtrlVal(panel, BASELINE_NUM_CURRENT_THRESHOLD, &g_experimentContext.params.currentThreshold);
     {
-        double tempLogInterval;
+        unsigned int tempLogInterval;
         GetCtrlVal(panel, BASELINE_NUM_INTERVAL, &tempLogInterval);
         g_experimentContext.params.logInterval = (unsigned int)tempLogInterval;
     }
