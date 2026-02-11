@@ -273,8 +273,12 @@ int BIO_ECLAB_SetDataDir(const char *dataDir) {
     if (!dataDir) return ERR_NULL_POINTER;
     if (!g_initialized) return ERR_NOT_INITIALIZED;
 
-    strncpy(g_config.dataDir, dataDir, MAX_PATH - 1);
-    g_config.dataDir[MAX_PATH - 1] = '\0';
+    // Resolve to absolute path - EC-Lab is a separate process and cannot
+    // resolve paths relative to our working directory
+    if (!GetFullPathNameA(dataDir, MAX_PATH, g_config.dataDir, NULL)) {
+        LogErrorEx(LOG_DEVICE_BIO, "Failed to resolve absolute path for: %s", dataDir);
+        return ERR_OPERATION_FAILED;
+    }
 
     // Create directory if it doesn't exist
     if (GetFileAttributesA(g_config.dataDir) == INVALID_FILE_ATTRIBUTES) {
