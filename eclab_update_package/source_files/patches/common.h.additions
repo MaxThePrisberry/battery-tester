@@ -1,0 +1,110 @@
+//==============================================================================
+// EC-Lab OLE COM Integration Configuration
+// Add this section to your common.h file
+//==============================================================================
+
+// BioLogic control mode selection
+// 0 = Direct DLL mode (default, uses ECLib.dll for direct hardware control)
+// 1 = EC-Lab OLE COM mode (uses EC-Lab GUI automation via Windows COM)
+//
+// Switching modes:
+//   1. Change this define
+//   2. Rebuild project (mode is compile-time)
+//   3. No other code changes needed!
+//
+// Recommendation:
+//   - Use DLL mode (0) for production/automated testing
+//   - Use EC-Lab mode (1) for development/debugging/validation
+#define BIOLOGIC_CONTROL_MODE           0
+
+//------------------------------------------------------------------------------
+// EC-Lab OLE COM Mode Settings (used when BIOLOGIC_CONTROL_MODE == 1)
+//------------------------------------------------------------------------------
+
+// Directory paths (customize for your system)
+// Settings directory: Contains .mps template files for each technique
+// Data directory: Where .mpr output files are saved
+//
+// IMPORTANT: Use double backslashes (\\) in Windows paths
+// IMPORTANT: Create these directories before first use (see integration guide)
+#define ECLAB_SETTINGS_DIR              "C:\\YourApplication\\eclab_settings"
+#define ECLAB_DATA_DIR                  "C:\\YourApplication\\eclab_data"
+
+// EC-Lab device and channel configuration
+// These indices depend on your EC-Lab configuration
+//   - DEVICE_NUMBER: Usually 0 for first/only device
+//   - CHANNEL_NUMBER: Usually 0 for single-channel devices, 0-15 for multi-channel
+//
+// To verify your device number:
+//   1. Open EC-Lab
+//   2. Look at device list (usually Device 0)
+//   3. Right-click device → Properties to see channels
+#define ECLAB_DEVICE_NUMBER             0
+#define ECLAB_CHANNEL_NUMBER            0
+
+// EC-Lab executable path
+// Update this if your EC-Lab is installed in a different location
+// Common paths:
+//   - "C:\\Program Files (x86)\\EC-Lab\\11.63\\EClab.exe"  (typical)
+//   - "C:\\Program Files\\EC-Lab\\11.63\\EClab.exe"        (64-bit install)
+//   - Check your actual installation path
+#define ECLAB_EXECUTABLE_PATH           "C:\\Program Files (x86)\\EC-Lab\\11.63\\EClab.exe"
+
+//------------------------------------------------------------------------------
+// .mps Template Filenames
+//------------------------------------------------------------------------------
+
+// These files must exist in ECLAB_SETTINGS_DIR
+// Create them in EC-Lab: Configure technique → File → Save Settings
+//
+// Each technique type needs its own .mps template:
+//   - OCV (Open Circuit Voltage)
+//   - PEIS (Potentiostatic Electrochemical Impedance Spectroscopy)
+//   - GEIS (Galvanostatic Electrochemical Impedance Spectroscopy)
+//   - Others as needed
+//
+// Filename conventions:
+//   - Use descriptive names that indicate the settings
+//   - Examples: "ocv_default.mps", "geis_battery_test.mps"
+//   - Can have multiple templates per technique for different scenarios
+#define ECLAB_OCV_TEMPLATE              "ocv_default.mps"
+#define ECLAB_PEIS_TEMPLATE             "peis_default.mps"
+#define ECLAB_GEIS_TEMPLATE             "geis_default.mps"
+
+//==============================================================================
+// End of EC-Lab OLE COM Configuration
+//==============================================================================
+
+// INTEGRATION NOTES:
+//
+// 1. REQUIRED CHANGES:
+//    - Update ECLAB_SETTINGS_DIR to your application's settings directory
+//    - Update ECLAB_DATA_DIR to your application's data directory
+//    - Verify ECLAB_EXECUTABLE_PATH matches your EC-Lab installation
+//
+// 2. OPTIONAL CHANGES:
+//    - Adjust ECLAB_DEVICE_NUMBER if using non-default device
+//    - Adjust ECLAB_CHANNEL_NUMBER if using multi-channel configuration
+//    - Rename .mps template files to match your naming convention
+//
+// 3. RUNTIME REQUIREMENTS (EC-Lab mode only):
+//    - EC-Lab must be registered as OLE COM server (one-time setup)
+//      Run as Administrator: EClab.exe /regserver
+//    - Directories must exist before running application
+//    - .mps files must be present in ECLAB_SETTINGS_DIR
+//    - EC-Lab application must be running before starting your program
+//
+// 4. SWITCHING MODES:
+//    - Change BIOLOGIC_CONTROL_MODE between 0 and 1
+//    - Rebuild entire project
+//    - No other code changes required
+//
+// 5. ABSTRACTION LAYER (if using):
+//    If you converted to BIO_Abstract_Run*() functions, mode switching is
+//    transparent and automatic. Parameters from code are used in DLL mode,
+//    parameters from .mps files are used in EC-Lab mode.
+//
+// 6. TROUBLESHOOTING:
+//    - See INTEGRATION_CHECKLIST.md for detailed troubleshooting
+//    - See ECLAB_INTEGRATION_GUIDE.md for usage instructions
+//    - Check log output for specific error messages

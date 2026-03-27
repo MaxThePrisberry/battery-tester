@@ -2242,24 +2242,50 @@ static int SwitchToPSB(BaselineExperimentContext *ctx) {
     BIO_StopChannelQueued(ctx->biologicID, 0, DEVICE_PRIORITY_LOW);  // Non-blocking
     PSB_SetOutputEnableQueued(0, DEVICE_PRIORITY_NORMAL);
     Delay(0.5);
-    
+
+    // RELAY DIAGNOSTIC: Read PSB voltage BEFORE connecting relay (output OFF).
+    // Comparing this with the reading after relay connect determines whether the
+    // relay actually controls the sense/voltage path:
+    //   - Before ~= After  → sense wires bypass the relay (always connected to battery)
+    //   - Before ~= 0, After ~= Vbattery → relay controls sense path
+    PSB_Status relayDiag;
+    double voltageBeforeRelay = -1.0;
+    if (PSB_GetStatusQueued(&relayDiag, DEVICE_PRIORITY_NORMAL) == PSB_SUCCESS)
+        voltageBeforeRelay = relayDiag.voltage;
+    LogMessage("RELAY DIAG: PSB voltage BEFORE relay connect (output OFF): %.4f V", voltageBeforeRelay);
+
     // Disconnect BioLogic relay first
     result = TNY_SetPinQueued(TNY_BIOLOGIC_PIN, TNY_STATE_DISCONNECTED, DEVICE_PRIORITY_NORMAL);
 	if (result != SUCCESS) {
 	    LogError("Failed to disconnect BioLogic relay: %s", GetErrorString(result));
 	    return result;
 	}
-    
+
     Delay(TNY_SWITCH_DELAY_MS / 1000.0);
-    
+
     // Connect PSB relay
     result = TNY_SetPinQueued(TNY_PSB_PIN, TNY_STATE_CONNECTED, DEVICE_PRIORITY_NORMAL);
 	if (result != SUCCESS) {
 	    LogError("Failed to connect PSB relay: %s", GetErrorString(result));
 	    return result;
 	}
-    
+
     Delay(TNY_SWITCH_DELAY_MS / 1000.0);
+
+    // RELAY DIAGNOSTIC: Read PSB voltage AFTER relay connect, BEFORE enabling output.
+    double voltageAfterRelay = -1.0;
+    if (PSB_GetStatusQueued(&relayDiag, DEVICE_PRIORITY_NORMAL) == PSB_SUCCESS)
+        voltageAfterRelay = relayDiag.voltage;
+    LogMessage("RELAY DIAG: PSB voltage AFTER relay connect (output OFF): %.4f V", voltageAfterRelay);
+    if (voltageBeforeRelay >= 0 && voltageAfterRelay >= 0) {
+        double delta = voltageAfterRelay - voltageBeforeRelay;
+        if (fabs(delta) < 0.05) {
+            LogWarning("RELAY DIAG: Voltage unchanged (delta=%.4fV) - sense wires may bypass relay,"
+                       " or relay was already connected", delta);
+        } else {
+            LogMessage("RELAY DIAG: Voltage changed by %.4fV - relay confirmed controlling sense path", delta);
+        }
+    }
 
     // Enable PSB output after relay is connected
     result = PSB_SetOutputEnableQueued(1, DEVICE_PRIORITY_NORMAL);

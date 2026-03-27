@@ -1,5 +1,6 @@
 cvibuild.*
 data/
+PSB10000_Programming_guide/
 *.exe
 *.cws
 *.log

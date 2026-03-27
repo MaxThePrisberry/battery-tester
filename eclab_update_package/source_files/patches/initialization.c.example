@@ -1,0 +1,325 @@
+/******************************************************************************* * initialization.c.example
+ *
+ * Example code showing how to initialize the EC-Lab abstraction layer
+ * in your main() or initialization function.
+ *
+ * INTEGRATION INSTRUCTIONS:
+ * 1. Find your main() or device initialization function
+ * 2. Locate where you initialize Bio-Logic queue manager
+ * 3. Add the abstraction layer initialization immediately after
+ * 4. Compile and test
+ ******************************************************************************/
+
+#include "common.h"
+#include "biologic_dll.h"
+#include "biologic_queue.h"
+#include "biologic_abstract.h"  // ADD THIS INCLUDE
+
+// ... your other includes ...
+
+//==============================================================================
+// EXAMPLE 1: Basic Integration (Minimal Changes)
+//==============================================================================
+
+int main(int argc, char *argv[]) {
+    int error = 0;
+
+    // ... your existing initialization code ...
+
+    //--------------------------------------------------------------------------
+    // Existing Bio-Logic Initialization (DO NOT CHANGE)
+    //--------------------------------------------------------------------------
+
+    // Initialize Bio-Logic queue manager
+    g_bioQueueMgr = BIO_InitializeQueueManager();
+    if (!g_bioQueueMgr) {
+        LogError("Failed to initialize Bio-Logic queue manager");
+        return -1;
+    }
+
+    //--------------------------------------------------------------------------
+    // NEW: Abstraction Layer Initialization (ADD THIS)
+    //--------------------------------------------------------------------------
+
+    // Connect abstraction layer to queue manager
+    // This enables BIO_Abstract_Run*() functions to work
+    BIO_Abstract_SetQueueManagers(g_bioQueueMgr, NULL);
+
+    // Optional: Verify connection mode
+    // (Reads from BIOLOGIC_CONTROL_MODE in common.h)
+    BIO_ConnectionMode mode = BIO_GetConnectionMode();
+    if (mode == BIO_MODE_DIRECT_DLL) {
+        LogMessage("Bio-Logic: Direct DLL mode active");
+    } else if (mode == BIO_MODE_ECLAB) {
+        LogMessage("Bio-Logic: EC-Lab OLE COM mode active");
+    }
+
+    //--------------------------------------------------------------------------
+    // Continue with your existing initialization...
+    //--------------------------------------------------------------------------
+
+    // ... rest of your main() function ...
+
+    return 0;
+}
+
+//==============================================================================
+// EXAMPLE 2: Advanced Integration (Runtime Mode Selection)
+//==============================================================================
+
+int main_advanced(int argc, char *argv[]) {
+    int error = 0;
+
+    // ... your existing initialization code ...
+
+    //--------------------------------------------------------------------------
+    // Initialize queue manager (existing code)
+    //--------------------------------------------------------------------------
+    g_bioQueueMgr = BIO_InitializeQueueManager();
+    if (!g_bioQueueMgr) {
+        LogError("Failed to initialize Bio-Logic queue manager");
+        return -1;
+    }
+
+    //--------------------------------------------------------------------------
+    // Advanced: Runtime mode selection based on command line or config file
+    //--------------------------------------------------------------------------
+
+    BIO_ConnectionMode selectedMode = BIO_MODE_DIRECT_DLL;  // Default
+
+    // Example: Check command line argument
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--eclab-mode") == 0) {
+            selectedMode = BIO_MODE_ECLAB;
+            LogMessage("Command line: EC-Lab mode requested");
+        } else if (strcmp(argv[i], "--dll-mode") == 0) {
+            selectedMode = BIO_MODE_DIRECT_DLL;
+            LogMessage("Command line: Direct DLL mode requested");
+        }
+    }
+
+    // Set the mode programmatically
+    // NOTE: This overrides BIOLOGIC_CONTROL_MODE from common.h
+    error = BIO_SetConnectionMode(selectedMode);
+    if (error != SUCCESS) {
+        LogError("Failed to set connection mode: %d", error);
+        // Fall back to compile-time mode
+    }
+
+    // Initialize abstraction layer
+    BIO_Abstract_SetQueueManagers(g_bioQueueMgr, NULL);
+
+    // Verify mode is active
+    BIO_ConnectionMode activeMode = BIO_GetConnectionMode();
+    LogMessage("Bio-Logic mode: %s",
+              activeMode == BIO_MODE_DIRECT_DLL ? "Direct DLL" : "EC-Lab OLE COM");
+
+    // ... rest of your main() function ...
+
+    return 0;
+}
+
+//==============================================================================
+// EXAMPLE 3: Multiple Device Support (If Applicable)
+//==============================================================================
+
+// If your application supports multiple Bio-Logic devices
+// (e.g., two SP-150e units), you can set multiple queue managers
+
+int main_multidevice(int argc, char *argv[]) {
+    int error = 0;
+
+    // Initialize first device queue manager
+    g_bioQueueMgr = BIO_InitializeQueueManager();
+    if (!g_bioQueueMgr) {
+        LogError("Failed to initialize Bio-Logic queue manager 1");
+        return -1;
+    }
+
+    // Initialize second device queue manager (if you have one)
+    BioQueueManager *g_bioQueueMgr2 = BIO_InitializeQueueManager();
+    if (!g_bioQueueMgr2) {
+        LogError("Failed to initialize Bio-Logic queue manager 2");
+        // Continue with single device
+        g_bioQueueMgr2 = NULL;
+    }
+
+    // Initialize abstraction layer with both managers
+    // The abstraction layer will use device IDs to route commands
+    BIO_Abstract_SetQueueManagers(g_bioQueueMgr, g_bioQueueMgr2);
+
+    LogMessage("Initialized abstraction layer with %d device(s)",
+              g_bioQueueMgr2 ? 2 : 1);
+
+    // ... rest of your main() function ...
+
+    return 0;
+}
+
+//==============================================================================
+// EXAMPLE 4: Error Handling and Validation
+//==============================================================================
+
+int main_with_validation(int argc, char *argv[]) {
+    int error = 0;
+
+    // Initialize queue manager
+    g_bioQueueMgr = BIO_InitializeQueueManager();
+    if (!g_bioQueueMgr) {
+        LogError("CRITICAL: Bio-Logic queue manager initialization failed");
+        return -1;
+    }
+
+    // Initialize abstraction layer
+    error = BIO_Abstract_SetQueueManagers(g_bioQueueMgr, NULL);
+    if (error != SUCCESS) {
+        LogError("CRITICAL: Abstraction layer initialization failed: %d", error);
+        // Cleanup and exit
+        BIO_ShutdownQueueManager(g_bioQueueMgr);
+        return -1;
+    }
+
+    // Validate mode configuration
+    BIO_ConnectionMode mode = BIO_GetConnectionMode();
+
+    if (mode == BIO_MODE_ECLAB) {
+        // EC-Lab mode: Perform additional validation
+        LogMessage("EC-Lab mode active - validating configuration...");
+
+        // Check if EC-Lab is accessible (optional pre-check)
+        // You could add a test connection here
+
+        LogMessage("EC-Lab validation complete");
+
+    } else if (mode == BIO_MODE_DIRECT_DLL) {
+        // DLL mode: Standard initialization
+        LogMessage("Direct DLL mode active - standard initialization");
+
+    } else {
+        LogError("CRITICAL: Unknown Bio-Logic mode: %d", mode);
+        return -1;
+    }
+
+    // ... rest of your main() function ...
+
+    return 0;
+}
+
+//==============================================================================
+// INTEGRATION CHECKLIST FOR YOUR PROJECT
+//==============================================================================
+
+/*
+ * Step-by-step integration into YOUR application:
+ *
+ * 1. LOCATE YOUR INITIALIZATION CODE
+ *    Find: main() or equivalent initialization function
+ *    Find: Where g_bioQueueMgr is initialized
+ *
+ * 2. ADD INCLUDE
+ *    Add: #include "biologic_abstract.h"
+ *    At top of file with other includes
+ *
+ * 3. ADD INITIALIZATION CALL
+ *    Add: BIO_Abstract_SetQueueManagers(g_bioQueueMgr, NULL);
+ *    Location: Immediately after g_bioQueueMgr initialization
+ *
+ * 4. OPTIONAL: ADD MODE LOGGING
+ *    Add: Log message showing which mode is active
+ *    Helps with debugging and verification
+ *
+ * 5. COMPILE AND TEST
+ *    Build project
+ *    Test in DLL mode first (BIOLOGIC_CONTROL_MODE = 0)
+ *    Verify existing functionality still works
+ *    Then test EC-Lab mode (BIOLOGIC_CONTROL_MODE = 1)
+ *
+ * COMMON MISTAKES TO AVOID:
+ *
+ * ✗ Calling BIO_Abstract_SetQueueManagers() BEFORE queue manager init
+ *   → Will fail because queue manager is NULL
+ *   → Always call AFTER g_bioQueueMgr = BIO_InitializeQueueManager()
+ *
+ * ✗ Forgetting to include biologic_abstract.h
+ *   → Compiler error: undefined function
+ *   → Add to includes at top of file
+ *
+ * ✗ Not passing actual queue manager pointer
+ *   → Passing NULL instead of g_bioQueueMgr
+ *   → Abstraction layer will fail to route commands
+ *
+ * ✗ Calling initialization multiple times
+ *   → Only call once during startup
+ *   → If you need to reinitialize, first shutdown queue manager
+ *
+ * VERIFICATION:
+ *
+ * After integration, verify:
+ * ✓ Application compiles without errors
+ * ✓ Application starts without crashing
+ * ✓ Log shows which mode is active
+ * ✓ Existing DLL functionality still works
+ * ✓ Can connect to device in DLL mode
+ * ✓ Can run measurements in DLL mode
+ *
+ * Then switch to EC-Lab mode and verify:
+ * ✓ Application compiles in EC-Lab mode
+ * ✓ EC-Lab connection established
+ * ✓ Can run measurements in EC-Lab mode
+ * ✓ Results match DLL mode results
+ */
+
+//==============================================================================
+// MINIMAL INTEGRATION EXAMPLE (Copy/Paste This)
+//==============================================================================
+
+/*
+ * If you just want to add EC-Lab support with minimal changes,
+ * copy and paste this into your main() right after queue init:
+ */
+
+void MinimalIntegrationSnippet(void) {
+    // ========== PASTE THIS AFTER YOUR QUEUE INIT ==========
+
+    // Initialize abstraction layer for dual-mode support
+    BIO_Abstract_SetQueueManagers(g_bioQueueMgr, NULL);
+
+    // Log which mode is active
+    BIO_ConnectionMode mode = BIO_GetConnectionMode();
+    const char *modeStr = (mode == BIO_MODE_DIRECT_DLL) ?
+                          "Direct DLL" : "EC-Lab OLE COM";
+    LogMessage("Bio-Logic initialized in %s mode", modeStr);
+
+    // ========== END OF INTEGRATION CODE ==========
+}
+
+//==============================================================================
+// QUESTIONS? ISSUES?
+//==============================================================================
+
+/*
+ * Q: Do I need to change my existing experiment code?
+ * A: No! If using Strategy A (minimal integration), no changes needed.
+ *    If using Strategy B (full abstraction), replace BIO_Run*Queued()
+ *    with BIO_Abstract_Run*() functions.
+ *
+ * Q: What if I don't have a global g_bioQueueMgr?
+ * A: Pass whatever variable holds your queue manager pointer.
+ *    It could be named differently (e.g., bioQueueManager, queueMgr).
+ *
+ * Q: Can I switch modes at runtime?
+ * A: Yes, using BIO_SetConnectionMode(). But typically mode is set
+ *    at compile-time via BIOLOGIC_CONTROL_MODE in common.h.
+ *
+ * Q: What if initialization fails?
+ * A: Check return value of BIO_Abstract_SetQueueManagers().
+ *    Most common cause: NULL queue manager pointer.
+ *
+ * Q: Do I need to shutdown the abstraction layer?
+ * A: No explicit shutdown needed. Just shutdown queue manager normally.
+ *
+ * For more help:
+ * - See INTEGRATION_CHECKLIST.md for detailed instructions
+ * - See ECLAB_INTEGRATION_GUIDE.md for usage guide
+ * - Check log output for specific error messages
+ */

@@ -120,15 +120,6 @@ int Battery_GoToVoltage(VoltageTargetParams *params) {
                                                      "Configuring discharge parameters...");
     }
 
-    // ORIGINAL WORKING PATTERN (from commit e7015ad, validated in exp_cdc.c):
-    // ALL setpoint registers must be set with non-zero values:
-    // - REG 501 (source current) = maxCurrent (NON-ZERO!)
-    // - REG 499 (sink current) = maxCurrent
-    // - REG 500 (voltage) = targetVoltage
-    // - REG 502/498 (power) = 20W from initialization
-    //
-    // The "only write voltage" approach was an INCORRECT hypothesis that caused zero current.
-
     LogMessage("Configuring PSB with current=%.3fA, voltage=%.3fV",
                params->maxCurrent_A, params->targetVoltage_V);
 
@@ -152,28 +143,26 @@ int Battery_GoToVoltage(VoltageTargetParams *params) {
         return result;
     }
 
-    // DIAGNOSTIC: Read PSB status immediately after setting voltage to verify mode
+    // SETPOINT DIAGNOSTIC: Read back all PSB registers to verify setpoints were actually
+    // written. This runs inside the queue thread so it is thread-safe.
+    // Look for REG 499 (sink current), REG 500 (voltage), REG 501 (source current) in the log.
+    PSB_LogAllRegistersQueued("after setpoint writes", DEVICE_PRIORITY_NORMAL);
+
+    // PSB STATE DIAGNOSTIC: Check mode and sink/source after setpoints written.
     PSB_Status diagStatus;
     result = PSB_GetStatusQueued(&diagStatus, DEVICE_PRIORITY_NORMAL);
     if (result == PSB_SUCCESS) {
         const char *modeStr[] = {"CV", "CR", "CC", "CP"};
         const char *sinkSourceStr = diagStatus.sinkMode ? "SINK" : "SOURCE";
-        LogMessage("DIAGNOSTIC: After setting voltage to %.3fV:", params->targetVoltage_V);
+        LogMessage("SETPOINT DIAG: After writing setpoints (output %s):",
+                   diagStatus.outputEnabled ? "ON" : "OFF");
         LogMessage("  PSB Mode: %s (%s mode)", modeStr[diagStatus.regulationMode], sinkSourceStr);
+        LogMessage("  Actual V: %.4f V, I: %.3f A", diagStatus.voltage, diagStatus.current);
         LogMessage("  Device State (raw): 0x%08lX", diagStatus.rawState);
-        LogMessage("  Control Location: %d", diagStatus.controlLocation);
-        LogMessage("  Remote Mode: %s", diagStatus.remoteMode ? "ON" : "OFF");
-
-        if (diagStatus.regulationMode != 0) {  // 0 = CV mode
-            LogWarning("PROBLEM DETECTED: PSB is not in CV mode after writing voltage setpoint!");
-            LogWarning("  Expected: CV mode (0), Actual: %s mode (%d)",
-                      modeStr[diagStatus.regulationMode], diagStatus.regulationMode);
-        }
-        if (diagStatus.sinkMode == 1) {
-            LogWarning("PROBLEM DETECTED: PSB is in SINK mode instead of SOURCE mode!");
-        }
+        LogMessage("  Expected: %s → %s mode", params->wasCharging ? "CHARGE" : "DISCHARGE",
+                   params->wasCharging ? "CV SOURCE" : "CV SINK");
     } else {
-        LogWarning("Failed to read PSB status for diagnostics: %s", PSB_GetErrorString(result));
+        LogWarning("SETPOINT DIAG: Failed to read PSB status: %s", PSB_GetErrorString(result));
     }
 
     // Enable output

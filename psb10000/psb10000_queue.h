@@ -67,7 +67,10 @@ typedef enum {
     PSB_CMD_SET_SINK_POWER,
     PSB_CMD_SET_SINK_CURRENT_LIMITS,
     PSB_CMD_SET_SINK_POWER_LIMIT,
-    
+
+    // Diagnostic commands
+    PSB_CMD_LOG_REGISTERS,
+
     PSB_CMD_TYPE_COUNT
 } PSBCommandType;
 
@@ -85,13 +88,14 @@ typedef union {
 	struct { double power; } setSinkPower;
 	struct { double minCurrent; double maxCurrent; } sinkCurrentLimits;
 	struct { double maxPower; } sinkPowerLimit;
-    struct { 
-        unsigned char *txBuffer; 
-        int txLength; 
-        unsigned char *rxBuffer; 
+    struct {
+        unsigned char *txBuffer;
+        int txLength;
+        unsigned char *rxBuffer;
         int rxBufferSize;
         int expectedRxLength;
     } rawModbus;
+    struct { char context[64]; } logRegisters;
 } PSBCommandParams;
 
 // Command result structure
@@ -185,6 +189,7 @@ int PSB_GetStatusQueued(PSB_Status *status, DevicePriority priority);
 int PSB_GetActualValuesQueued(double *voltage, double *current, double *power, DevicePriority priority);
 int PSB_SendRawModbusQueued(unsigned char *txBuffer, int txLength,
                             unsigned char *rxBuffer, int rxBufferSize, int expectedRxLength, DevicePriority priority);
+int PSB_LogAllRegistersQueued(const char *context, DevicePriority priority);
 
 /******************************************************************************
  * Async Command Functions

@@ -1,0 +1,270 @@
+================================================================================
+EC-LAB OLE COM INTEGRATION - QUICK INSTALLATION GUIDE
+================================================================================
+
+This is a condensed installation guide. For detailed instructions, see:
+  - README.md (comprehensive overview)
+  - INTEGRATION_CHECKLIST.md (step-by-step with verification)
+
+================================================================================
+WHAT THIS PACKAGE DOES
+================================================================================
+
+Adds EC-Lab OLE COM support to your DLL-based Bio-Logic battery testing
+application, enabling:
+
+  ✓ Dual-mode operation (Direct DLL + EC-Lab OLE COM)
+  ✓ Switch modes at compile-time
+  ✓ Visual debugging via EC-Lab GUI
+  ✓ Parameter changes without recompiling (.mps files)
+  ✓ Data validation (compare DLL vs EC-Lab results)
+  ✓ Zero changes to existing experiments
+
+================================================================================
+PREREQUISITES
+================================================================================
+
+Before starting, verify you have:
+  ☐ LabWindows/CVI 2020 (or compatible)
+  ☐ EC-Lab 11.x installed
+  ☐ Bio-Logic SP-150e (or compatible)
+  ☐ Working DLL-based Bio-Logic integration
+  ☐ Administrator access (one-time setup)
+  ☐ 30-60 minutes for integration
+
+================================================================================
+INSTALLATION (5 STEPS)
+================================================================================
+
+STEP 1: EXTRACT PACKAGE
+------------------------
+1. Extract this archive to a temporary location
+2. You should see:
+   - README.md
+   - INTEGRATION_CHECKLIST.md
+   - source_files/
+   - documentation/
+   - settings_templates/
+
+STEP 2: COPY SOURCE FILES TO YOUR PROJECT
+------------------------------------------
+From: source_files/biologic/
+To:   <your_project>/biologic/
+
+Copy these 7 files:
+  ☐ eclab_olecom_interface.h
+  ☐ eclab_olecom.h
+  ☐ eclab_olecom.c
+  ☐ biologic_eclab.h
+  ☐ biologic_eclab.c
+  ☐ biologic_abstract.h
+  ☐ biologic_abstract.c
+
+STEP 3: UPDATE YOUR PROJECT CONFIGURATION
+------------------------------------------
+a) Add files to LabWindows/CVI project:
+   - Open your .prj file
+   - Right-click project → Add Files to Project → Target
+   - Add all 7 files (4 headers + 3 source files)
+
+b) Add OLE32.lib to linker:
+   - Build → Configuration → Linker
+   - Libraries/Object tab → Add Library
+   - Add: OLE32.lib
+
+c) Update common.h:
+   - Open: source_files/patches/common.h.additions
+   - Copy entire contents
+   - Paste at end of your common.h file
+   - Update paths for your system:
+     * ECLAB_SETTINGS_DIR
+     * ECLAB_DATA_DIR
+     * ECLAB_EXECUTABLE_PATH
+
+d) Update initialization code:
+   - Open: source_files/patches/initialization.c.example
+   - Find the "MinimalIntegrationSnippet" section
+   - Copy the 5-line code block
+   - Paste into your main() after Bio-Logic queue init
+
+STEP 4: BUILD AND TEST DLL MODE
+--------------------------------
+1. Set BIOLOGIC_CONTROL_MODE = 0 in common.h
+2. Build → Rebuild All
+3. Run your application
+4. Test OCV measurement
+5. Verify everything works as before
+
+If errors occur, see INTEGRATION_CHECKLIST.md troubleshooting.
+
+STEP 5: ONE-TIME EC-LAB SETUP
+------------------------------
+a) Register EC-Lab as COM server:
+   - Open Command Prompt AS ADMINISTRATOR
+   - cd "C:\Program Files (x86)\EC-Lab\11.63"
+   - EClab.exe /regserver
+   - (No output is normal)
+
+b) Create directories:
+   - mkdir C:\YourApp\eclab_settings
+   - mkdir C:\YourApp\eclab_data
+   - (Use paths you set in common.h)
+
+c) Create .mps template files:
+   - Launch EC-Lab
+   - Configure OCV technique
+   - File → Save Settings → ocv_default.mps
+   - Repeat for PEIS, GEIS if needed
+   - Save to eclab_settings directory
+
+See settings_templates/README.md for detailed .mps instructions.
+
+================================================================================
+TESTING EC-LAB MODE
+================================================================================
+
+1. Start EC-Lab GUI
+2. Connect your device in EC-Lab
+3. Edit common.h: BIOLOGIC_CONTROL_MODE = 1
+4. Build → Rebuild All
+5. Run your application
+6. Run OCV measurement
+7. Watch it appear in EC-Lab GUI!
+8. Verify data is returned correctly
+
+================================================================================
+SWITCHING BETWEEN MODES
+================================================================================
+
+To use Direct DLL mode:
+  - Set BIOLOGIC_CONTROL_MODE = 0 in common.h
+  - Rebuild
+
+To use EC-Lab mode:
+  - Set BIOLOGIC_CONTROL_MODE = 1 in common.h
+  - Rebuild
+  - Start EC-Lab first
+
+That's it! No other code changes needed.
+
+================================================================================
+TYPICAL PROBLEMS AND SOLUTIONS
+================================================================================
+
+Problem: "Cannot find eclab_olecom.h"
+Solution: Add biologic/ to Include Directories in project settings
+
+Problem: "Unresolved external symbol CoCreateInstance"
+Solution: Add OLE32.lib to linker libraries
+
+Problem: "Failed to create EC-Lab COM object"
+Solution: Run as Administrator: EClab.exe /regserver
+
+Problem: "Settings file not found"
+Solution: Create .mps files and place in ECLAB_SETTINGS_DIR
+
+Problem: "Device not found"
+Solution: Start EC-Lab and connect device before starting your app
+
+For complete troubleshooting, see:
+  - INTEGRATION_CHECKLIST.md (Phase 6 - Troubleshooting)
+  - documentation/ECLAB_OLECOM_Debugging_Checklist.md
+
+================================================================================
+GETTING HELP
+================================================================================
+
+Files to Read (in order):
+  1. This file (you're reading it) - Quick overview
+  2. README.md - Complete package description
+  3. INTEGRATION_CHECKLIST.md - Detailed step-by-step
+  4. documentation/ECLAB_INTEGRATION_GUIDE.md - Runtime usage
+
+When stuck:
+  1. Check log output in your application
+  2. Check EC-Lab GUI for error messages
+  3. Test measurement manually in EC-Lab
+  4. Review integration checklist troubleshooting section
+
+================================================================================
+VERIFICATION CHECKLIST
+================================================================================
+
+Installation is complete when:
+  ☐ Application compiles without errors
+  ☐ DLL mode still works (baseline test)
+  ☐ EC-Lab mode compiles
+  ☐ EC-Lab connection established
+  ☐ OCV runs in EC-Lab mode
+  ☐ .mpr files created
+  ☐ Data matches between modes
+  ☐ No unexpected errors
+
+================================================================================
+WHAT'S NEXT?
+================================================================================
+
+After successful integration:
+
+1. Create .mps library
+   - Build collection of validated .mps files
+   - Different parameters for different scenarios
+   - Document which .mps to use when
+
+2. Train your team
+   - Show how to switch modes
+   - Demonstrate EC-Lab GUI monitoring
+   - Explain when to use each mode
+
+3. Establish testing protocol
+   - DLL mode for production/automation
+   - EC-Lab mode for debugging/validation
+   - Periodic cross-mode validation
+
+4. Document your setup
+   - Record .mps file locations
+   - Note mode currently in use
+   - List any custom configurations
+
+================================================================================
+PACKAGE CONTENTS
+================================================================================
+
+source_files/biologic/          - Core EC-Lab integration (7 files)
+source_files/patches/           - Configuration snippets (2 files)
+documentation/                  - Reference guides (2 files)
+settings_templates/             - .mps file instructions (1 file)
+README.md                       - Package overview
+INTEGRATION_CHECKLIST.md        - Detailed guide
+PACKAGE_CONTENTS.txt            - File inventory
+INSTALLATION_GUIDE.txt          - This file
+
+Total: 14 files + documentation
+
+================================================================================
+SUPPORT
+================================================================================
+
+For technical support:
+  - Review included documentation
+  - Check Bio-Logic EC-Lab manual
+  - Test in EC-Lab GUI first
+  - Examine application logs
+
+For package updates or questions about battery_tester integration:
+  - Contact your development team
+  - Reference battery_exploder implementation
+
+================================================================================
+THANK YOU FOR USING THE EC-LAB OLE COM INTEGRATION PACKAGE
+================================================================================
+
+Version: 1.0
+Date: January 2025
+Authors: Claude Code, Maxwell Prisbrey, Nicolas Rasmont, Gabriel Meier
+
+This package enables dual-mode Bio-Logic control with minimal changes to your
+existing application. Enjoy the flexibility of Direct DLL performance with
+EC-Lab GUI debugging capabilities!
+
+For detailed instructions, proceed to README.md

@@ -292,10 +292,15 @@ static int PSB_AdapterExecuteCommand(void *deviceContext, int commandType, void 
 		    break;
 		    
 		case PSB_CMD_SET_SINK_POWER_LIMIT:
-		    cmdResult->errorCode = PSB_SetSinkPowerLimit(&ctx->handle, 
+		    cmdResult->errorCode = PSB_SetSinkPowerLimit(&ctx->handle,
 		        cmdParams->sinkPowerLimit.maxPower);
 		    break;
-	
+
+        case PSB_CMD_LOG_REGISTERS:
+            cmdResult->errorCode = PSB_LogAllRegisters(&ctx->handle,
+                cmdParams->logRegisters.context[0] ? cmdParams->logRegisters.context : "diagnostic");
+            break;
+
         default:
             cmdResult->errorCode = PSB_ERROR_INVALID_PARAM;
             break;
@@ -666,6 +671,19 @@ int PSB_SetSinkPowerLimitQueued(double maxPower, DevicePriority priority) {
     PSBCommandResult result;
     
     return PSB_QueueCommandBlocking(g_psbQueueManager, PSB_CMD_SET_SINK_POWER_LIMIT,
+                                  &params, priority, &result,
+                                  PSB_QUEUE_COMMAND_TIMEOUT_MS);
+}
+
+int PSB_LogAllRegistersQueued(const char *context, DevicePriority priority) {
+    if (!g_psbQueueManager) return ERR_QUEUE_NOT_INIT;
+
+    PSBCommandParams params = {0};
+    if (context)
+        strncpy(params.logRegisters.context, context, sizeof(params.logRegisters.context) - 1);
+    PSBCommandResult result;
+
+    return PSB_QueueCommandBlocking(g_psbQueueManager, PSB_CMD_LOG_REGISTERS,
                                   &params, priority, &result,
                                   PSB_QUEUE_COMMAND_TIMEOUT_MS);
 }
