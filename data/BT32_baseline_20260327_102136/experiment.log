@@ -1,0 +1,20 @@
+2026-03-27 10:21:36 [INFO] Experiment settings saved to: c:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\data\BT32_baseline_20260327_102136\experiment_settings.ini
+2026-03-27 10:21:36 [INFO] Initializing relay states...
+2026-03-27 10:21:40 [ERROR] [DTB] Timeout reading response (got 9 bytes so far)
+2026-03-27 10:21:40 [WARN] [DTB] Input queue has 4 bytes before sending
+2026-03-27 10:21:40 [WARN] DTB(slave 2) status callback timed out after 5454.3 ms
+2026-03-27 10:21:40 [WARN] DTB(slave 2) status update timed out
+2026-03-27 10:21:40 [WARN] DTB(slave 3) status callback timed out after 5454.2 ms
+2026-03-27 10:21:40 [WARN] DTB(slave 3) status update timed out
+2026-03-27 10:21:40 [ERROR] [TNY] Timeout waiting for response (got 0 bytes)
+2026-03-27 10:21:40 [ERROR] [TNY] Communication error: Timeout error
+2026-03-27 10:21:40 [ERROR] Failed to initialize PSB relay
+2026-03-27 10:21:40 [INFO] Cleaning up baseline experiment...
+2026-03-27 10:21:40 [INFO] Safely disconnecting all devices...
+2026-03-27 10:21:40 [INFO] [PSB] Setting output: OFF
+2026-03-27 10:21:41 [INFO] [DTB] Setting run/stop to STOP for all 2 DTB devices...
+2026-03-27 10:21:42 [INFO] [DTB] Setting Run/Stop: STOP
+2026-03-27 10:21:43 [INFO] [DTB] Setting Run/Stop: STOP
+2026-03-27 10:21:43 [INFO] [DTB] Successfully set run/stop for all DTB devices
+2026-03-27 10:21:47 [ERROR] [TNY] Failed to write command: wrote -1 of 5 bytes
+2026-03-27 10:21:47 [ERROR] [TNY] Communication error: Communication error

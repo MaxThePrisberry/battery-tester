@@ -1,0 +1,70 @@
+2026-03-27 10:19:06 [INFO] Experiment settings saved to: c:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\data\BT32_baseline_20260327_101906\experiment_settings.ini
+2026-03-27 10:19:06 [INFO] Initializing relay states...
+2026-03-27 10:19:06 [INFO] EIS target SOC points initialized:
+2026-03-27 10:19:06 [INFO]   0.0%
+2026-03-27 10:19:06 [INFO]   10.0%
+2026-03-27 10:19:06 [INFO]   20.0%
+2026-03-27 10:19:06 [INFO]   30.0%
+2026-03-27 10:19:06 [INFO]   40.0%
+2026-03-27 10:19:06 [INFO]   50.0%
+2026-03-27 10:19:06 [INFO]   60.0%
+2026-03-27 10:19:06 [INFO]   70.0%
+2026-03-27 10:19:06 [INFO]   80.0%
+2026-03-27 10:19:06 [INFO]   90.0%
+2026-03-27 10:19:06 [INFO]   100.0%
+2026-03-27 10:19:06 [INFO] === PHASE 1: Initial Discharge and Temperature Setup ===
+2026-03-27 10:19:06 [INFO] Setting up temperature control - target: 30.0 ï¿½C
+2026-03-27 10:19:06 [INFO] [DTB] Setting setpoint to 30.0°C for all 2 DTB devices...
+2026-03-27 10:19:07 [INFO] [DTB] Setting setpoint: 30.0°C
+2026-03-27 10:19:07 [INFO] [DTB] Setting setpoint: 30.0°C
+2026-03-27 10:19:08 [INFO] [DTB] Successfully set setpoint for all DTB devices
+2026-03-27 10:19:08 [INFO] [DTB] Setting run/stop to RUN for all 2 DTB devices...
+2026-03-27 10:19:08 [INFO] [DTB] Setting Run/Stop: RUN
+2026-03-27 10:19:08 [INFO] [DTB] Setting Run/Stop: RUN
+2026-03-27 10:19:09 [INFO] [DTB] Successfully set run/stop for all DTB devices
+2026-03-27 10:19:09 [INFO] DTB temperature controller started
+2026-03-27 10:19:09 [INFO] Switching to PSB...
+2026-03-27 10:19:09 [INFO] [PSB] Setting output: OFF
+2026-03-27 10:19:09 [INFO] [PSB] Setting output: ON
+2026-03-27 10:19:10 [INFO] Successfully switched to PSB (output enabled)
+2026-03-27 10:19:10 [INFO] Discharging battery to 2.70 V
+2026-03-27 10:19:10 [INFO] Battery voltage: 3.603 V, Target: 2.700 V - Will DISCHARGE
+2026-03-27 10:19:10 [INFO] Configuring PSB with current=5.000A, voltage=2.700V
+2026-03-27 10:19:10 [INFO] [PSB] Setting current: 5.00A
+2026-03-27 10:19:11 [INFO] [PSB] Setting sink current: 5.00A
+2026-03-27 10:19:11 [INFO] [PSB] Setting voltage: 2.70V
+2026-03-27 10:19:11 [INFO] DIAGNOSTIC: After setting voltage to 2.700V:
+2026-03-27 10:19:11 [INFO]   PSB Mode: CC (SOURCE mode)
+2026-03-27 10:19:11 [INFO]   Device State (raw): 0x00004C83
+2026-03-27 10:19:11 [INFO]   Control Location: 3
+2026-03-27 10:19:11 [INFO]   Remote Mode: ON
+2026-03-27 10:19:11 [WARN] PROBLEM DETECTED: PSB is not in CV mode after writing voltage setpoint!
+2026-03-27 10:19:11 [WARN]   Expected: CV mode (0), Actual: CC mode (2)
+2026-03-27 10:19:12 [INFO] [PSB] Setting output: ON
+2026-03-27 10:19:12 [INFO] Waiting for output to stabilize...
+2026-03-27 10:19:14 [INFO] ==========================================================
+2026-03-27 10:19:14 [INFO] CRITICAL DIAGNOSTIC: After output enable + stabilization:
+2026-03-27 10:19:14 [INFO] ==========================================================
+2026-03-27 10:19:14 [INFO]   PSB Mode: CC (SOURCE mode)
+2026-03-27 10:19:14 [INFO]   Voltage: 3.603 V (target: 2.700 V)
+2026-03-27 10:19:14 [INFO]   Current: 0.000 A
+2026-03-27 10:19:14 [INFO]   Power: 0.00 W
+2026-03-27 10:19:14 [INFO]   Device State (raw): 0x00004C83
+2026-03-27 10:19:14 [INFO]   Output Enabled: YES
+2026-03-27 10:19:14 [INFO] ==========================================================
+2026-03-27 10:19:14 [ERROR] MODE SWITCHING DETECTED AFTER OUTPUT ENABLE!
+2026-03-27 10:19:14 [ERROR]   Expected: CV mode, Actual: CC SOURCE mode
+2026-03-27 10:19:14 [ERROR]   This is the root cause of the discharge failure!
+2026-03-27 10:19:14 [INFO] Discharging...
+2026-03-27 10:20:50 [INFO] User requested to stop baseline experiment
+2026-03-27 10:20:55 [INFO] Battery_GoToVoltage operation cancelled by user
+2026-03-27 10:20:55 [INFO] [PSB] Setting output: OFF
+2026-03-27 10:20:55 [INFO] Discharge complete: 0.00 mAh, 0.00 Wh in 1.7 minutes
+2026-03-27 10:20:55 [INFO] Cleaning up baseline experiment...
+2026-03-27 10:20:55 [INFO] Safely disconnecting all devices...
+2026-03-27 10:20:56 [INFO] [PSB] Setting output: OFF
+2026-03-27 10:20:56 [INFO] [DTB] Setting run/stop to STOP for all 2 DTB devices...
+2026-03-27 10:20:56 [INFO] [DTB] Setting Run/Stop: STOP
+2026-03-27 10:20:57 [INFO] [DTB] Setting Run/Stop: STOP
+2026-03-27 10:20:57 [INFO] [DTB] Successfully set run/stop for all DTB devices
+2026-03-27 10:20:57 [INFO] Device disconnect completed

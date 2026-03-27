@@ -1,0 +1,78 @@
+2026-03-27 10:07:27 [INFO] Experiment settings saved to: c:\Users\CV166\Documents\LabWindowsCVI\BatteryApplication\battery-tester\data\BT32_baseline_20260327_100727\experiment_settings.ini
+2026-03-27 10:07:27 [INFO] Initializing relay states...
+2026-03-27 10:07:28 [INFO] EIS target SOC points initialized:
+2026-03-27 10:07:28 [INFO]   0.0%
+2026-03-27 10:07:28 [INFO]   10.0%
+2026-03-27 10:07:28 [INFO]   20.0%
+2026-03-27 10:07:28 [INFO]   30.0%
+2026-03-27 10:07:28 [INFO]   40.0%
+2026-03-27 10:07:28 [INFO]   50.0%
+2026-03-27 10:07:28 [INFO]   60.0%
+2026-03-27 10:07:28 [INFO]   70.0%
+2026-03-27 10:07:28 [INFO]   80.0%
+2026-03-27 10:07:28 [INFO]   90.0%
+2026-03-27 10:07:28 [INFO]   100.0%
+2026-03-27 10:07:28 [INFO] === PHASE 0: OCV Measurement ===
+2026-03-27 10:07:28 [INFO] Phase 0: Running OCV measurement before discharge
+2026-03-27 10:07:28 [INFO] === OCV Experiment (Phase 0) ===
+2026-03-27 10:07:28 [INFO] Switching to BioLogic...
+2026-03-27 10:07:28 [INFO] [PSB] Setting output: OFF
+2026-03-27 10:07:29 [INFO] Successfully switched to BioLogic
+2026-03-27 10:07:29 [INFO] Setting up temperature control: target 30.0 C
+2026-03-27 10:07:29 [INFO] [DTB] Setting setpoint to 30.0°C for all 2 DTB devices...
+2026-03-27 10:07:29 [INFO] [DTB] Setting setpoint: 30.0°C
+2026-03-27 10:07:29 [INFO] [DTB] Setting setpoint: 30.0°C
+2026-03-27 10:07:30 [INFO] [DTB] Successfully set setpoint for all DTB devices
+2026-03-27 10:07:30 [INFO] [DTB] Setting run/stop to RUN for all 2 DTB devices...
+2026-03-27 10:07:30 [INFO] [DTB] Setting Run/Stop: RUN
+2026-03-27 10:07:30 [INFO] [DTB] Setting Run/Stop: RUN
+2026-03-27 10:07:31 [INFO] [DTB] Successfully set run/stop for all DTB devices
+2026-03-27 10:07:31 [INFO] Waiting for ALL DTB devices to reach target temperature: 30.0 C
+2026-03-27 10:07:45 [INFO] DTB avg: 28.8 C (target: 30.0 C, max diff: 1.2 C, 2/2 in tolerance)
+2026-03-27 10:07:45 [INFO] ALL DTB devices reached target temperature (avg: 28.8 C)
+2026-03-27 10:07:45 [INFO] Stabilizing temperature for 300 seconds...
+2026-03-27 10:07:47 [INFO] User requested to stop baseline experiment
+2026-03-27 10:08:44 [INFO] ========================================
+2026-03-27 10:08:44 [INFO] Shutting down Battery Tester application
+2026-03-27 10:08:44 [INFO] ========================================
+2026-03-27 10:08:44 [INFO] [TNY] Setting 2 pins
+2026-03-27 10:08:44 [INFO] Stopping status monitoring...
+2026-03-27 10:08:44 [INFO] Stopping device status monitoring...
+2026-03-27 10:08:44 [INFO] Status module state: RUNNING -> STOPPING
+2026-03-27 10:08:45 [INFO] Status timer thread stopped
+2026-03-27 10:08:45 [INFO] Status module state: STOPPING -> STOPPED
+2026-03-27 10:08:45 [INFO] Status monitoring stopped
+2026-03-27 10:08:45 [INFO] Cleaning up cDAQ module...
+2026-03-27 10:08:45 [INFO] Cleaning up cDAQ module...
+2026-03-27 10:08:46 [INFO] Cleaned up cDAQ slot 2 task
+2026-03-27 10:08:47 [INFO] Cleaned up cDAQ slot 3 task
+2026-03-27 10:08:47 [INFO] cDAQ module cleaned up
+2026-03-27 10:08:47 [INFO] Shutting down PSB queue manager...
+2026-03-27 10:08:47 [INFO] [PSB] Shutting down PSB 10000 queue manager...
+2026-03-27 10:08:47 [INFO] [PSB] Waiting for processing thread to complete...
+2026-03-27 10:08:47 [INFO] [PSB] All queues empty, processing thread exiting
+2026-03-27 10:08:47 [INFO] [PSB] PSB 10000 queue processing thread stopped
+2026-03-27 10:08:47 [INFO] [PSB] Setting output: OFF
+2026-03-27 10:08:47 [INFO] [PSB] Setting remote mode: OFF
+2026-03-27 10:08:47 [INFO] [PSB] Closing connection on COM3
+2026-03-27 10:08:47 [INFO] [PSB] Disconnected from PSB 10000
+2026-03-27 10:08:47 [INFO] Device queue manager shut down
+2026-03-27 10:08:47 [INFO] Shutting down BioLogic abstraction layer...
+2026-03-27 10:08:47 [INFO] [BIO] Shutting down BioLogic abstraction layer
+2026-03-27 10:08:47 [INFO] [BIO] Shutting down EC-Lab backend
+2026-03-27 10:08:47 [INFO] [BIO] Shutting down EC-Lab OLE COM connection
+2026-03-27 10:08:47 [INFO] [BIO] Disconnecting from EC-Lab device 0
+2026-03-27 10:08:48 [INFO] [BIO] Disconnected from EC-Lab device
+2026-03-27 10:08:48 [INFO] [BIO] EC-Lab OLE COM connection shutdown complete
+2026-03-27 10:08:48 [INFO] [BIO] EC-Lab backend shutdown complete
+2026-03-27 10:08:48 [INFO] [BIO] BioLogic abstraction layer shutdown complete
+2026-03-27 10:08:48 [INFO] Shutting down DTB queue manager...
+2026-03-27 10:08:48 [INFO] [DTB] Shutting down DTB 4848 queue manager...
+2026-03-27 10:08:48 [INFO] [DTB] Waiting for processing thread to complete...
+2026-03-27 10:08:48 [ERROR] [DTB] Failed to get status from DTB slave 3: Unknown DTB error
+2026-03-27 10:08:48 [WARN] [DTB] Got status from 1 of 2 DTB devices
+2026-03-27 10:08:48 [ERROR] Failed to read DTB status during stabilization: Unknown DTB error
+2026-03-27 10:08:48 [ERROR] Phase 0: OCV measurement failed with error -1024
+2026-03-27 10:08:48 [INFO] Cleaning up baseline experiment...
+2026-03-27 10:08:48 [INFO] Safely disconnecting all devices...
+2026-03-27 10:08:48 [INFO] Device disconnect completed
